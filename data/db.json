@@ -1,0 +1,621 @@
+{
+  "users": [
+    {
+      "id": "usr_admin",
+      "username": "admin",
+      "displayName": "Aether Administrator",
+      "email": "admin@aetherpanel.in",
+      "role": "super_admin",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      "isSuspended": false,
+      "emailVerified": true,
+      "twoFactorEnabled": false,
+      "credits": 498.005,
+      "createdAt": "2026-08-11T08:44:53.502Z",
+      "updatedAt": "2026-08-11T08:44:53.502Z"
+    }
+  ],
+  "passwords": {
+    "usr_admin": "$2b$10$3IuBxau4rrJKC.fbkG2xUe7ZbMVN0/ngImZKGlF5CJ/wppTYq6Dni"
+  },
+  "products": [
+    {
+      "id": "prod_minecraft",
+      "slug": "minecraft",
+      "name": "Minecraft Hosting",
+      "description": "High-performance Minecraft server hosting powered by high clock-speed AMD Ryzen CPU nodes and NVMe SSDs.",
+      "category": "minecraft",
+      "icon": "Gamepad2",
+      "isActive": true,
+      "sortOrder": 1
+    },
+    {
+      "id": "prod_bot",
+      "slug": "bot",
+      "name": "Discord Bot Hosting",
+      "description": "24/7 persistent process hosting for Discord, Telegram, and Twitch bots supporting Node.js, Python, and Bun.",
+      "category": "bot",
+      "icon": "Bot",
+      "isActive": true,
+      "sortOrder": 2
+    }
+  ],
+  "plans": [
+    {
+      "id": "plan_mc_starter",
+      "productId": "prod_minecraft",
+      "name": "Starter Tier",
+      "description": "Ideal for small friend groups & vanilla survival worlds.",
+      "priceMonthly": 3.99,
+      "priceYearly": 39.99,
+      "ramMB": 2048,
+      "cpuCores": 1,
+      "diskGB": 15,
+      "backupLimit": 2,
+      "databaseLimit": 1,
+      "serverLimit": 1,
+      "networkMbps": 1000,
+      "features": [
+        "2GB DDR5 RAM",
+        "1 vCPU Ryzen 9",
+        "15GB NVMe Storage",
+        "Subdomain Included",
+        "Automatic Backups (2)"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_mc_basic",
+      "productId": "prod_minecraft",
+      "name": "Basic Tier",
+      "description": "Great for small community servers & light plugin setups.",
+      "priceMonthly": 7.99,
+      "priceYearly": 79.99,
+      "ramMB": 4096,
+      "cpuCores": 2,
+      "diskGB": 30,
+      "backupLimit": 3,
+      "databaseLimit": 2,
+      "serverLimit": 2,
+      "networkMbps": 1000,
+      "features": [
+        "4GB DDR5 RAM",
+        "2 vCPU Ryzen 9",
+        "30GB NVMe Storage",
+        "Custom Port & Subdomain",
+        "Automatic Backups (3)",
+        "1 MySQL Database"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central",
+        "ap-southeast"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_mc_pro",
+      "productId": "prod_minecraft",
+      "name": "Pro Tier",
+      "description": "Recommended for heavily modded servers, Paper, and Purpur networks.",
+      "priceMonthly": 14.99,
+      "priceYearly": 149.99,
+      "ramMB": 8192,
+      "cpuCores": 4,
+      "diskGB": 60,
+      "backupLimit": 5,
+      "databaseLimit": 3,
+      "serverLimit": 5,
+      "networkMbps": 2500,
+      "features": [
+        "8GB DDR5 RAM",
+        "4 vCPU Ryzen 9",
+        "60GB NVMe Storage",
+        "DDoS Protection",
+        "5 Backups",
+        "3 Databases",
+        "Priority Support"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central",
+        "ap-southeast"
+      ],
+      "isPopular": true,
+      "isActive": true
+    },
+    {
+      "id": "plan_mc_ultra",
+      "productId": "prod_minecraft",
+      "name": "Ultra Network",
+      "description": "Maximum performance for large networks and Forge/Fabric modpacks.",
+      "priceMonthly": 29.99,
+      "priceYearly": 299.99,
+      "ramMB": 16384,
+      "cpuCores": 8,
+      "diskGB": 120,
+      "backupLimit": 10,
+      "databaseLimit": 5,
+      "serverLimit": 10,
+      "networkMbps": 10000,
+      "features": [
+        "16GB DDR5 RAM",
+        "8 vCPU Ryzen 9",
+        "120GB NVMe Storage",
+        "Dedicated IP Option",
+        "10 Backups",
+        "5 Databases",
+        "VIP Enterprise Support"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central",
+        "ap-southeast"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_bot_starter",
+      "productId": "prod_bot",
+      "name": "Bot Starter",
+      "description": "Perfect for single-sharded Discord bots.",
+      "priceMonthly": 1.99,
+      "priceYearly": 19.99,
+      "ramMB": 512,
+      "cpuCores": 0.5,
+      "diskGB": 5,
+      "backupLimit": 1,
+      "databaseLimit": 1,
+      "serverLimit": 1,
+      "networkMbps": 1000,
+      "features": [
+        "512MB RAM",
+        "0.5 vCPU",
+        "5GB SSD",
+        "Node.js & Python",
+        "24/7 Process Manager"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_bot_pro",
+      "productId": "prod_bot",
+      "name": "Bot Pro",
+      "description": "For high-traffic, multi-server bots and music bots.",
+      "priceMonthly": 4.99,
+      "priceYearly": 49.99,
+      "ramMB": 2048,
+      "cpuCores": 1.5,
+      "diskGB": 15,
+      "backupLimit": 3,
+      "databaseLimit": 2,
+      "serverLimit": 3,
+      "networkMbps": 1000,
+      "features": [
+        "2GB RAM",
+        "1.5 vCPU",
+        "15GB SSD",
+        "Node.js, Python, Bun",
+        "3 Backups",
+        "2 Databases",
+        "Auto-restart on crash"
+      ],
+      "locations": [
+        "us-east",
+        "eu-central",
+        "ap-southeast"
+      ],
+      "isPopular": true,
+      "isActive": true
+    }
+  ],
+  "servers": [
+    {
+      "id": "srv_1786438062204_3uu3",
+      "name": "My Aether Server",
+      "userId": "usr_admin",
+      "productId": "prod_minecraft",
+      "planId": "plan_mc_starter",
+      "nodeId": "node_ap_southeast",
+      "status": "running",
+      "primaryIp": "139.180.201.5",
+      "primaryPort": 25565,
+      "location": "Singapore",
+      "software": "Paper",
+      "version": "1.20.4",
+      "limits": {
+        "ramMB": 2048,
+        "cpuCores": 1,
+        "diskGB": 15,
+        "backups": 2,
+        "databases": 1
+      },
+      "createdAt": "2026-08-11T08:47:42.204Z",
+      "updatedAt": "2026-08-11T08:47:42.204Z",
+      "cpuUsage": 17,
+      "ramUsageMB": 716,
+      "diskUsageMB": 250,
+      "uptimeSeconds": 0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node_us_east",
+      "name": "US East 01 - Virginia",
+      "hostname": "node-us1.aetherpanel.com",
+      "ip": "104.22.14.88",
+      "location": "us-east",
+      "locationName": "Ashburn, VA, USA",
+      "flagCode": "US",
+      "totalRamMB": 65536,
+      "usedRamMB": 12288,
+      "totalCpuCores": 16,
+      "usedCpuCores": 4.5,
+      "totalDiskGB": 1024,
+      "usedDiskGB": 120,
+      "status": "offline",
+      "isMaintenanceMode": false,
+      "serverCount": 2,
+      "daemonPort": 8080,
+      "sftpPort": 2022,
+      "ramOverallocatePercent": 0,
+      "cpuOverallocatePercent": 0,
+      "diskOverallocatePercent": 0,
+      "maxServers": 100,
+      "allowedProducts": [
+        "prod_minecraft",
+        "prod_bot"
+      ],
+      "lastHeartbeatAt": "2026-08-11T09:08:56.929Z"
+    },
+    {
+      "id": "node_eu_central",
+      "name": "EU Central 01 - Frankfurt",
+      "hostname": "node-eu1.aetherpanel.com",
+      "ip": "185.120.44.12",
+      "location": "eu-central",
+      "locationName": "Frankfurt, Germany",
+      "flagCode": "DE",
+      "totalRamMB": 65536,
+      "usedRamMB": 8192,
+      "totalCpuCores": 16,
+      "usedCpuCores": 2,
+      "totalDiskGB": 1024,
+      "usedDiskGB": 80,
+      "status": "offline",
+      "isMaintenanceMode": false,
+      "serverCount": 1,
+      "daemonPort": 8080,
+      "sftpPort": 2022,
+      "ramOverallocatePercent": 0,
+      "cpuOverallocatePercent": 0,
+      "diskOverallocatePercent": 0,
+      "maxServers": 100,
+      "allowedProducts": [
+        "prod_minecraft",
+        "prod_bot"
+      ],
+      "lastHeartbeatAt": "2026-08-11T09:08:56.929Z"
+    },
+    {
+      "id": "node_ap_southeast",
+      "name": "AP South 01 - Singapore",
+      "hostname": "node-ap1.aetherpanel.com",
+      "ip": "139.180.201.5",
+      "location": "ap-southeast",
+      "locationName": "Singapore",
+      "flagCode": "SG",
+      "totalRamMB": 32768,
+      "usedRamMB": 6144,
+      "totalCpuCores": 8,
+      "usedCpuCores": 2,
+      "totalDiskGB": 500,
+      "usedDiskGB": 45,
+      "status": "offline",
+      "isMaintenanceMode": false,
+      "serverCount": 1,
+      "daemonPort": 8080,
+      "sftpPort": 2022,
+      "ramOverallocatePercent": 0,
+      "cpuOverallocatePercent": 0,
+      "diskOverallocatePercent": 0,
+      "maxServers": 100,
+      "allowedProducts": [
+        "prod_minecraft",
+        "prod_bot"
+      ],
+      "lastHeartbeatAt": "2026-08-11T09:08:56.929Z"
+    }
+  ],
+  "allocations": [
+    {
+      "id": "alloc_1",
+      "nodeId": "node_us_east",
+      "ip": "104.22.14.88",
+      "port": 25565,
+      "serverId": "srv_survival",
+      "isAssigned": true
+    },
+    {
+      "id": "alloc_2",
+      "nodeId": "node_us_east",
+      "ip": "104.22.14.88",
+      "port": 25566,
+      "isAssigned": false
+    },
+    {
+      "id": "alloc_3",
+      "nodeId": "node_us_east",
+      "ip": "104.22.14.88",
+      "port": 3000,
+      "serverId": "srv_discord_bot",
+      "isAssigned": true
+    },
+    {
+      "id": "alloc_4",
+      "nodeId": "node_eu_central",
+      "ip": "185.120.44.12",
+      "port": 25565,
+      "isAssigned": false
+    },
+    {
+      "id": "alloc_5",
+      "nodeId": "node_ap_southeast",
+      "ip": "139.180.201.5",
+      "port": 25565,
+      "isAssigned": true,
+      "serverId": "srv_1786438062204_3uu3"
+    }
+  ],
+  "backups": [
+    {
+      "id": "bk_1",
+      "serverId": "srv_survival",
+      "name": "Pre-World-Reset-Backup.tar.gz",
+      "sizeMB": 1420,
+      "status": "completed",
+      "checksum": "sha256_8a9f31c0e2",
+      "createdAt": "2026-08-10T08:44:53.502Z"
+    }
+  ],
+  "databases": [
+    {
+      "id": "db_1",
+      "serverId": "srv_survival",
+      "name": "s2_luckperms_db",
+      "username": "u_s2_luckperms",
+      "host": "node-us1.aetherpanel.com",
+      "port": 3306,
+      "dbType": "mysql",
+      "createdAt": "2026-08-09T08:44:53.502Z"
+    }
+  ],
+  "schedules": [
+    {
+      "id": "sch_1",
+      "serverId": "srv_survival",
+      "name": "Daily 4 AM World Save & Restart",
+      "cronExpression": "0 4 * * *",
+      "action": "restart",
+      "isEnabled": true,
+      "lastRunAt": "2026-08-10T18:44:53.502Z",
+      "nextRunAt": "2026-08-11T18:44:53.502Z"
+    }
+  ],
+  "activities": [
+    {
+      "id": "act_1",
+      "serverId": "srv_survival",
+      "userId": "usr_demo",
+      "username": "demouser",
+      "action": "SERVER_START",
+      "details": "Started Minecraft server instance",
+      "createdAt": "2026-08-11T07:44:53.502Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ord_1786438062204",
+      "userId": "usr_admin",
+      "userEmail": "admin@aetherpanel.com",
+      "planId": "plan_mc_starter",
+      "planName": "Minecraft Hosting - Starter Tier",
+      "billingCycle": "monthly",
+      "amount": 2,
+      "currency": "USD",
+      "status": "paid",
+      "paymentMethod": "Aether Account Credits",
+      "createdAt": "2026-08-11T08:47:42.204Z"
+    }
+  ],
+  "coupons": [
+    {
+      "id": "coup_welcome20",
+      "code": "WELCOME20",
+      "discountType": "percent",
+      "discountValue": 20,
+      "usageLimit": 100,
+      "timesUsed": 14,
+      "isActive": true
+    },
+    {
+      "id": "coup_AETHER50",
+      "code": "AETHER50",
+      "discountType": "percent",
+      "discountValue": 50,
+      "usageLimit": 10,
+      "timesUsed": 3,
+      "isActive": true
+    }
+  ],
+  "tickets": [],
+  "announcements": [
+    {
+      "id": "ann_1",
+      "title": "AetherPanel v2.4 Platform Upgrade",
+      "content": "We have upgraded all US East and EU Central nodes with AMD Ryzen 9 7950X processors and DDR5 ECC RAM for 35% higher TPS in Minecraft and sub-millisecond bot response times!",
+      "type": "update",
+      "isPublished": true,
+      "createdAt": "2026-08-09T08:44:53.502Z"
+    },
+    {
+      "id": "ann_2",
+      "title": "Scheduled Node Maintenance - AP South",
+      "content": "Routine firmware updates on AP South (Singapore) node scheduled for Sunday at 02:00 UTC. Expected downtime under 3 minutes.",
+      "type": "maintenance",
+      "isPublished": true,
+      "createdAt": "2026-08-06T08:44:53.502Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud_1786438750133_pi7a",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SERVER_POWER_START",
+      "targetResource": "srv_1786438062204_3uu3",
+      "details": "Executed start on server My Aether Server",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:59:10.133Z"
+    },
+    {
+      "id": "aud_1786438746942_3lhb",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SERVER_POWER_RESTART",
+      "targetResource": "srv_1786438062204_3uu3",
+      "details": "Executed restart on server My Aether Server",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:59:06.942Z"
+    },
+    {
+      "id": "aud_1786438385911_aurq",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SERVER_POWER_START",
+      "targetResource": "srv_1786438062204_3uu3",
+      "details": "Executed start on server My Aether Server",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:53:05.911Z"
+    },
+    {
+      "id": "aud_1786438286339_bmwt",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "USER_LOGIN",
+      "targetResource": "SESSION",
+      "details": "Successful user authentication",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:51:26.339Z"
+    },
+    {
+      "id": "aud_1786438228166_mfz5",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SERVER_POWER_STOP",
+      "targetResource": "srv_1786438062204_3uu3",
+      "details": "Executed stop on server My Aether Server",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:50:28.166Z"
+    },
+    {
+      "id": "aud_1786438062206_rsnw",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SERVER_PROVISION",
+      "targetResource": "srv_1786438062204_3uu3",
+      "details": "Provisioned server 'My Aether Server' ($2.00)",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:47:42.206Z"
+    },
+    {
+      "id": "aud_1786437909580_go7x",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "USER_LOGIN",
+      "targetResource": "SESSION",
+      "details": "Successful user authentication",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:45:09.580Z"
+    },
+    {
+      "id": "aud_1",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.com",
+      "actorRole": "super_admin",
+      "action": "SYSTEM_INIT",
+      "targetResource": "DATABASE",
+      "details": "AetherPanel database initialized with security policies.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-11T08:44:53.502Z"
+    }
+  ],
+  "settings": {
+    "brandName": "AetherPanel",
+    "brandTagline": "Next-Generation Cloud Platform for Minecraft & Bot Infrastructure",
+    "supportEmail": "support@aetherpanel.com",
+    "discordUrl": "https://discord.gg/aetherpanel",
+    "currencySymbol": "$",
+    "currencyCode": "USD",
+    "registrationEnabled": true,
+    "emailVerificationRequired": false,
+    "maintenanceMode": false,
+    "maintenanceMessage": "AetherPanel is currently performing scheduled system upgrades. We will be back online shortly.",
+    "defaultTheme": "dark",
+    "accentColor": "#8b5cf6"
+  },
+  "locations": [
+    {
+      "id": "loc_us_east",
+      "name": "United States (Virginia)",
+      "code": "us-east",
+      "country": "United States",
+      "flagCode": "US",
+      "description": "Ashburn Datacenter, Low latency across US & EU East",
+      "isActive": true
+    },
+    {
+      "id": "loc_eu_central",
+      "name": "Germany (Frankfurt)",
+      "code": "eu-central",
+      "country": "Germany",
+      "flagCode": "DE",
+      "description": "Frankfurt Equinix, Central European routing hub",
+      "isActive": true
+    },
+    {
+      "id": "loc_ap_southeast",
+      "name": "Singapore",
+      "code": "ap-southeast",
+      "country": "Singapore",
+      "flagCode": "SG",
+      "description": "Singapore Regional Hub, APAC region priority routing",
+      "isActive": true
+    },
+    {
+      "id": "loc_in_delhi",
+      "name": "India (Delhi/Mumbai)",
+      "code": "in-south",
+      "country": "India",
+      "flagCode": "IN",
+      "description": "Direct Peering with Airtel/Jio, Sub-15ms regional ping",
+      "isActive": true
+    }
+  ],
+  "nodeInstallTokens": []
+}

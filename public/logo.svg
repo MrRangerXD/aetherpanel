@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
+  <defs>
+    <linearGradient id="logoGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="40%" stop-color="#fbbf24" />
+      <stop offset="80%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <!-- Emblem -->
+  <g transform="translate(10, 10)">
+    <rect width="60" height="60" rx="16" fill="#18181b" stroke="url(#logoGold)" stroke-width="1.5" stroke-opacity="0.4" />
+    <path d="M30 10 L50 21 V43 L30 54 L10 43 V21 Z" fill="none" stroke="url(#logoGold)" stroke-width="3" stroke-linejoin="round" />
+    <path d="M30 17 L42 28 L37 46 L30 40 L23 46 L18 28 Z" fill="url(#logoGold)" />
+    <circle cx="30" cy="30" r="4" fill="#09090b" />
+  </g>
+
+  <!-- Text -->
+  <text x="84" y="44" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="28" letter-spacing="-0.5" fill="#ffffff">
+    Aether<tspan fill="url(#logoGold)">Panel</tspan>
+  </text>
+  <text x="85" y="60" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="10" letter-spacing="2" fill="#a1a1aa" text-transform="uppercase">
+    CLOUD INFRASTRUCTURE
+  </text>
+</svg>

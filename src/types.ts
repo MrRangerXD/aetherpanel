@@ -1,0 +1,763 @@
+/**
+ * AetherPanel - Global Type Definitions
+ */
+
+export type UserRole = 'user' | 'support' | 'moderator' | 'admin' | 'super_admin';
+
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  role: UserRole;
+  avatarUrl?: string;
+  isSuspended: boolean;
+  emailVerified: boolean;
+  twoFactorEnabled: boolean;
+  mustChangePassword?: boolean;
+  credits: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductCategory = 'minecraft' | 'bot' | 'other';
+
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  category: ProductCategory;
+  icon: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface Plan {
+  id: string;
+  productId: string;
+  name: string;
+  description: string;
+  priceMonthly: number;
+  priceYearly: number;
+  ramMB: number;
+  cpuCores: number; // e.g. 1, 2, 4 cores or 200%
+  diskGB: number;
+  backupLimit: number;
+  maxBackupStorageMB?: number;
+  allowScheduledBackups?: boolean;
+  databaseLimit: number;
+  serverLimit: number; // max servers user with this plan can own
+  networkMbps: number;
+  features: string[];
+  locations: string[]; // e.g. ['us-east', 'eu-central', 'ap-southeast']
+  isPopular?: boolean;
+  isActive: boolean;
+}
+
+export type ServerStatus = 'running' | 'stopped' | 'starting' | 'stopping' | 'installing' | 'error' | 'suspended';
+
+export type ServerDeploymentState = 
+  | 'QUEUED' 
+  | 'PROVISIONING' 
+  | 'INSTALLING' 
+  | 'CONFIGURING' 
+  | 'STARTING' 
+  | 'READY' 
+  | 'FAILED' 
+  | 'CANCELLED';
+
+export interface ServerTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'minecraft' | 'bot' | 'other';
+  icon: string;
+  runtime: 'minecraft' | 'python' | 'nodejs';
+  versions: string[];
+  defaultVersion: string;
+  startupCommand: string;
+  environmentVars: Record<string, string>;
+  installScript?: string;
+  defaultPort: number;
+  recommendedRamMB: number;
+  recommendedCpuCores: number;
+  recommendedDiskGB: number;
+  status: 'active' | 'maintenance' | 'disabled';
+  isPopular?: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServerResourceLimits {
+  ramMB: number;
+  cpuCores: number;
+  diskGB: number;
+  backups: number;
+  maxBackupStorageMB?: number;
+  allowScheduledBackups?: boolean;
+  databases: number;
+}
+
+export interface Server {
+  id: string;
+  name: string;
+  userId: string;
+  productId: string;
+  planId: string;
+  nodeId: string;
+  templateId?: string;
+  deploymentState?: ServerDeploymentState;
+  status: ServerStatus;
+  primaryIp: string;
+  primaryPort: number;
+  location: string;
+  software: string; // e.g., 'Paper', 'Purpur', 'Spigot', 'Node.js', 'Python'
+  version: string; // e.g. '1.20.4', 'Node 20', 'Python 3.11'
+  limits: ServerResourceLimits;
+  createdAt: string;
+  updatedAt: string;
+  // Live stats cache
+  cpuUsage: number; // %
+  ramUsageMB: number;
+  diskUsageMB: number;
+  uptimeSeconds: number;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  code: string;
+  country: string;
+  flagCode: string;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface Node {
+  id: string;
+  name: string;
+  hostname: string;
+  ip: string;
+  fqdn?: string;
+  daemonPort: number;
+  sftpPort: number;
+  location: string;
+  locationName: string;
+  flagCode: string; // ISO country code for UI flags
+  totalRamMB: number;
+  usedRamMB: number;
+  totalCpuCores: number;
+  usedCpuCores: number;
+  totalDiskGB: number;
+  usedDiskGB: number;
+  ramOverallocatePercent: number;
+  cpuOverallocatePercent: number;
+  diskOverallocatePercent: number;
+  maxServers: number;
+  allowedProducts: string[];
+  status: 'online' | 'degraded' | 'maintenance' | 'offline';
+  isMaintenanceMode: boolean;
+  serverCount: number;
+  daemonToken?: string;
+  lastHeartbeatAt?: string;
+  isSecure?: boolean;
+  isLocalNode?: boolean;
+  reservedRamMB?: number;
+  reservedCpuCores?: number;
+  reservedDiskGB?: number;
+}
+
+export interface NodeInstallToken {
+  id: string;
+  nodeId: string;
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+  isUsed: boolean;
+}
+
+export interface Allocation {
+  id: string;
+  nodeId: string;
+  ip: string;
+  port: number;
+  serverId?: string;
+  isAssigned: boolean;
+  isReserved?: boolean;
+}
+
+export interface ServerFile {
+  name: string;
+  path: string;
+  size: number;
+  isDir: boolean;
+  updatedAt: string;
+  extension?: string;
+}
+
+export type BackupStatus = 'QUEUED' | 'CREATING' | 'COMPLETED' | 'FAILED' | 'RESTORING' | 'DELETING';
+export type BackupType = 'manual' | 'scheduled' | 'automated';
+export type BackupStorageProvider = 'local' | 'node' | 'object';
+
+export interface ServerBackup {
+  id: string;
+  serverId: string;
+  serverName?: string;
+  userEmail?: string;
+  name: string;
+  sizeMB: number;
+  sizeBytes?: number;
+  status: BackupStatus;
+  type: BackupType;
+  storageProvider: BackupStorageProvider;
+  storagePath?: string;
+  storageKey?: string;
+  checksum?: string;
+  errorMessage?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface ServerDatabase {
+  id: string;
+  serverId: string;
+  name: string;
+  username: string;
+  host: string;
+  port: number;
+  dbType: 'mysql' | 'postgres';
+  createdAt: string;
+}
+
+export type ScheduleType = 'one-time' | 'hourly' | 'daily' | 'weekly' | 'custom_cron';
+export type ScheduleAction = 'backup' | 'start' | 'stop' | 'restart' | 'command';
+
+export interface ServerSchedule {
+  id: string;
+  serverId: string;
+  serverName?: string;
+  name: string;
+  scheduleType: ScheduleType;
+  cronExpression: string; // e.g. "0 0 * * *"
+  date?: string; // YYYY-MM-DD
+  time?: string; // HH:mm
+  timezone?: string;
+  intervalHours?: number;
+  dayOfWeek?: number; // 0=Sunday, 1=Monday...
+  action: ScheduleAction;
+  payload?: string; // command string if action === 'command'
+  isEnabled: boolean;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  lastStatus?: 'success' | 'failed';
+  lastError?: string;
+  createdAt: string;
+}
+
+export interface ServerActivity {
+  id: string;
+  serverId: string;
+  userId: string;
+  username: string;
+  action: string;
+  details: string;
+  createdAt: string;
+}
+
+export interface Order {
+  id: string;
+  userId: string;
+  userEmail: string;
+  planId: string;
+  planName: string;
+  billingCycle: 'monthly' | 'yearly';
+  amount: number;
+  currency: string;
+  status: 'paid' | 'pending' | 'failed' | 'refunded';
+  paymentMethod: string;
+  transactionRef?: string;
+  proofUrl?: string;
+  adminNote?: string;
+  createdAt: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  expiresAt?: string;
+  usageLimit?: number;
+  timesUsed: number;
+  isActive: boolean;
+}
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  category: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'pending' | 'answered' | 'closed';
+  messages: {
+    id: string;
+    senderId: string;
+    senderName: string;
+    senderRole: UserRole;
+    message: string;
+    createdAt: string;
+  }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  type: 'info' | 'maintenance' | 'update' | 'warning';
+  isPublished: boolean;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId: string;
+  actorEmail: string;
+  actorRole: string;
+  action: string;
+  targetResource: string;
+  details: string;
+  ipAddress: string;
+  createdAt: string;
+}
+
+export interface PaymentGatewaySettings {
+  upi: {
+    enabled: boolean;
+    upiId: string;
+    merchantName: string;
+    qrCodeUrl: string;
+    instructions: string;
+  };
+  bank: {
+    enabled: boolean;
+    bankName: string;
+    accountNumber: string;
+    ifsc: string;
+    accountHolder: string;
+    instructions: string;
+  };
+  crypto: {
+    enabled: boolean;
+    walletAddress: string;
+    network: string;
+    instructions: string;
+  };
+  stripe: {
+    enabled: boolean;
+    instructions: string;
+  };
+}
+
+export interface BackupSettings {
+  storageProvider: BackupStorageProvider;
+  localStoragePath: string;
+  s3Endpoint?: string;
+  s3Bucket?: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
+  s3Region?: string;
+  maxBackupsPerServer: number;
+  backupRetentionDays: number;
+  autoCleanupEnabled: boolean;
+}
+
+export interface SystemSettings {
+  brandName: string;
+  brandTagline: string;
+  supportEmail: string;
+  discordUrl: string;
+  currencySymbol: string;
+  currencyCode: string;
+  registrationEnabled: boolean;
+  emailVerificationRequired: boolean;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  defaultTheme: 'dark' | 'light' | 'system';
+  accentColor: string;
+  paymentGateways?: PaymentGatewaySettings;
+  backupSettings?: BackupSettings;
+  discordSettings?: DiscordBotSettings;
+}
+
+export interface PluginItem {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  iconUrl?: string;
+  downloads: number;
+  category: string;
+  version: string;
+  supportedVersions?: string[];
+  platform?: string;
+  provider: 'Modrinth' | 'Hangar';
+  projectUrl?: string;
+  downloadUrl?: string;
+  filename?: string;
+  isEnabled?: boolean;
+}
+
+export interface HealthStatus {
+  status: 'operational' | 'degraded' | 'outage';
+  controlPanel: 'operational' | 'degraded' | 'outage';
+  api: 'operational' | 'degraded' | 'outage';
+  nodesOnline: number;
+  nodesTotal: number;
+  activeServers: number;
+  lastCheckedAt: string;
+}
+
+// Ads System Types
+export type AdPlacement = 'dashboard' | 'server_list' | 'server_page' | 'file_manager' | 'billing' | 'public' | 'login';
+export type AdType = 'banner' | 'card' | 'announcement' | 'sponsored';
+
+export interface AdItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  destinationUrl: string;
+  type: AdType;
+  placement: AdPlacement;
+  priority: number;
+  frequencyCapPerSession: number;
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  impressions: number;
+  clicks: number;
+  createdAt: string;
+}
+
+export interface AdEvent {
+  id: string;
+  adId: string;
+  type: 'impression' | 'click';
+  userId?: string;
+  timestamp: string;
+}
+
+// AFK Reward System Types
+export interface AfkSession {
+  id: string;
+  userId: string;
+  sessionId: string;
+  startedAt: string;
+  lastHeartbeatAt: string;
+  earnedCredits: number;
+  isCompleted: boolean;
+  ipAddress?: string;
+}
+
+export type RewardTransactionType = 'AFK_REWARD' | 'ADMIN_ADJUSTMENT' | 'REDEMPTION' | 'BONUS' | 'REVERSAL';
+
+export interface RewardTransaction {
+  id: string;
+  userId: string;
+  amount: number;
+  type: RewardTransactionType;
+  description: string;
+  createdAt: string;
+  referenceId?: string;
+}
+
+export interface AfkSettings {
+  enabled: boolean;
+  creditsPerInterval: number;
+  intervalMinutes: number;
+  dailyMaxCredits: number;
+  weeklyMaxCredits: number;
+  minAccountAgeDays: number;
+}
+
+export interface UserPreferences {
+  customCursorEnabled: boolean;
+  animationsEnabled: boolean;
+  adsEnabled: boolean;
+}
+
+// Discord Integration Types
+export type DiscordNotificationEvent =
+  | 'SERVER_STARTED'
+  | 'SERVER_STOPPED'
+  | 'SERVER_CRASHED'
+  | 'SERVER_RESTARTED'
+  | 'BACKUP_COMPLETED'
+  | 'BACKUP_FAILED'
+  | 'DEPLOYMENT_COMPLETED'
+  | 'DEPLOYMENT_FAILED'
+  | 'NODE_OFFLINE'
+  | 'RESOURCE_WARNING'
+  | 'PLAN_EXPIRING';
+
+export interface DiscordAccount {
+  discordId: string;
+  username: string;
+  globalName?: string;
+  avatar?: string;
+  email?: string;
+  linkedAt: string;
+}
+
+export interface DiscordBotSettings {
+  enabled: boolean;
+  botToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+  redirectUri?: string;
+  defaultWebhookUrl?: string;
+  botStatus: 'online' | 'offline' | 'configured' | 'unconfigured';
+  commandRateLimitPerMin: number;
+  defaultNotificationEvents: DiscordNotificationEvent[];
+}
+
+export interface ServerDiscordLink {
+  serverId: string;
+  enabled: boolean;
+  webhookUrl: string;
+  botChannelId?: string;
+  guildId?: string;
+  guildName?: string;
+  channelName?: string;
+  enabledEvents: DiscordNotificationEvent[];
+  mentionRoleId?: string;
+  mentionUserId?: string;
+  cooldownSeconds: number;
+  allowServerCommands: boolean;
+  lastNotifiedAt?: Record<string, string>;
+  updatedAt: string;
+}
+
+export interface DiscordAuditLog {
+  id: string;
+  command: string; // e.g. /server status, /server start, WEBHOOK_TEST
+  discordUserId: string;
+  discordUsername: string;
+  aetherUserId?: string;
+  aetherUserEmail?: string;
+  serverId?: string;
+  serverName?: string;
+  result: 'success' | 'denied' | 'failed';
+  details: string;
+  timestamp: string;
+}
+
+// Public Status, Real-Time Monitoring & Alerts Types
+export type StatusComponentType = 'panel' | 'api' | 'database' | 'node' | 'storage' | 'discord' | 'custom';
+export type StatusComponentState = 'operational' | 'degraded' | 'partial_outage' | 'major_outage' | 'maintenance';
+export type IncidentSeverity = 'minor' | 'major' | 'critical' | 'maintenance';
+export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
+export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface DayUptime {
+  date: string; // YYYY-MM-DD
+  status: StatusComponentState;
+  uptimePercent: number;
+}
+
+export interface StatusComponent {
+  id: string;
+  name: string;
+  type: StatusComponentType;
+  description: string;
+  group: 'Core Platform' | 'Compute Nodes' | 'External Integrations' | 'Storage Subsystems' | 'Other Services';
+  status: StatusComponentState;
+  uptimePercent90Days: number;
+  lastCheckedAt: string;
+  latencyMs?: number;
+  details?: string;
+  order: number;
+  isPublic: boolean;
+  nodeId?: string;
+  history90Days?: DayUptime[];
+}
+
+export interface IncidentUpdate {
+  id: string;
+  status: IncidentStatus;
+  message: string;
+  timestamp: string;
+}
+
+export interface Incident {
+  id: string;
+  title: string;
+  description: string;
+  status: IncidentStatus;
+  severity: IncidentSeverity;
+  affectedComponents: string[];
+  timeline: IncidentUpdate[];
+  startedAt: string;
+  resolvedAt?: string;
+  isPublic: boolean;
+}
+
+export interface ScheduledMaintenance {
+  id: string;
+  title: string;
+  description: string;
+  affectedComponents: string[];
+  scheduledStartTime: string; // ISO UTC
+  scheduledEndTime: string;   // ISO UTC
+  status: MaintenanceStatus;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface TelemetryPoint {
+  timestamp: string;
+  cpuPercent: number;
+  ramPercent: number;
+  usedRamMB: number;
+  totalRamMB: number;
+  diskPercent: number;
+  usedDiskGB: number;
+  totalDiskGB: number;
+  netInKBps: number;
+  netOutKBps: number;
+  latencyMs: number;
+  loadAvg1m?: number;
+  tps?: number;
+  players?: number;
+  status?: string;
+}
+
+export type AlertTargetType = 'node' | 'server' | 'api' | 'database' | 'storage';
+export type AlertMetric = 'status_offline' | 'cpu_high' | 'ram_high' | 'disk_high' | 'server_crashed' | 'api_latency';
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  targetType: AlertTargetType;
+  targetId?: string; // 'all' or specific ID
+  metric: AlertMetric;
+  threshold: number; // e.g. 90%
+  durationMinutes: number; // e.g. 5 min
+  cooldownMinutes: number; // e.g. 30 min
+  notificationChannel: 'discord' | 'panel' | 'email' | 'all';
+  webhookUrl?: string;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertIncident {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  targetId: string;
+  targetName: string;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  status: 'active' | 'acknowledged' | 'resolved';
+  triggeredAt: string;
+  acknowledgedAt?: string;
+  resolvedAt?: string;
+}
+
+export interface ApiKey {
+  id: string;
+  userId: string;
+  userEmail: string;
+  name: string;
+  keyPrefix: string;
+  keyHash?: string;
+  role: UserRole;
+  allowedIps?: string[];
+  expiresAt?: string;
+  lastUsedAt?: string;
+  createdAt: string;
+}
+
+export interface WebhookSubscription {
+  id: string;
+  userId: string;
+  name: string;
+  url: string;
+  secret: string;
+  events: string[];
+  isEnabled: boolean;
+  lastTriggeredAt?: string;
+  lastStatus?: number;
+  lastError?: string;
+  createdAt: string;
+}
+
+export type MarketplaceCategory = 'minecraft' | 'bot' | 'template' | 'tool' | 'utility';
+export type MarketplaceInstallType = 'template_deploy' | 'resource_install' | 'one_click_setup';
+export type MarketplaceBadge = 'official' | 'verified' | 'community';
+export type MarketplaceStatus = 'active' | 'pending' | 'draft' | 'rejected' | 'archived';
+
+export interface MarketplaceReview {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  rating: number; // 1 to 5
+  comment: string;
+  createdAt: string;
+}
+
+export interface MarketplaceItem {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  longDescription?: string;
+  category: MarketplaceCategory;
+  icon: string; // lucide icon name or image URL
+  bannerUrl?: string;
+  author: string; // e.g. "AetherPanel Team" or user name
+  authorId?: string; // userId if submitted by user
+  badge: MarketplaceBadge; // 'official' | 'verified' | 'community'
+  version: string;
+  changelog?: string;
+  compatibility: string; // e.g. "Minecraft 1.20.x, Paper/Purpur", "Node 18+", "Python 3.10+", "All Nodes"
+  requirements: {
+    minRamMB: number;
+    minCpuCores: number;
+    minDiskGB: number;
+    notes?: string;
+  };
+  installType: MarketplaceInstallType;
+  templateId?: string; // Links to ServerTemplate ID for template_deploy
+  startupCommand?: string;
+  environmentVars?: Record<string, string>;
+  installScript?: string;
+  configFiles?: { path: string; content: string }[];
+
+  // Real metrics (NO FAKE METRICS!)
+  downloadsCount: number; // Actual deployment/install count
+  rating: number; // Calculated average rating from real reviews, 0 if no reviews
+  reviewsCount: number; // Total real reviews count
+  reviews?: MarketplaceReview[];
+
+  // Admin & Approval controls
+  status: MarketplaceStatus;
+  isFeatured: boolean;
+  securityValidated: boolean; // Marked true after safety check
+  securityNotes?: string;
+  rejectionReason?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
