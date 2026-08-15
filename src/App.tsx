@@ -22,6 +22,7 @@ import { BotHosting } from './pages/public/BotHosting';
 import { Pricing } from './pages/public/Pricing';
 import { Status } from './pages/public/Status';
 import { Docs } from './pages/public/Docs';
+import { LegalPage } from './pages/public/LegalPage';
 
 // Auth Pages
 import { Login } from './pages/auth/Login';
@@ -59,6 +60,7 @@ import { AdminBackups } from './pages/admin/AdminBackups';
 import { AdminDiscord } from './pages/admin/AdminDiscord';
 import { AdminMarketplace } from './pages/admin/AdminMarketplace';
 import { AdminMonitoring } from './pages/admin/AdminMonitoring';
+import { AdminLegal } from './pages/admin/AdminLegal';
 
 
 function AppContent() {
@@ -131,7 +133,7 @@ function AppContent() {
   useEffect(() => {
     if (loading) return;
 
-    const publicPages = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'login', 'register'];
+    const publicPages = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'];
     const isPublic = publicPages.includes(currentPage);
     const isAdmin = currentPage.startsWith('admin-');
 
@@ -166,7 +168,7 @@ function AppContent() {
     );
   }
 
-  const isPublicPage = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'login', 'register'].includes(currentPage);
+  const isPublicPage = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'].includes(currentPage);
   const isAdminPage = currentPage.startsWith('admin-');
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
@@ -221,6 +223,10 @@ function AppContent() {
           {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}
           {currentPage === 'status' && <Status onNavigate={handleNavigate} />}
           {currentPage === 'docs' && <Docs onNavigate={handleNavigate} />}
+          {currentPage === 'terms' && <LegalPage initialSlug="terms" onNavigate={handleNavigate} />}
+          {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
+          {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
+          {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
 
           {/* Auth Views */}
           {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
@@ -278,6 +284,7 @@ function AppContent() {
           {currentPage === 'admin-announcements' && <AdminAnnouncements />}
           {currentPage === 'admin-support' && <AdminSupport />}
           {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
+          {currentPage === 'admin-legal' && <AdminLegal />}
           {currentPage === 'admin-settings' && <AdminSettings />}
           {currentPage === 'admin-ads' && <AdminAds />}
           {currentPage === 'admin-rewards' && <AdminRewards />}

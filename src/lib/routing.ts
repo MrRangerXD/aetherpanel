@@ -25,6 +25,13 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   if (first === 'pricing') return { page: 'pricing', params: queryObj };
   if (first === 'status') return { page: 'status', params: queryObj };
   if (first === 'docs') return { page: 'docs', params: queryObj };
+  if (first === 'terms' || first === 'tos') return { page: 'terms', params: { ...queryObj, initialSlug: 'terms' } };
+  if (first === 'privacy') return { page: 'privacy', params: { ...queryObj, initialSlug: 'privacy' } };
+  if (first === 'acceptable-use' || first === 'aup') return { page: 'acceptable-use', params: { ...queryObj, initialSlug: 'acceptable-use' } };
+  if (first === 'legal') {
+    const slug = pathParts[1] || 'terms';
+    return { page: 'legal', params: { ...queryObj, initialSlug: slug } };
+  }
 
   // Auth pages
   if (first === 'login') return { page: 'login', params: queryObj };
@@ -79,6 +86,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'appearance' || sub === 'fonts-themes' || sub === 'theme') return { page: 'admin-appearance', params: queryObj };
     if (sub === 'support') return { page: 'admin-support', params: queryObj };
     if (sub === 'audit-logs' || sub === 'logs') return { page: 'admin-audit-logs', params: queryObj };
+    if (sub === 'legal' || sub === 'content' || sub === 'legal-pages') return { page: 'admin-legal', params: queryObj };
     if (sub === 'settings') return { page: 'admin-settings', params: queryObj };
     return { page: 'admin-dashboard', params: queryObj };
   }
@@ -107,6 +115,10 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'pricing': return `/pricing${formatQuery(params)}`;
     case 'status': return `/status${formatQuery(params)}`;
     case 'docs': return `/docs${formatQuery(params)}`;
+    case 'terms': return `/terms${formatQuery(params)}`;
+    case 'privacy': return `/privacy${formatQuery(params)}`;
+    case 'acceptable-use': return `/acceptable-use${formatQuery(params)}`;
+    case 'legal': return `/legal${params?.initialSlug ? `/${params.initialSlug}` : ''}${formatQuery(params, ['initialSlug'])}`;
     case 'login': return `/login${formatQuery(params)}`;
     case 'register': return `/register${formatQuery(params)}`;
 
@@ -147,6 +159,7 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-discord': return `/admin/discord${formatQuery(params)}`;
     case 'admin-marketplace': return `/admin/marketplace${formatQuery(params)}`;
     case 'admin-appearance': return `/admin/appearance${formatQuery(params)}`;
+    case 'admin-legal': return `/admin/legal${formatQuery(params)}`;
     case 'admin-support': return `/admin/support${formatQuery(params)}`;
     case 'admin-audit-logs': return `/admin/audit-logs${formatQuery(params)}`;
     case 'admin-settings': return `/admin/settings${formatQuery(params)}`;

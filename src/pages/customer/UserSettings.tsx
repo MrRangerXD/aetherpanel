@@ -56,8 +56,8 @@ export const UserSettings: React.FC = () => {
   const fetchDiscordStatus = async () => {
     try {
       setLoadingDiscord(true);
-      const res = await apiRequest<{ success: boolean; data: DiscordAccount | null }>('/discord/user');
-      if (res.success) {
+      const res = await apiRequest<DiscordAccount | null>('/discord/user');
+      if (res.success && res.data !== undefined) {
         setDiscordAccount(res.data);
       }
     } catch (err) {
@@ -70,7 +70,7 @@ export const UserSettings: React.FC = () => {
   const fetchApiKeys = async () => {
     setLoadingKeys(true);
     try {
-      const res = await apiRequest<{ success: boolean; data: ApiKey[] }>('/api-keys');
+      const res = await apiRequest<ApiKey[]>('/api-keys');
       if (res.success && res.data) {
         setApiKeys(res.data);
       }
@@ -84,7 +84,7 @@ export const UserSettings: React.FC = () => {
   const fetchWebhooks = async () => {
     setLoadingWebhooks(true);
     try {
-      const res = await apiRequest<{ success: boolean; data: WebhookSubscription[] }>('/api-keys/webhooks/list');
+      const res = await apiRequest<WebhookSubscription[]>('/api-keys/webhooks/list');
       if (res.success && res.data) {
         setWebhooks(res.data);
       }
@@ -100,7 +100,7 @@ export const UserSettings: React.FC = () => {
     if (!newKeyName.trim()) return;
     setGeneratingKey(true);
     try {
-      const res = await apiRequest<{ success: boolean; data: ApiKey & { apiKey: string } }>('/api-keys', {
+      const res = await apiRequest<ApiKey & { apiKey: string }>('/api-keys', {
         method: 'POST',
         body: JSON.stringify({
           name: newKeyName.trim(),
@@ -171,7 +171,7 @@ export const UserSettings: React.FC = () => {
     setTestingId(id);
     setTestResult(null);
     try {
-      const res = await apiRequest<{ success: boolean; message: string; data: any }>(`/api-keys/webhooks/${id}/test`, {
+      const res = await apiRequest<any>(`/api-keys/webhooks/${id}/test`, {
         method: 'POST'
       });
       setTestResult({
@@ -208,7 +208,7 @@ export const UserSettings: React.FC = () => {
       setConnectingDiscord(true);
       setDiscordNotice(null);
 
-      const res = await apiRequest<{ success: boolean; message: string; data: DiscordAccount }>('/discord/user/connect', {
+      const res = await apiRequest<DiscordAccount>('/discord/user/connect', {
         method: 'POST',
         body: JSON.stringify({
           username: user ? `${user.username}#${Math.floor(1000 + Math.random() * 9000)}` : 'Gamer#1337',
@@ -216,7 +216,7 @@ export const UserSettings: React.FC = () => {
         })
       });
 
-      if (res.success) {
+      if (res.success && res.data) {
         setDiscordAccount(res.data);
         setDiscordNotice('Discord account authorized and connected successfully!');
       }

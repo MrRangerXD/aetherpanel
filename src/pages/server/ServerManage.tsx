@@ -5,7 +5,8 @@ import {
   Cpu, Activity, RefreshCw, FileText, Plus, Trash2, Download, Edit3,
   Save, PlayCircle, Shield, AlertTriangle, ArrowLeft, Key, ExternalLink,
   Layers, CheckCircle2, ChevronRight, Zap, RefreshCcw, Upload, FileArchive,
-  Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare
+  Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare,
+  Globe, Wifi
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem } from '../../types';
@@ -13,6 +14,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
+import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
 
 interface ServerManageProps {
   serverId: string;
@@ -25,18 +27,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const { accentClasses } = useTheme();
 
   const [server, setServer] = useState<Server | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
+  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
     (initialTab as any) || 'console'
   );
 
 
   useEffect(() => {
-    if (initialTab && ['console', 'monitoring', 'files', 'plugins', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity'].includes(initialTab)) {
+    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity'].includes(initialTab)) {
       setActiveTab(initialTab as any);
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'console' | 'monitoring' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
+  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
     setActiveTab(tab);
     setIsEditingFile(false);
     onNavigate('server-manage', { serverId, initialTab: tab });
@@ -116,12 +118,36 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [serverNameEdit, setServerNameEdit] = useState('');
   const [startupFlags, setStartupFlags] = useState('');
   const [javaVersion, setJavaVersion] = useState('Java 21');
+  const [botRuntime, setBotRuntime] = useState('Node.js');
+  const [botVersion, setBotVersion] = useState('Node 20 LTS');
+  const [botEntryPoint, setBotEntryPoint] = useState('index.js');
+  const [autoRestart, setAutoRestart] = useState('always');
+  const [isInstallingDeps, setIsInstallingDeps] = useState(false);
+  const [depsInstallResult, setDepsInstallResult] = useState<{ success: boolean; message: string } | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [showReinstallModal, setShowReinstallModal] = useState(false);
   const [isReinstalling, setIsReinstalling] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleInstallDependencies = async () => {
+    setIsInstallingDeps(true);
+    setDepsInstallResult(null);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/install-dependencies`, { method: 'POST' });
+      if (res.success) {
+        setDepsInstallResult({ success: true, message: 'Dependencies installed successfully!' });
+        fetchConsoleLogs();
+      } else {
+        setDepsInstallResult({ success: false, message: res.error?.message || 'Failed to install dependencies' });
+      }
+    } catch (err: any) {
+      setDepsInstallResult({ success: false, message: err.message || 'Network error' });
+    } finally {
+      setIsInstallingDeps(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -339,8 +365,55 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     if (!server) return;
     if (activeTab === 'console') {
       fetchConsoleLogs();
-      const interval = setInterval(fetchConsoleLogs, 3000);
-      return () => clearInterval(interval);
+
+      // Establish Real-time WebSocket connection for streaming console
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const token = localStorage.getItem('aether_token') || '';
+      const wsUrl = `${protocol}//${window.location.host}/ws/console/${serverId}?token=${encodeURIComponent(token)}`;
+      let ws: WebSocket | null = null;
+      let pollInterval: NodeJS.Timeout | null = null;
+
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          console.log('[AetherConsole] Connected to live WebSocket stream');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'backlog' && Array.isArray(data.logs)) {
+              setLogs(data.logs);
+            } else if (data.type === 'log' && typeof data.line === 'string') {
+              setLogs((prev) => [...prev, data.line]);
+            }
+          } catch {}
+        };
+
+        ws.onerror = () => {
+          // Fallback to polling if WebSocket fails
+          if (!pollInterval) {
+            pollInterval = setInterval(fetchConsoleLogs, 3000);
+          }
+        };
+
+        ws.onclose = () => {
+          if (!pollInterval) {
+            pollInterval = setInterval(fetchConsoleLogs, 3000);
+          }
+        };
+      } catch (err) {
+        pollInterval = setInterval(fetchConsoleLogs, 3000);
+      }
+
+      return () => {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          ws.close();
+        }
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+      };
     } else if (activeTab === 'files') {
       fetchFiles(currentPath);
     } else if (activeTab === 'plugins') {
@@ -872,6 +945,16 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </button>
 
         <button
+          onClick={() => handleTabSelect('network')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+            activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+          }`}
+        >
+          <Globe className="h-4 w-4 text-amber-400" />
+          <span>Network, SFTP & Playit</span>
+        </button>
+
+        <button
           onClick={() => handleTabSelect('files')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
             activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
@@ -1028,6 +1111,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB: MONITORING & REAL-TIME TELEMETRY */}
       {activeTab === 'monitoring' && (
         <ServerMonitoringTab server={server} />
+      )}
+
+      {/* TAB: NETWORK, SFTP & PLAYIT.GG */}
+      {activeTab === 'network' && (
+        <ServerNetworkPlayitTab server={server} onRefreshServer={fetchServerDetails} />
       )}
 
       {/* TAB 2: FILE MANAGER */}
@@ -2021,20 +2109,64 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                  Runtime Build / Java Version
+                  {isMinecraft ? 'Runtime Build / Java Version' : 'Runtime Engine & Version'}
                 </label>
                 <select
                   value={javaVersion}
                   onChange={(e) => setJavaVersion(e.target.value)}
                   className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
                 >
-                  <option value="Java 21">Java 21 (Recommended for 1.20+)</option>
-                  <option value="Java 17">Java 17 (LTS)</option>
-                  <option value="Node.js 20">Node.js 20 LTS</option>
-                  <option value="Python 3.11">Python 3.11</option>
+                  {isMinecraft ? (
+                    <>
+                      <option value="Java 21">Java 21 (Recommended for 1.20+)</option>
+                      <option value="Java 17">Java 17 (LTS for 1.18 - 1.19)</option>
+                      <option value="Java 11">Java 11 (Legacy 1.16 - 1.17)</option>
+                      <option value="Java 8">Java 8 (Legacy 1.8 - 1.12)</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Node.js 20">Node.js 20 LTS (Recommended)</option>
+                      <option value="Node.js 22">Node.js 22 Current</option>
+                      <option value="Python 3.11">Python 3.11 LTS</option>
+                      <option value="Python 3.12">Python 3.12</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>
+
+            {/* Dependency Installer for Bots */}
+            {isBot && (
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                      <Package className="h-4 w-4 text-violet-400" /> Package Dependency Manager
+                    </h4>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Executes <code className="font-mono text-zinc-300">npm install</code> or <code className="font-mono text-zinc-300">pip install -r requirements.txt</code> in the server root.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleInstallDependencies}
+                    disabled={isInstallingDeps}
+                    className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md flex items-center gap-2 disabled:opacity-50 shrink-0"
+                  >
+                    <RefreshCcw className={`h-3.5 w-3.5 ${isInstallingDeps ? 'animate-spin' : ''}`} />
+                    <span>{isInstallingDeps ? 'Installing Packages...' : 'Install Dependencies'}</span>
+                  </button>
+                </div>
+
+                {depsInstallResult && (
+                  <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
+                    depsInstallResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                  }`}>
+                    {depsInstallResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+                    <span>{depsInstallResult.message} Check Console Logs for full terminal output.</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1.5">

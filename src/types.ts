@@ -6,6 +6,7 @@ export type UserRole = 'user' | 'support' | 'moderator' | 'admin' | 'super_admin
 
 export interface User {
   id: string;
+  installationId?: string;
   username: string;
   displayName: string;
   email: string;
@@ -14,6 +15,8 @@ export interface User {
   isSuspended: boolean;
   emailVerified: boolean;
   twoFactorEnabled: boolean;
+  twoFactorSecret?: string;
+  tokenVersion?: number;
   mustChangePassword?: boolean;
   credits: number;
   createdAt: string;
@@ -102,6 +105,7 @@ export interface ServerResourceLimits {
 
 export interface Server {
   id: string;
+  installationId?: string;
   name: string;
   userId: string;
   productId: string;
@@ -137,6 +141,7 @@ export interface Location {
 
 export interface Node {
   id: string;
+  installationId?: string;
   name: string;
   hostname: string;
   ip: string;
@@ -180,6 +185,7 @@ export interface NodeInstallToken {
 
 export interface Allocation {
   id: string;
+  installationId?: string;
   nodeId: string;
   ip: string;
   port: number;
@@ -203,6 +209,7 @@ export type BackupStorageProvider = 'local' | 'node' | 'object';
 
 export interface ServerBackup {
   id: string;
+  installationId?: string;
   serverId: string;
   serverName?: string;
   userEmail?: string;
@@ -222,6 +229,7 @@ export interface ServerBackup {
 
 export interface ServerDatabase {
   id: string;
+  installationId?: string;
   serverId: string;
   name: string;
   username: string;
@@ -236,6 +244,7 @@ export type ScheduleAction = 'backup' | 'start' | 'stop' | 'restart' | 'command'
 
 export interface ServerSchedule {
   id: string;
+  installationId?: string;
   serverId: string;
   serverName?: string;
   name: string;
@@ -258,6 +267,7 @@ export interface ServerSchedule {
 
 export interface ServerActivity {
   id: string;
+  installationId?: string;
   serverId: string;
   userId: string;
   username: string;
@@ -268,6 +278,7 @@ export interface ServerActivity {
 
 export interface Order {
   id: string;
+  installationId?: string;
   userId: string;
   userEmail: string;
   planId: string;
@@ -296,6 +307,7 @@ export interface Coupon {
 
 export interface SupportTicket {
   id: string;
+  installationId?: string;
   userId: string;
   userName: string;
   userEmail: string;
@@ -317,6 +329,7 @@ export interface SupportTicket {
 
 export interface Announcement {
   id: string;
+  installationId?: string;
   title: string;
   content: string;
   type: 'info' | 'maintenance' | 'update' | 'warning';
@@ -326,6 +339,7 @@ export interface Announcement {
 
 export interface AuditLog {
   id: string;
+  installationId?: string;
   actorId: string;
   actorEmail: string;
   actorRole: string;
@@ -673,6 +687,7 @@ export interface AlertIncident {
 
 export interface ApiKey {
   id: string;
+  installationId?: string;
   userId: string;
   userEmail: string;
   name: string;
@@ -687,6 +702,7 @@ export interface ApiKey {
 
 export interface WebhookSubscription {
   id: string;
+  installationId?: string;
   userId: string;
   name: string;
   url: string;
@@ -759,5 +775,25 @@ export interface MarketplaceItem {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface LegalPage {
+  id: string;
+  slug: 'terms' | 'privacy' | 'acceptable-use' | string;
+  title: string;
+  summary: string;
+  content: string; // Markdown formatted text
+  version: string;
+  isPublished: boolean;
+  lastUpdatedAt: string;
+  updatedBy?: string;
+}
+
+export interface InstallationPublicInfo {
+  installationId: string;
+  installedAt: string;
+  version: string;
+  systemName?: string;
+}
+
 
 

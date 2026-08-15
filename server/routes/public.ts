@@ -97,4 +97,37 @@ router.get('/settings', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/v1/public/legal
+router.get('/legal', async (req: Request, res: Response) => {
+  const db = await getDb();
+  const pages = (db.legalPages || []).filter(p => p.isPublished).map(p => ({
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    summary: p.summary,
+    version: p.version,
+    lastUpdatedAt: p.lastUpdatedAt
+  }));
+  res.json({
+    success: true,
+    data: pages
+  });
+});
+
+// GET /api/v1/public/legal/:slug
+router.get('/legal/:slug', async (req: Request, res: Response) => {
+  const db = await getDb();
+  const page = (db.legalPages || []).find(p => p.slug === req.params.slug && p.isPublished);
+  if (!page) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Legal document not found or unpublished.' }
+    });
+  }
+  res.json({
+    success: true,
+    data: page
+  });
+});
+
 export default router;

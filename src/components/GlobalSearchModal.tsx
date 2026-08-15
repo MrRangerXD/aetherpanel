@@ -180,8 +180,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     // Try fetching user's servers dynamically
     if (user) {
       try {
-        const res = await apiRequest<{ success: boolean; data: any[] }>('/servers');
-        if (res.success && res.data) {
+        const res = await apiRequest<any[]>('/servers');
+        if (res.success && res.data && Array.isArray(res.data)) {
           res.data.forEach(s => {
             list.unshift({
               id: `srv_${s.id}`,

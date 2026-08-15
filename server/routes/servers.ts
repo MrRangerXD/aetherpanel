@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import {
@@ -10,8 +11,12 @@ import {
   readServerFile, writeServerFile, deleteServerItem, createServerDirectory,
   renameServerItem, compressServerItem, decompressServerItem,
   readServerEnv, writeServerEnv, recordServerActivity,
-  listMinecraftPlugins, toggleMinecraftPlugin, getServerDir
+  listMinecraftPlugins, toggleMinecraftPlugin, getServerDir,
+  installServerDependencies
 } from '../provider';
+import {
+  getPlayitStatus, installPlayitAgent, togglePlayitAgent, uninstallPlayitAgent
+} from '../playitService';
 import { searchRealPlugins, downloadPluginJar } from '../pluginProviders';
 import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProcess, getBackupFilePath } from '../backups';
 import { calculateNextRunAt } from '../scheduler';
@@ -780,6 +785,81 @@ router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res
   saveDbSync();
 
   res.json({ success: true, message: 'Startup configuration updated.', data: server });
+});
+
+// POST /api/v1/servers/:id/install-dependencies - Install npm / pip packages
+router.post('/:id/install-dependencies', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const result = await installServerDependencies(req.params.id);
+    res.json({ success: result.success, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'INSTALL_FAILED', message: err.message } });
+  }
+});
+
+// GET /api/v1/servers/:id/playit - Get Playit agent & tunnel status
+router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const status = getPlayitStatus(req.params.id);
+  res.json({ success: true, data: status });
+});
+
+// POST /api/v1/servers/:id/playit/install - Install Playit agent
+router.post('/:id/playit/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const status = await installPlayitAgent(req.params.id);
+    res.json({ success: true, message: 'Playit agent configured and tunnel created.', data: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'PLAYIT_INSTALL_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/playit/toggle - Start / Stop Playit tunnel
+router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { enable } = req.body;
+  try {
+    const status = await togglePlayitAgent(req.params.id, Boolean(enable));
+    res.json({ success: true, message: `Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/playit/uninstall - Remove Playit agent
+router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    await uninstallPlayitAgent(req.params.id);
+    res.json({ success: true, message: 'Playit agent uninstalled.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'PLAYIT_UNINSTALL_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/sftp/reset-password - Generate fresh SFTP password
+router.post('/:id/sftp/reset-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server } = access;
+  const newPassword = `aeth_${crypto.randomBytes(8).toString('hex')}`;
+  (server as any).sftpPassword = newPassword;
+  saveDbSync();
+
+  res.json({ success: true, message: 'SFTP password regenerated.', data: { sftpPassword: newPassword } });
 });
 
 // DELETE /api/v1/servers/:id - Delete server

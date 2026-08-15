@@ -80,7 +80,18 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
           {/* Col 4 */}
           <div>
-            <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-4 font-mono">Security & Compliance</h4>
+            <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-4 font-mono">Legal & Security</h4>
+            <ul className="space-y-2.5 text-xs mb-4">
+              <li>
+                <button onClick={() => onNavigate('terms')} className="hover:text-white transition-colors">Terms of Service</button>
+              </li>
+              <li>
+                <button onClick={() => onNavigate('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
+              </li>
+              <li>
+                <button onClick={() => onNavigate('acceptable-use')} className="hover:text-white transition-colors">Acceptable Use Policy</button>
+              </li>
+            </ul>
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
                 <div className="flex items-center gap-2 text-white font-medium mb-1">
@@ -98,7 +109,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-zinc-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          <p className="font-medium text-zinc-400">© 2025–2026 AetherPanel</p>
+          <div className="flex flex-wrap items-center gap-4 text-zinc-400 font-medium">
+            <span>© 2025–2026 AetherPanel</span>
+            <span className="text-zinc-700">•</span>
+            <button onClick={() => onNavigate('terms')} className="text-zinc-500 hover:text-zinc-300 transition">Terms</button>
+            <button onClick={() => onNavigate('privacy')} className="text-zinc-500 hover:text-zinc-300 transition">Privacy</button>
+            <button onClick={() => onNavigate('acceptable-use')} className="text-zinc-500 hover:text-zinc-300 transition">AUP</button>
+          </div>
           <p className="flex items-center gap-1 text-zinc-500">
             Engineered with <Heart className="h-3 w-3 text-rose-500 fill-rose-500" /> for gaming and developer communities.
           </p>

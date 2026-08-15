@@ -947,4 +947,72 @@ router.post('/nodes/:id/regenerate-token', async (req: AuthenticatedRequest, res
   res.json({ success: true, message: 'Daemon token regenerated', data: { daemonToken: node.daemonToken } });
 });
 
+// --- LEGAL PAGES CONTENT MANAGEMENT ---
+// GET /api/v1/admin/legal
+router.get('/legal', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  res.json({
+    success: true,
+    data: db.legalPages || []
+  });
+});
+
+// GET /api/v1/admin/legal/:slug
+router.get('/legal/:slug', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const page = (db.legalPages || []).find(p => p.slug === req.params.slug);
+  if (!page) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Legal document not found' } });
+  }
+  res.json({ success: true, data: page });
+});
+
+// PUT /api/v1/admin/legal/:slug
+router.put('/legal/:slug', async (req: AuthenticatedRequest, res: Response) => {
+  const { title, summary, content, version, isPublished } = req.body;
+  const db = await getDb();
+  if (!db.legalPages) db.legalPages = [];
+
+  let page = db.legalPages.find(p => p.slug === req.params.slug);
+  if (!page) {
+    page = {
+      id: `legal_${req.params.slug}`,
+      slug: req.params.slug,
+      title: title || req.params.slug,
+      summary: summary || '',
+      content: content || '',
+      version: version || '1.0.0',
+      isPublished: isPublished !== undefined ? Boolean(isPublished) : true,
+      lastUpdatedAt: new Date().toISOString(),
+      updatedBy: req.user?.displayName || req.user?.email || 'Administrator'
+    };
+    db.legalPages.push(page);
+  } else {
+    if (title !== undefined) page.title = title.trim();
+    if (summary !== undefined) page.summary = summary.trim();
+    if (content !== undefined) page.content = content;
+    if (version !== undefined) page.version = version.trim();
+    if (isPublished !== undefined) page.isPublished = Boolean(isPublished);
+    page.lastUpdatedAt = new Date().toISOString();
+    page.updatedBy = req.user?.displayName || req.user?.email || 'Administrator';
+  }
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_LEGAL',
+    page.slug,
+    `Updated legal document '${page.title}' (${page.slug}) version ${page.version}`
+  );
+
+  res.json({
+    success: true,
+    message: `Legal document '${page.title}' saved successfully.`,
+    data: page
+  });
+});
+
 export default router;

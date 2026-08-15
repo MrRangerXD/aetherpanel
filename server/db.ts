@@ -9,7 +9,7 @@ import {
   AdItem, AdEvent, AfkSession, RewardTransaction, AfkSettings, ServerTemplate,
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
-  AlertIncident, TelemetryPoint, DayUptime, ApiKey, WebhookSubscription
+  AlertIncident, TelemetryPoint, DayUptime, ApiKey, WebhookSubscription, LegalPage
 } from '../src/types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -53,6 +53,7 @@ export interface DatabaseSchema {
   telemetryHistory: Record<string, TelemetryPoint[]>;
   apiKeys: ApiKey[];
   webhooks: WebhookSubscription[];
+  legalPages: LegalPage[];
 }
 
 
@@ -696,8 +697,163 @@ export const defaultScheduledMaintenances: ScheduledMaintenance[] = [
   }
 ];
 
-let dbCache: DatabaseSchema | null = null;
+export const defaultLegalPages: LegalPage[] = [
+  {
+    id: 'legal_terms',
+    slug: 'terms',
+    title: 'Terms of Service',
+    summary: 'Rules, resource usage terms, service availability, and account governance on AetherPanel.',
+    version: '2.4.0',
+    isPublished: true,
+    lastUpdatedAt: new Date().toISOString(),
+    updatedBy: 'Aether Legal Compliance',
+    content: `# AetherPanel Terms of Service
 
+**Effective Date:** January 1, 2025  
+**Last Revised:** August 15, 2026  
+
+Welcome to **AetherPanel**. These Terms of Service ("Terms", "Agreement") govern your access to and usage of the AetherPanel hosting control plane, APIs, virtualized server environments, compute nodes, and related cloud services provided by AetherPanel ("we", "us", "our").
+
+By registering an account, purchasing or deploying a hosting instance, or using our platform, you agree to be bound by these Terms in full.
+
+---
+
+## 1. Eligibility & Account Responsibilities
+- You must be at least 13 years of age (or the minimum legal age in your jurisdiction) to establish an account.
+- You are strictly responsible for maintaining the confidentiality of your authentication credentials, 2FA recovery keys, and API tokens.
+- Any activity, process, or network traffic originating from your provisioned game or bot instances is legally attributable to your account.
+
+---
+
+## 2. Service Provisioning & Resource Limits
+- **Resource Allocations:** Dedicated memory (RAM), virtual CPU cores (vCPU), NVMe storage, port allocations, and backup quotas are allocated strictly according to your active plan tier.
+- **Fair Use:** Free and shared tier instances must adhere to fair usage policies. Processes that deliberately attempt to evade container limits, starve host memory, or exploit background kernel vulnerabilities are subject to immediate suspension.
+- **Node Relocation & Maintenance:** We reserve the right to migrate instances between hardware hypervisors during scheduled maintenance windows to maintain infrastructure stability and security.
+
+---
+
+## 3. Billing, Invoicing & Refunds
+- **Subscription Billing:** Paid plans are billed on a recurring monthly or yearly cycle according to your chosen payment method.
+- **Credits & Balance:** Account credits earned via AFK rewards, manual vouchers, or promotions are non-transferable and possess no standalone cash redemption value.
+- **Refund Policy:** If you encounter persistent infrastructure downtime (>24 hours non-maintenance outage), you may request a pro-rated account credit refund within 7 days of the billing incident.
+
+---
+
+## 4. User Content & Data Security
+- You retain all ownership rights to world saves, bot scripts, database contents, configuration files, and custom plugins uploaded to your virtual filesystem.
+- We maintain isolated, multi-tenant container barriers (cgroups, namespaces, chroot jail SFTP) to prevent cross-account data access.
+- You are responsible for scheduling periodic backups using the integrated Backup & Snapshot engine before performing major server upgrades or software re-installations.
+
+---
+
+## 5. Termination & Suspension
+We reserve the right to suspend or terminate service without prior notice if an instance is found in violation of our **Acceptable Use Policy (AUP)**, including but not limited to participating in Denial of Service (DDoS) campaigns, unauthorized cryptocurrency mining, or distributing malicious payloads.
+
+---
+
+## 6. Limitation of Liability
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, AETHERPANEL DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED. UNDER NO CIRCUMSTANCES SHALL AETHERPANEL BE LIABLE FOR INDIRECT, INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES RESULTING FROM DATA LOSS, INTERRUPTED GAMEPLAY, OR UPSTREAM TRANSIT OUTAGES.`
+  },
+  {
+    id: 'legal_privacy',
+    slug: 'privacy',
+    title: 'Privacy Policy',
+    summary: 'How AetherPanel collects, protects, isolates, and handles your account and telemetry data.',
+    version: '2.1.0',
+    isPublished: true,
+    lastUpdatedAt: new Date().toISOString(),
+    updatedBy: 'Aether Data Privacy Office',
+    content: `# AetherPanel Privacy Policy
+
+**Effective Date:** January 1, 2025  
+**Last Revised:** August 15, 2026  
+
+AetherPanel values your privacy and data autonomy. This Privacy Policy details how we collect, process, store, and safeguard your personal information and server data when using our platform.
+
+---
+
+## 1. Information We Collect
+We collect only the minimum required information necessary to provide reliable hosting services:
+1. **Account Identification:** Email address, username, display name, and hashed credentials (salted using bcrypt).
+2. **Infrastructure Telemetry:** CPU utilization, memory consumption, disk storage metrics, network I/O, uptime timestamps, and node status indicators collected by our local and remote node agents.
+3. **Audit & Security Logs:** IP addresses, login timestamps, API key requests, and administrative actions for security tracking.
+
+---
+
+## 2. Server Filesystem & Code Privacy
+- **Strict Isolation:** Your server files (Minecraft worlds, Discord bot scripts, \`.env\` configurations, and databases) are stored in sandboxed directories.
+- **No Unsolicited Scanning:** We do not read, inspect, or commercialize the contents of your private server files or application source code, except when strictly necessary to execute automated virus/malware scans or when compelled by law.
+
+---
+
+## 3. Cryptographic Storage & Security Measures
+- Authentication tokens and session cookies are signed using industry-standard HMAC-SHA256 signatures with expiration limits.
+- SSH/SFTP connections are authenticated through standard public key cryptography and secure host key verification.
+- Passwords are never stored in plaintext and cannot be retrieved in unhashed format by administrators.
+
+---
+
+## 4. Third-Party Integrations
+- **Discord Webhooks:** When configured by you, event payloads (start, stop, crash alerts) are securely dispatched to your chosen Discord channel endpoints.
+- **Payment Providers:** Sensitive credit card details are handled directly by PCI-DSS compliant payment gateways (Stripe, UPI providers); AetherPanel does not store raw payment card numbers.
+
+---
+
+## 5. Data Retention & Deletion Rights
+- When you delete a server instance, its associated virtual disk, SFTP permissions, and local backup archives are permanently unlinked and erased from the node filesystem.
+- You may request complete account deletion at any time by contacting our support team or opening a ticket in the Support Center.`
+  },
+  {
+    id: 'legal_acceptable_use',
+    slug: 'acceptable-use',
+    title: 'Acceptable Use Policy',
+    summary: 'Prohibited activities, bot guidelines, game server standards, and security obligations.',
+    version: '2.3.0',
+    isPublished: true,
+    lastUpdatedAt: new Date().toISOString(),
+    updatedBy: 'Aether Security Operations',
+    content: `# AetherPanel Acceptable Use Policy (AUP)
+
+**Effective Date:** January 1, 2025  
+**Last Revised:** August 15, 2026  
+
+This Acceptable Use Policy outlines mandatory rules and prohibited activities across all AetherPanel compute nodes, virtual instances, and networking infrastructure. Violations will result in immediate suspension, termination, and potential reporting to law enforcement authorities.
+
+---
+
+## 1. Strictly Prohibited Activities
+You may NOT use AetherPanel infrastructure for:
+- **Network Attacks:** Launching, participating in, or orchestrating Distributed Denial of Service (DDoS), SYN floods, UDP amplification attacks, or port-scanning operations.
+- **Botnets & Command & Control (C2):** Hosting botnet controllers, malware distribution hubs, trojans, ransomware, or keyloggers.
+- **Cryptocurrency Mining:** Running CPU, GPU, or memory-intensive cryptocurrency miners (e.g., XMRig, Monero miners) on shared or standard compute nodes without written enterprise permission.
+- **Phishing & Fraud:** Hosting counterfeit login portals, credential harvesting schemes, or fraudulent billing sites.
+- **Mass Spam & Mail Abuse:** Operating unauthenticated SMTP relays, unsolicited spam bots, or automated mass-messaging scrapers.
+
+---
+
+## 2. Minecraft & Game Server Standards
+- **Minecraft EULA Compliance:** All Minecraft server instances must comply with Mojang Studios' Commercial Usage Guidelines and End User License Agreement (EULA).
+- **Anti-Exploitation:** Running deliberate lag machines or malicious crash-spigot plugins designed to exhaust hypervisor shared resources is prohibited.
+
+---
+
+## 3. Discord & API Bot Standards
+- **Platform Terms:** Bot hosting instances must comply with the Discord Developer Terms of Service and Policy Guidelines.
+- **Token Security:** Users must not embed publicly leaked or hijacked bot tokens.
+- **Resource Discipline:** Bots must implement proper gateway reconnect backoff intervals and rate-limiting handling.
+
+---
+
+## 4. Enforcement & Abuse Reporting
+- Automated watchdog processes continuously monitor for abnormal outbound traffic spikes, high raw packet rates, and unauthorized binary signatures.
+- If abuse is detected, the affected instance will be immediately stopped and quarantined.
+- To report abuse originating from our IP ranges, please contact **abuse@aetherpanel.com** with relevant log excerpts and timestamps.`
+  }
+];
+
+let dbCache: DatabaseSchema | null = null;
+let isWriting = false;
+let pendingSave: Promise<void> | null = null;
 
 export async function getDb(): Promise<DatabaseSchema> {
   if (dbCache) return dbCache;
@@ -724,37 +880,7 @@ export async function getDb(): Promise<DatabaseSchema> {
         dbCache!.nodeInstallTokens = [];
       }
       if (!dbCache!.ads) {
-        dbCache!.ads = [
-          {
-            id: 'ad_aether_pro',
-            title: 'Aether Pro Infrastructure',
-            description: 'Upgrade to dedicated NVMe node clusters with guaranteed 99.99% uptime and DDoS protection.',
-            imageUrl: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80',
-            destinationUrl: '/pricing',
-            type: 'banner',
-            placement: 'dashboard',
-            priority: 10,
-            frequencyCapPerSession: 5,
-            isActive: true,
-            impressions: 42,
-            clicks: 5,
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 'ad_discord_bot',
-            title: 'Deploy High-Speed Discord Bots',
-            description: 'Run Python 3.11 & Node.js 20 bots with instant 24/7 process uptime starting at $0/mo.',
-            destinationUrl: '/bot',
-            type: 'card',
-            placement: 'server_list',
-            priority: 5,
-            frequencyCapPerSession: 3,
-            isActive: true,
-            impressions: 28,
-            clicks: 3,
-            createdAt: new Date().toISOString()
-          }
-        ];
+        dbCache!.ads = [];
       }
       if (!dbCache!.adEvents) {
         dbCache!.adEvents = [];
@@ -890,6 +1016,7 @@ export async function getDb(): Promise<DatabaseSchema> {
           isSuspended: false,
           emailVerified: true,
           twoFactorEnabled: false,
+          tokenVersion: 1,
           mustChangePassword: true,
           credits: 500.0,
           createdAt: new Date().toISOString(),
@@ -900,7 +1027,7 @@ export async function getDb(): Promise<DatabaseSchema> {
       } else {
         admin.email = adminEmail;
         admin.username = 'admin';
-        // Always ensure password for primary admin is set to configured adminPassword unless updated
+        if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
         dbCache!.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
       }
       delete dbCache!.passwords['usr_demo'];
@@ -943,8 +1070,12 @@ export async function getDb(): Promise<DatabaseSchema> {
       if (!dbCache!.webhooks) {
         dbCache!.webhooks = [];
       }
+      if (!dbCache!.legalPages || dbCache!.legalPages.length === 0) {
+        dbCache!.legalPages = defaultLegalPages;
+      }
 
       saveDbSync();
+      createDbSnapshot();
       return dbCache!;
     } catch (e) {
       console.error('Error reading db.json, generating default database:', e);
@@ -954,7 +1085,22 @@ export async function getDb(): Promise<DatabaseSchema> {
   // Generate initial database
   dbCache = await generateInitialDb();
   saveDbSync();
+  createDbSnapshot();
   return dbCache;
+}
+
+export function createDbSnapshot(): void {
+  try {
+    if (!dbCache) return;
+    const backupDir = path.join(DATA_DIR, 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const snapshotFile = path.join(backupDir, 'db-snapshot.json');
+    fs.writeFileSync(snapshotFile, JSON.stringify(dbCache, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Database] Failed to write db-snapshot:', err);
+  }
 }
 
 export function saveDbSync(): void {
@@ -962,11 +1108,33 @@ export function saveDbSync(): void {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(dbCache, null, 2), 'utf-8');
+  const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+  try {
+    fs.writeFileSync(tempFile, JSON.stringify(dbCache, null, 2), 'utf-8');
+    fs.renameSync(tempFile, DB_FILE);
+  } catch (err) {
+    console.error('[Database] Error in atomic write, falling back to direct write:', err);
+    fs.writeFileSync(DB_FILE, JSON.stringify(dbCache, null, 2), 'utf-8');
+  }
 }
 
 export async function saveDb(): Promise<void> {
   saveDbSync();
+}
+
+/**
+ * Executes an atomic transaction lock on the database state.
+ */
+export async function runTransaction<T>(action: (db: DatabaseSchema) => Promise<T> | T): Promise<T> {
+  const db = await getDb();
+  try {
+    const result = await action(db);
+    saveDbSync();
+    return result;
+  } catch (err) {
+    saveDbSync();
+    throw err;
+  }
 }
 
 async function generateInitialDb(): Promise<DatabaseSchema> {
@@ -1634,7 +1802,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     alertIncidents: [],
     telemetryHistory: {},
     apiKeys: [],
-    webhooks: []
+    webhooks: [],
+    legalPages: defaultLegalPages
   };
 }
 

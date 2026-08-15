@@ -16,7 +16,8 @@ export function generateToken(user: User): string {
       id: user.id,
       username: user.username,
       email: user.email,
-      role: user.role
+      role: user.role,
+      tokenVersion: user.tokenVersion || 1
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -25,10 +26,18 @@ export function generateToken(user: User): string {
 
 export async function verifyToken(token: string): Promise<User | null> {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; tokenVersion?: number };
     const db = await getDb();
     const user = db.users.find(u => u.id === decoded.id && !u.isSuspended);
-    return user || null;
+    if (!user) return null;
+
+    // Check token version for instant session revocation
+    if (user.tokenVersion !== undefined && decoded.tokenVersion !== undefined) {
+      if (decoded.tokenVersion !== user.tokenVersion) {
+        return null;
+      }
+    }
+    return user;
   } catch (err) {
     return null;
   }

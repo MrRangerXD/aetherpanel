@@ -22,6 +22,8 @@ import monitoringRoutes from './server/routes/monitoring';
 import apiKeysRoutes from './server/routes/apiKeys';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
+import { setupConsoleWebSocket } from './server/consoleWs';
+import { startSftpDaemon } from './server/sftpServer';
 
 dotenv.config();
 
@@ -46,6 +48,11 @@ async function startServer() {
     next();
   });
 
+  // Health endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', service: 'AetherPanel Control Plane', timestamp: new Date().toISOString() });
+  });
+
   // Serve install.sh bash script directly for curl commands
   app.get('/install.sh', (req, res) => {
     const rootScriptPath = path.join(process.cwd(), 'install.sh');
@@ -59,7 +66,7 @@ async function startServer() {
     res.status(404).send('# Installer script not found');
   });
 
-  // API Routes
+  // API Routes FIRST
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/public', publicRoutes);
   app.use('/api/v1/servers', serverRoutes);
@@ -77,20 +84,14 @@ async function startServer() {
   app.use('/api/v1/monitoring', monitoringRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
 
-  // Start Node Daemon Heartbeat Watchdog, Local Node Agent, and Scheduler Automation
-  startHeartbeatMonitor();
-  startLocalNodeAgent();
-  startSchedulerLoop();
-
-  // Health endpoint
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'AetherPanel Control Plane', timestamp: new Date().toISOString() });
-  });
-
-  // Vite Integration
+  // Vite Integration for SPA Development and Production Serving
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        ws: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -102,11 +103,57 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // Bind and Listen on Port 3000
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[AetherPanel] Server running on http://0.0.0.0:${PORT}`);
   });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[AetherPanel] Port ${PORT} in use, existing listener may still be handling requests.`);
+    } else {
+      console.error('[AetherPanel] Server listener error:', err);
+    }
+  });
+
+  // Initialize WebSockets for live console streaming attached to express server
+  try {
+    setupConsoleWebSocket(server);
+  } catch (wsErr) {
+    console.warn('[AetherPanel] WebSocket initialization warning:', wsErr);
+  }
+
+  // Start background services asynchronously after server is listening
+  setImmediate(() => {
+    try {
+      startHeartbeatMonitor();
+    } catch (e) {
+      console.warn('[AetherPanel] Heartbeat monitor init notice:', e);
+    }
+
+    try {
+      startLocalNodeAgent();
+    } catch (e) {
+      console.warn('[AetherPanel] Local node agent init notice:', e);
+    }
+
+    try {
+      startSchedulerLoop();
+    } catch (e) {
+      console.warn('[AetherPanel] Scheduler loop init notice:', e);
+    }
+
+    try {
+      startSftpDaemon();
+    } catch (e) {
+      console.warn('[AetherPanel] SFTP daemon init notice:', e);
+    }
+  });
+
+  return server;
 }
 
 startServer().catch(err => {
   console.error('[AetherPanel] Fatal server startup error:', err);
 });
+
