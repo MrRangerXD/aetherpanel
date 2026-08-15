@@ -91,7 +91,7 @@ print_banner() {
   echo -e "${CYAN}${BOLD}                         AETHERPANEL${NC}"
   echo -e "${WHITE}                    Premium Hosting Platform${NC}\n"
   echo -e "${BLUE}                    DEFAULT PORT: ${BOLD}${PANEL_PORT}${NC}"
-  echo -e "${PURPLE}                    Authoritative Source: ${BOLD}${REPO_URL}${NC}\n"
+  echo -e "${PURPLE}                    Made by: ${BOLD}$ZenseiBabe${NC}\n"
   echo -e "${CYAN}--------------------------------------------------------------------------------${NC}\n"
 }
 
