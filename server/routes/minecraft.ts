@@ -1,0 +1,197 @@
+import { Router, Request, Response } from 'express';
+import { getDb, saveDbSync } from '../db';
+import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
+import {
+  getMinecraftVersions,
+  getRecommendedJavaVersion,
+  readServerProperties,
+  writeServerProperties,
+  writeMinecraftEula,
+  downloadMinecraftServerJar
+} from '../minecraftService';
+import { getServerDir, startServer, stopServer, appendConsoleLog } from '../provider';
+import { dispatchWebhookEvent } from '../webhookService';
+import fs from 'fs';
+import path from 'path';
+
+const router = Router();
+
+// GET /api/v1/minecraft/versions - Query supported versions for software
+router.get('/versions', async (req: Request, res: Response) => {
+  try {
+    const software = (req.query.software as string) || 'paper';
+    const versionInfo = await getMinecraftVersions(software);
+    res.json({
+      success: true,
+      data: versionInfo
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: { code: 'VERSION_FETCH_FAILED', message: err.message }
+    });
+  }
+});
+
+// Helper for server access check
+async function checkServerAccess(req: AuthenticatedRequest, res: Response, serverId: string) {
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === serverId);
+
+  if (!server) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Server not found.' } });
+    return null;
+  }
+
+  const isOwner = server.userId === req.user!.id;
+  const isAdmin = ['admin', 'super_admin', 'moderator'].includes(req.user!.role);
+
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied to this server.' } });
+    return null;
+  }
+
+  return { server, db };
+}
+
+// GET /api/v1/minecraft/:id/properties - Get parsed server.properties
+router.get('/:id/properties', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const properties = readServerProperties(req.params.id);
+    res.json({
+      success: true,
+      data: {
+        properties,
+        recommendedJava: getRecommendedJavaVersion(access.server.version)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'PROPERTIES_ERROR', message: err.message } });
+  }
+});
+
+// PUT /api/v1/minecraft/:id/properties - Update server.properties
+router.put('/:id/properties', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const { properties } = req.body;
+    if (!properties || typeof properties !== 'object') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_PROPERTIES', message: 'Properties object required' } });
+    }
+
+    // Force serverPort to match server allocation to avoid desync
+    properties.serverPort = access.server.primaryPort;
+
+    writeServerProperties(req.params.id, properties);
+
+    await createAuditLog(
+      req.user!.id, req.user!.email, req.user!.role,
+      'UPDATE_SERVER_PROPERTIES', req.params.id,
+      `Updated Minecraft server.properties on '${access.server.name}'`
+    );
+
+    res.json({
+      success: true,
+      message: 'Server properties saved successfully. Restart server to apply changes.',
+      data: { properties: readServerProperties(req.params.id) }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'SAVE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/minecraft/:id/eula - Accept EULA explicitly
+router.post('/:id/eula', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { accepted } = req.body;
+  writeMinecraftEula(req.params.id, accepted !== false);
+
+  res.json({
+    success: true,
+    message: accepted !== false ? 'Mojang EULA accepted.' : 'Mojang EULA declined.'
+  });
+});
+
+// POST /api/v1/minecraft/:id/reinstall - Full reinstallation or version change
+router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server, db } = access;
+  const { software, version, preserveData } = req.body;
+
+  const targetSoftware = software || server.software || 'Paper';
+  const targetVersion = version || server.version || '1.21.4';
+
+  try {
+    // 1. Stop active process
+    await stopServer(server.id);
+
+    server.status = 'installing';
+    server.deploymentState = 'INSTALLING';
+    saveDbSync();
+
+    const dir = getServerDir(server.id);
+
+    // 2. Wipe non-preserved files if preserveData is false
+    if (!preserveData && fs.existsSync(dir)) {
+      appendConsoleLog(server.id, `[AetherInstaller/WARN]: Wiping server workspace for clean reinstallation...`);
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        const full = path.join(dir, entry);
+        try {
+          fs.rmSync(full, { recursive: true, force: true });
+        } catch (e) {}
+      }
+    }
+
+    // 3. Download target JAR
+    appendConsoleLog(server.id, `[AetherInstaller/INFO]: Installing ${targetSoftware} ${targetVersion}...`);
+    await downloadMinecraftServerJar(server.id, targetSoftware, targetVersion);
+
+    // 4. Generate configs
+    writeMinecraftEula(server.id, true);
+    writeServerProperties(server.id, {
+      serverPort: server.primaryPort,
+      motd: `§bAetherPanel §7- ${server.name}`
+    });
+
+    // 5. Update server metadata
+    server.software = targetSoftware;
+    server.version = targetVersion;
+    server.status = 'stopped';
+    server.deploymentState = 'READY';
+    server.updatedAt = new Date().toISOString();
+    saveDbSync();
+
+    await createAuditLog(
+      req.user!.id, req.user!.email, req.user!.role,
+      'REINSTALL_MINECRAFT', server.id,
+      `Reinstalled '${server.name}' to ${targetSoftware} ${targetVersion} (Preserve Data: ${Boolean(preserveData)})`
+    );
+
+    appendConsoleLog(server.id, `[AetherInstaller/SUCCESS]: Installation finished. Server is ready to start.`);
+
+    res.json({
+      success: true,
+      message: `Minecraft server reinstalled to ${targetSoftware} ${targetVersion}.`,
+      data: {
+        server
+      }
+    });
+  } catch (err: any) {
+    server.status = 'error';
+    server.deploymentState = 'FAILED';
+    saveDbSync();
+    res.status(500).json({ success: false, error: { code: 'REINSTALL_FAILED', message: err.message } });
+  }
+});
+
+export default router;

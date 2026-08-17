@@ -6,7 +6,7 @@ import {
   Save, PlayCircle, Shield, AlertTriangle, ArrowLeft, Key, ExternalLink,
   Layers, CheckCircle2, ChevronRight, Zap, RefreshCcw, Upload, FileArchive,
   Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare,
-  Globe, Wifi
+  Globe, Wifi, Sliders
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem } from '../../types';
@@ -15,6 +15,7 @@ import { useTheme } from '../../lib/ThemeContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
+import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 
 interface ServerManageProps {
   serverId: string;
@@ -27,18 +28,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const { accentClasses } = useTheme();
 
   const [server, setServer] = useState<Server | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
+  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
     (initialTab as any) || 'console'
   );
 
-
   useEffect(() => {
-    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity'].includes(initialTab)) {
+    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity'].includes(initialTab)) {
       setActiveTab(initialTab as any);
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
+  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
     setActiveTab(tab);
     setIsEditingFile(false);
     onNavigate('server-manage', { serverId, initialTab: tab });
@@ -127,9 +127,72 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [showReinstallModal, setShowReinstallModal] = useState(false);
   const [isReinstalling, setIsReinstalling] = useState(false);
+  const [reinstallSoftware, setReinstallSoftware] = useState('Paper');
+  const [reinstallVersion, setReinstallVersion] = useState('1.21.4');
+  const [reinstallVersionsList, setReinstallVersionsList] = useState<string[]>([]);
+  const [reinstallPreserveData, setReinstallPreserveData] = useState(true);
+  const [isLoadingReinstallVersions, setIsLoadingReinstallVersions] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Minecraft Properties state
+  const [mcProps, setMcProps] = useState<any>({
+    motd: '§bAetherPanel §7- High Performance Minecraft Host',
+    serverPort: 25565,
+    serverIp: '',
+    gamemode: 'survival',
+    difficulty: 'easy',
+    maxPlayers: 20,
+    onlineMode: true,
+    pvp: true,
+    viewDistance: 10,
+    simulationDistance: 8,
+    allowFlight: false,
+    enableCommandBlock: true,
+    spawnProtection: 16,
+    whiteList: false,
+    hardcore: false,
+    levelName: 'world',
+    levelSeed: ''
+  });
+  const [isLoadingProps, setIsLoadingProps] = useState(false);
+  const [isSavingProps, setIsSavingProps] = useState(false);
+  const [propsSavedMsg, setPropsSavedMsg] = useState(false);
+
+  const fetchMinecraftProps = async () => {
+    setIsLoadingProps(true);
+    const res = await apiRequest(`/minecraft/${serverId}/properties`);
+    if (res.success && res.data && res.data.properties) {
+      setMcProps(res.data.properties);
+    }
+    setIsLoadingProps(false);
+  };
+
+  const handleSaveMinecraftProps = async () => {
+    setIsSavingProps(true);
+    const res = await apiRequest(`/minecraft/${serverId}/properties`, {
+      method: 'PUT',
+      body: JSON.stringify({ properties: mcProps })
+    });
+    setIsSavingProps(false);
+    if (res.success) {
+      setPropsSavedMsg(true);
+      setTimeout(() => setPropsSavedMsg(false), 3000);
+    }
+  };
+
+  const loadReinstallVersions = async (software: string) => {
+    setIsLoadingReinstallVersions(true);
+    try {
+      const res = await apiRequest(`/minecraft/versions?software=${encodeURIComponent(software)}`);
+      if (res.success && res.data && res.data.versions && res.data.versions.length > 0) {
+        setReinstallVersionsList(res.data.versions);
+        setReinstallVersion(res.data.latest || res.data.versions[0]);
+      }
+    } catch (e) {}
+    setIsLoadingReinstallVersions(false);
+  };
 
   const handleInstallDependencies = async () => {
     setIsInstallingDeps(true);
@@ -419,6 +482,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     } else if (activeTab === 'plugins') {
       fetchPlugins();
       handleSearchPlugins('');
+    } else if (activeTab === 'properties') {
+      fetchMinecraftProps();
     } else if (activeTab === 'env') {
       fetchEnvVars();
     } else if (activeTab === 'backups') {
@@ -714,7 +779,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   // Reinstall Server
   const handleReinstallServer = async () => {
     setIsReinstalling(true);
-    await apiRequest(`/servers/${serverId}/reinstall`, { method: 'POST' });
+    if (isMinecraft) {
+      await apiRequest(`/minecraft/${serverId}/reinstall`, {
+        method: 'POST',
+        body: JSON.stringify({
+          software: reinstallSoftware,
+          version: reinstallVersion,
+          preserveData: reinstallPreserveData
+        })
+      });
+    } else {
+      await apiRequest(`/servers/${serverId}/reinstall`, { method: 'POST' });
+    }
     setIsReinstalling(false);
     setShowReinstallModal(false);
     fetchServerDetails();
@@ -976,6 +1052,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           </button>
         )}
 
+        {isMinecraft && (
+          <button
+            onClick={() => handleTabSelect('properties')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              activeTab === 'properties' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <Sliders className="h-4 w-4 text-amber-400" />
+            <span>Server Properties</span>
+          </button>
+        )}
+
         {isBot && (
           <button
             onClick={() => handleTabSelect('env')}
@@ -1051,61 +1139,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
       {/* TAB 1: CONSOLE LOGS */}
       {activeTab === 'console' && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-zinc-800 bg-black p-4 font-mono text-xs text-zinc-300 min-h-[380px] max-h-[500px] overflow-y-auto space-y-1 shadow-2xl">
-            {logs.map((log, idx) => (
-              <div
-                key={idx}
-                className={
-                  log.includes('SUCCESS') || log.includes('Done')
-                    ? 'text-emerald-400'
-                    : log.includes('WARN')
-                    ? 'text-amber-400'
-                    : log.includes('ERROR') || log.includes('FATAL')
-                    ? 'text-rose-400 font-bold'
-                    : log.includes('USER COMMAND')
-                    ? 'text-cyan-400 font-semibold'
-                    : 'text-zinc-300'
-                }
-              >
-                {log}
-              </div>
-            ))}
-            <div ref={consoleEndRef} />
-          </div>
-
-          <form onSubmit={handleSendCommand} className="flex gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3.5 top-3 font-mono text-violet-400 text-xs font-bold">&gt;</span>
-              <input
-                type="text"
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="Type command (e.g. op player, say Hello, stop, help)..."
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 pl-8 pr-4 py-2.5 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className={`px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-md`}
-            >
-              Send
-            </button>
-          </form>
-
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-            <span className="text-zinc-500 font-mono text-[11px]">Quick Commands:</span>
-            {['help', 'op admin', 'tps', 'save-all', 'say Server restarting soon!', 'list'].map((cmd) => (
-              <button
-                key={cmd}
-                onClick={() => { setCommand(cmd); }}
-                className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-violet-500 font-mono text-[11px] transition-colors"
-              >
-                {cmd}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ServerConsoleTab
+          server={server}
+          onRefreshServer={fetchServerDetails}
+          onPowerAction={handlePowerAction}
+        />
       )}
 
       {/* TAB: MONITORING & REAL-TIME TELEMETRY */}
@@ -1561,6 +1599,231 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: MINECRAFT PROPERTIES */}
+      {activeTab === 'properties' && isMinecraft && (
+        <div className="space-y-6">
+          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Sliders className="h-5 w-5 text-amber-400" /> Minecraft Server Configuration (server.properties)
+              </h3>
+              <p className="text-xs text-zinc-400">Directly modify and validate in-game gameplay parameters, world seeds, and networking rules.</p>
+            </div>
+            <button
+              onClick={handleSaveMinecraftProps}
+              disabled={isSavingProps}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/10 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              <span>{isSavingProps ? 'Saving Properties...' : 'Save Configuration'}</span>
+            </button>
+          </div>
+
+          {propsSavedMsg && (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-semibold flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Server properties saved! Restart server to apply changes to the live Minecraft instance.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Gameplay Rules */}
+            <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">Gameplay & World Parameters</h4>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Server MOTD (Message of the Day)</label>
+                <input
+                  type="text"
+                  value={mcProps.motd || ''}
+                  onChange={(e) => setMcProps({ ...mcProps, motd: e.target.value })}
+                  placeholder="§bAetherPanel Minecraft Server"
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Gamemode</label>
+                  <select
+                    value={mcProps.gamemode || 'survival'}
+                    onChange={(e) => setMcProps({ ...mcProps, gamemode: e.target.value })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs text-white"
+                  >
+                    <option value="survival">Survival</option>
+                    <option value="creative">Creative</option>
+                    <option value="adventure">Adventure</option>
+                    <option value="spectator">Spectator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Difficulty</label>
+                  <select
+                    value={mcProps.difficulty || 'easy'}
+                    onChange={(e) => setMcProps({ ...mcProps, difficulty: e.target.value })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs text-white"
+                  >
+                    <option value="peaceful">Peaceful</option>
+                    <option value="easy">Easy</option>
+                    <option value="normal">Normal</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Max Player Slots</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={mcProps.maxPlayers || 20}
+                    onChange={(e) => setMcProps({ ...mcProps, maxPlayers: parseInt(e.target.value, 10) || 20 })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Spawn Protection (Blocks)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={128}
+                    value={mcProps.spawnProtection ?? 16}
+                    onChange={(e) => setMcProps({ ...mcProps, spawnProtection: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">World / Level Name</label>
+                  <input
+                    type="text"
+                    value={mcProps.levelName || 'world'}
+                    onChange={(e) => setMcProps({ ...mcProps, levelName: e.target.value })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Custom World Seed</label>
+                  <input
+                    type="text"
+                    value={mcProps.levelSeed || ''}
+                    onChange={(e) => setMcProps({ ...mcProps, levelSeed: e.target.value })}
+                    placeholder="Leave empty for random"
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* In-Game Flags & Security */}
+            <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">In-Game Flags & Authentication</h4>
+
+              <div className="space-y-3">
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Online Mode (Mojang Authentication)</div>
+                    <div className="text-[11px] text-zinc-400">Enforce official Minecraft account authentication. Disable for offline/cracked.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={mcProps.onlineMode !== false}
+                    onChange={(e) => setMcProps({ ...mcProps, onlineMode: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">PvP Combat (Player vs Player)</div>
+                    <div className="text-[11px] text-zinc-400">Allow players to deal damage and engage in combat with each other.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={mcProps.pvp !== false}
+                    onChange={(e) => setMcProps({ ...mcProps, pvp: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Command Blocks Enabled</div>
+                    <div className="text-[11px] text-zinc-400">Enable execution of custom server command blocks.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={mcProps.enableCommandBlock !== false}
+                    onChange={(e) => setMcProps({ ...mcProps, enableCommandBlock: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Allow Flight (Survival Flight)</div>
+                    <div className="text-[11px] text-zinc-400">Prevents auto-kicking players using jetpacks, elytra mods, or flying glitches.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={mcProps.allowFlight === true}
+                    onChange={(e) => setMcProps({ ...mcProps, allowFlight: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Enforce White-List</div>
+                    <div className="text-[11px] text-zinc-400">Only players listed in whitelist.json can connect to the server.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={mcProps.whiteList === true}
+                    onChange={(e) => setMcProps({ ...mcProps, whiteList: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">View Distance (Chunks)</label>
+                  <input
+                    type="number"
+                    min={4}
+                    max={32}
+                    value={mcProps.viewDistance || 10}
+                    onChange={(e) => setMcProps({ ...mcProps, viewDistance: parseInt(e.target.value, 10) || 10 })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Simulation Distance</label>
+                  <input
+                    type="number"
+                    min={4}
+                    max={32}
+                    value={mcProps.simulationDistance || 8}
+                    onChange={(e) => setMcProps({ ...mcProps, simulationDistance: parseInt(e.target.value, 10) || 8 })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
 
@@ -2333,24 +2596,109 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
       {/* Reinstall Modal */}
       {showReinstallModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-400" /> Reinstall Server Container
-            </h3>
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to reinstall <strong>{server.name}</strong>? This process will stop the server, reset files to defaults, and re-apply fresh server templates.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowReinstallModal(false)} className="px-4 py-2 bg-zinc-900 text-xs text-zinc-300 rounded-xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-400" /> Reinstall & Change Software
+              </h3>
+              <button
+                onClick={() => setShowReinstallModal(false)}
+                className="p-1 text-zinc-500 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isMinecraft ? (
+              <div className="space-y-4">
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Switch server software or Minecraft version for <strong className="text-white font-mono">{server.name}</strong>. Real official JARs will be downloaded from upstream APIs.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Target Software</label>
+                  <select
+                    value={reinstallSoftware}
+                    onChange={(e) => {
+                      setReinstallSoftware(e.target.value);
+                      loadReinstallVersions(e.target.value);
+                    }}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white"
+                  >
+                    <option value="Paper">Paper (High Performance & Plugins)</option>
+                    <option value="Purpur">Purpur (Extremely Optimized Paper Fork)</option>
+                    <option value="Vanilla">Vanilla Mojang (Official Snapshot / Release)</option>
+                    <option value="Fabric">Fabric (Modern Lightweight Modded)</option>
+                    <option value="Spigot">Spigot (Classic Plugin Engine)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
+                    <span>Minecraft Version</span>
+                    {isLoadingReinstallVersions && <span className="text-[10px] text-amber-400 font-mono">Fetching latest builds...</span>}
+                  </label>
+                  <select
+                    value={reinstallVersion}
+                    onChange={(e) => setReinstallVersion(e.target.value)}
+                    disabled={isLoadingReinstallVersions}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                  >
+                    {reinstallVersionsList.length > 0 ? (
+                      reinstallVersionsList.map((ver) => (
+                        <option key={ver} value={ver}>
+                          {ver} {ver === reinstallVersionsList[0] ? '(Latest Stable)' : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="1.21.4">1.21.4 (Latest)</option>
+                        <option value="1.21.3">1.21.3</option>
+                        <option value="1.21.1">1.21.1</option>
+                        <option value="1.20.4">1.20.4</option>
+                        <option value="1.20.1">1.20.1</option>
+                        <option value="1.19.4">1.19.4</option>
+                        <option value="1.18.2">1.18.2</option>
+                        <option value="1.16.5">1.16.5</option>
+                        <option value="1.12.2">1.12.2</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reinstallPreserveData}
+                    onChange={(e) => setReinstallPreserveData(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded bg-zinc-950 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-white">Preserve World Data & Plugin Configs</div>
+                    <div className="text-[11px] text-zinc-400">Keeps existing worlds, player inventory data, and configs while replacing server.jar with the new build.</div>
+                  </div>
+                </label>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                Are you sure you want to reinstall <strong>{server.name}</strong>? This process will stop the server, reset files to defaults, and re-apply fresh server templates.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setShowReinstallModal(false)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 rounded-xl"
+              >
                 Cancel
               </button>
               <button
                 onClick={handleReinstallServer}
                 disabled={isReinstalling}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-xs text-white font-semibold rounded-xl"
+                className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs text-black font-bold rounded-xl shadow-lg shadow-amber-500/10 disabled:opacity-50"
               >
-                {isReinstalling ? 'Reinstalling...' : 'Yes, Reinstall'}
+                {isReinstalling ? 'Downloading & Provisioning...' : 'Confirm Reinstall'}
               </button>
             </div>
           </div>

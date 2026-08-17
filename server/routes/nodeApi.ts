@@ -1,17 +1,28 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
+import { getInstallationId } from '../installation';
+import { appendConsoleLog, emitServerStatus, pullRemoteServerCommands } from '../provider';
 
 const router = Router();
 
 // POST /api/v1/node/enroll - Daemon uses one-time installation token to pair with Panel
 router.post('/enroll', async (req: Request, res: Response) => {
-  const { token, fqdn, ip, daemonPort, sftpPort } = req.body;
+  const { token, fqdn, ip, daemonPort, sftpPort, installationId } = req.body;
 
   if (!token) {
     return res.status(400).json({
       success: false,
       error: { code: 'MISSING_TOKEN', message: 'Installation token is required' }
+    });
+  }
+
+  // Installation ID boundary validation
+  const currentInstallationId = getInstallationId();
+  if (installationId && installationId !== currentInstallationId) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'CROSS_INSTALLATION_DENIED', message: 'Daemon is targeting a different AetherPanel installation' }
     });
   }
 
@@ -59,6 +70,7 @@ router.post('/enroll', async (req: Request, res: Response) => {
       daemonToken,
       sftpPort: node.sftpPort,
       daemonPort: node.daemonPort,
+      installationId: currentInstallationId,
       panelUrl: `${req.protocol}://${req.get('host')}`
     }
   });
@@ -96,7 +108,8 @@ router.post('/heartbeat', async (req: Request, res: Response) => {
     diskUsageGB,
     activeContainers,
     totalRamMB,
-    totalDiskGB
+    totalDiskGB,
+    serverStatuses
   } = req.body;
 
   if (typeof ramUsageMB === 'number') node.usedRamMB = ramUsageMB;
@@ -105,6 +118,18 @@ router.post('/heartbeat', async (req: Request, res: Response) => {
   if (typeof activeContainers === 'number') node.serverCount = activeContainers;
   if (typeof totalRamMB === 'number' && totalRamMB > 0) node.totalRamMB = totalRamMB;
   if (typeof totalDiskGB === 'number' && totalDiskGB > 0) node.totalDiskGB = totalDiskGB;
+
+  // If node reports actual status for its running server containers
+  if (Array.isArray(serverStatuses)) {
+    serverStatuses.forEach((st: { serverId: string; status: any; cpu?: number; ram?: number }) => {
+      const s = db.servers.find(srv => srv.id === st.serverId && srv.nodeId === node.id);
+      if (s) {
+        if (st.status) s.status = st.status;
+        if (typeof st.cpu === 'number') s.cpuUsage = st.cpu;
+        if (typeof st.ram === 'number') s.ramUsageMB = st.ram;
+      }
+    });
+  }
 
   node.lastHeartbeatAt = new Date().toISOString();
   if (node.status !== 'maintenance') {
@@ -153,6 +178,186 @@ router.get('/servers', async (req: Request, res: Response) => {
       software: s.software,
       version: s.version
     }))
+  });
+});
+
+// POST /api/v1/node/servers/:id/logs - Daemon streams console stdout/stderr lines to Panel
+router.post('/servers/:id/logs', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  const serverId = req.params.id;
+  const server = db.servers.find(s => s.id === serverId && s.nodeId === node.id);
+  if (!server) {
+    return res.status(404).json({ success: false, error: { code: 'SERVER_NOT_FOUND', message: 'Server not assigned to this node' } });
+  }
+
+  const { lines, line } = req.body;
+  if (Array.isArray(lines)) {
+    for (const l of lines) {
+      if (typeof l === 'string') appendConsoleLog(serverId, l);
+    }
+  } else if (typeof line === 'string') {
+    appendConsoleLog(serverId, line);
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/v1/node/servers/:id/status - Daemon notifies Panel of container status change
+router.post('/servers/:id/status', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  const serverId = req.params.id;
+  const server = db.servers.find(s => s.id === serverId && s.nodeId === node.id);
+  if (!server) {
+    return res.status(404).json({ success: false, error: { code: 'SERVER_NOT_FOUND', message: 'Server not assigned to this node' } });
+  }
+
+  const { status, cpuUsage, ramUsageMB, exitCode, signal } = req.body;
+  if (status) {
+    server.status = status;
+    if (typeof cpuUsage === 'number') server.cpuUsage = cpuUsage;
+    if (typeof ramUsageMB === 'number') server.ramUsageMB = ramUsageMB;
+    saveDbSync();
+    emitServerStatus(serverId, status, { exitCode, signal, cpuUsage, ramUsageMB });
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/v1/node/servers/:id/commands - Daemon pulls pending stdin commands queued by Panel users
+router.get('/servers/:id/commands', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  const serverId = req.params.id;
+  const server = db.servers.find(s => s.id === serverId && s.nodeId === node.id);
+  if (!server) {
+    return res.status(404).json({ success: false, error: { code: 'SERVER_NOT_FOUND', message: 'Server not assigned to this node' } });
+  }
+
+  const commands = pullRemoteServerCommands(serverId);
+  res.json({ success: true, data: { commands } });
+});
+
+// GET /api/v1/node/config - Remote daemon fetches full node networking & SFTP configurations
+router.get('/config', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      nodeId: node.id,
+      nodeName: node.name,
+      ip: node.ip,
+      fqdn: node.fqdn,
+      sftpFqdn: node.sftpFqdn,
+      sftpPort: node.sftpPort || 2022,
+      daemonPort: node.daemonPort || 8080,
+      playitSftpAddress: node.playitSftpAddress,
+      playitSftpPort: node.playitSftpPort,
+      playitAgentInstalled: node.playitAgentInstalled,
+      playitAgentRunning: node.playitAgentRunning,
+      playitClaimCode: node.playitClaimCode,
+      playitClaimUrl: node.playitClaimUrl,
+      limits: {
+        totalRamMB: node.totalRamMB,
+        totalCpuCores: node.totalCpuCores,
+        totalDiskGB: node.totalDiskGB,
+        maxServers: node.maxServers
+      }
+    }
+  });
+});
+
+// POST /api/v1/node/sftp-status - Remote daemon syncs its local SFTP listener & public tunnel info
+router.post('/sftp-status', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  const { sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort } = req.body;
+  if (sftpPort) node.sftpPort = parseInt(sftpPort);
+  if (sftpFqdn) node.sftpFqdn = sftpFqdn.trim();
+  if (playitSftpAddress) node.playitSftpAddress = playitSftpAddress.trim();
+  if (playitSftpPort) node.playitSftpPort = parseInt(playitSftpPort);
+
+  saveDbSync();
+
+  res.json({
+    success: true,
+    message: 'SFTP networking status synchronized with Panel.'
+  });
+});
+
+// POST /api/v1/node/playit/sync - Remote daemon syncs Playit agent daemon state
+router.post('/playit/sync', async (req: Request, res: Response) => {
+  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
+  if (!daemonToken) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
+  }
+
+  const db = await getDb();
+  const node = db.nodes.find(n => n.daemonToken === daemonToken);
+  if (!node) {
+    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
+  }
+
+  const { isInstalled, isRunning, claimCode, claimUrl, sftpTunnelAddress, sftpTunnelPort } = req.body;
+  if (typeof isInstalled === 'boolean') node.playitAgentInstalled = isInstalled;
+  if (typeof isRunning === 'boolean') node.playitAgentRunning = isRunning;
+  if (claimCode) node.playitClaimCode = claimCode;
+  if (claimUrl) node.playitClaimUrl = claimUrl;
+  if (sftpTunnelAddress) node.playitSftpAddress = sftpTunnelAddress;
+  if (sftpTunnelPort) node.playitSftpPort = parseInt(sftpTunnelPort);
+
+  saveDbSync();
+
+  res.json({
+    success: true,
+    message: 'Node Playit tunnel status synchronized.'
   });
 });
 

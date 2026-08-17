@@ -3,7 +3,7 @@ import {
   Gamepad2, Bot, CheckCircle2, ArrowRight, ArrowLeft, Cpu,
   Globe2, ShieldCheck, Tag, Sparkles, Check, Server as ServerIcon,
   Zap, Layers, Terminal, Loader2, AlertCircle, HardDrive, MemoryStick,
-  Boxes, CheckCircle
+  Boxes, CheckCircle, RefreshCw
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Product, Plan, Node, ServerTemplate } from '../../types';
@@ -38,6 +38,10 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState<ServerTemplate | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<string>('');
   const [customEnvVars, setCustomEnvVars] = useState<Record<string, string>>({});
+  const [dynamicVersions, setDynamicVersions] = useState<string[]>([]);
+  const [selectedJavaVersion, setSelectedJavaVersion] = useState<string>('Java 21');
+  const [eulaAccepted, setEulaAccepted] = useState<boolean>(true);
+  const [isLoadingVersions, setIsLoadingVersions] = useState<boolean>(false);
   
   const [serverName, setServerName] = useState<string>('My Aether Server');
   const [selectedLocation, setSelectedLocation] = useState<string>('us-east');
@@ -81,11 +85,35 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     }
   };
 
+  const loadMinecraftVersions = async (software: string) => {
+    setIsLoadingVersions(true);
+    try {
+      const res = await apiRequest(`/minecraft/versions?software=${encodeURIComponent(software)}`);
+      if (res.success && res.data && res.data.versions && res.data.versions.length > 0) {
+        setDynamicVersions(res.data.versions);
+        setSelectedVersion(res.data.latest || res.data.versions[0]);
+        if (res.data.recommendedJava) {
+          setSelectedJavaVersion(`Java ${res.data.recommendedJava}`);
+        }
+      }
+    } catch (e) {
+      // Fallback to template versions
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
   const handleSelectTemplate = (tpl: ServerTemplate) => {
     setSelectedTemplate(tpl);
     setSelectedVersion(tpl.defaultVersion || tpl.versions[0] || '');
     setCustomEnvVars(tpl.environmentVars || {});
     setServerName(`${tpl.name} Instance`);
+
+    if (tpl.category === 'minecraft') {
+      loadMinecraftVersions(tpl.name);
+    } else {
+      setDynamicVersions(tpl.versions || []);
+    }
 
     // Pre-select appropriate plan if available based on recommended RAM
     const matchingPlan = plans.find(p => p.productId === (tpl.category === 'minecraft' ? 'prod_minecraft' : 'prod_bot') && p.ramMB >= tpl.recommendedRamMB);
@@ -360,67 +388,134 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         <div className="space-y-6">
           <div className="border-b border-zinc-800 pb-3">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Terminal className="h-5 w-5 text-amber-400" /> Step 2: Version & Configuration
+              <Terminal className="h-5 w-5 text-amber-400" /> Step 2: Version & Runtime Configuration
             </h2>
-            <p className="text-xs text-zinc-400">Configure runtime version and default environment variables for {selectedTemplate.name}.</p>
+            <p className="text-xs text-zinc-400">Configure runtime version, Java engine, and server configuration for {selectedTemplate.name}.</p>
           </div>
 
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 space-y-6">
             
             {/* Version Picker */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-2">
-                Select Software Version *
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {(selectedTemplate.versions || ['1.20.4']).map((ver) => (
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Select {selectedTemplate.name} Release Version *
+                </label>
+                {isLoadingVersions && (
+                  <span className="text-[11px] text-amber-400 flex items-center gap-1 font-mono">
+                    <RefreshCw className="h-3 w-3 animate-spin" /> Querying Upstream Releases...
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                {((dynamicVersions.length > 0 ? dynamicVersions : selectedTemplate.versions) || ['1.21.4', '1.20.4', '1.19.4', '1.18.2']).map((ver) => (
                   <button
                     key={ver}
                     type="button"
-                    onClick={() => setSelectedVersion(ver)}
-                    className={`p-3 rounded-xl border text-xs font-semibold text-center transition ${
+                    onClick={() => {
+                      setSelectedVersion(ver);
+                      const clean = ver.replace(/[^0-9.]/g, '');
+                      const parts = clean.split('.').map(p => parseInt(p, 10));
+                      const minor = parts[1] || 20;
+                      const patch = parts[2] || 0;
+                      if (minor > 20 || (minor === 20 && patch >= 5)) setSelectedJavaVersion('Java 21');
+                      else if (minor >= 17) setSelectedJavaVersion('Java 17');
+                      else if (minor === 16) setSelectedJavaVersion('Java 11');
+                      else setSelectedJavaVersion('Java 8');
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold font-mono text-center transition ${
                       selectedVersion === ver
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-400'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-400 ring-1 ring-amber-500/50'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
                     }`}
                   >
-                    {ver} {ver === selectedTemplate.defaultVersion && '(Recommended)'}
+                    {ver}
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* Java Runtime Selector for Minecraft */}
+            {selectedTemplate.category === 'minecraft' && (
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-white">Java Runtime Engine</label>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Compatible OpenJDK container image for this Minecraft build.</p>
+                  </div>
+                  <select
+                    value={selectedJavaVersion}
+                    onChange={(e) => setSelectedJavaVersion(e.target.value)}
+                    className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-semibold text-amber-400 focus:outline-none"
+                  >
+                    <option value="Java 21">Java 21 (Recommended for 1.20.5+)</option>
+                    <option value="Java 17">Java 17 (LTS for 1.17 - 1.20.4)</option>
+                    <option value="Java 11">Java 11 (Legacy 1.16)</option>
+                    <option value="Java 8">Java 8 (Legacy 1.8 - 1.15)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Mojang EULA Checkbox for Minecraft */}
+            {selectedTemplate.category === 'minecraft' && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={eulaAccepted}
+                    onChange={(e) => setEulaAccepted(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
+                  />
+                  <div className="text-xs text-zinc-300">
+                    <span className="font-bold text-white">Accept Mojang End User License Agreement (EULA)</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      By checking this box, you confirm agreement to the{' '}
+                      <a href="https://account.mojang.com/documents/minecraft_eula" target="_blank" rel="noreferrer" className="text-amber-400 underline hover:text-amber-300">
+                        Mojang Minecraft EULA
+                      </a>. This writes <code className="font-mono text-zinc-300">eula=true</code> to your server directory.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
+
             {/* Startup Command preview */}
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-2">
-                Startup Command
+                Startup Execution Vector
               </label>
               <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 font-mono text-xs text-amber-400">
-                {selectedTemplate.startupCommand}
+                {selectedTemplate.category === 'minecraft'
+                  ? `java -Xms128M -Xmx{{SERVER_MEMORY}}M -XX:+UseG1GC -jar server.jar nogui`
+                  : selectedTemplate.startupCommand}
               </div>
             </div>
 
             {/* Custom Environment Variables */}
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-2">
-                Environment Variables
-              </label>
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-3">
-                {Object.entries(customEnvVars).map(([key, val]) => (
-                  <div key={key} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="text-xs font-mono text-zinc-400 flex items-center bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
-                      {key}
+            {Object.keys(customEnvVars).length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-2">
+                  Environment Variables
+                </label>
+                <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-3">
+                  {Object.entries(customEnvVars).map(([key, val]) => (
+                    <div key={key} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="text-xs font-mono text-zinc-400 flex items-center bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
+                        {key}
+                      </div>
+                      <input
+                        type="text"
+                        value={val}
+                        onChange={(e) => setCustomEnvVars(prev => ({ ...prev, [key]: e.target.value }))}
+                        className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-amber-500"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      value={val}
-                      onChange={(e) => setCustomEnvVars(prev => ({ ...prev, [key]: e.target.value }))}
-                      className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
 
@@ -432,8 +527,9 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
               <ArrowLeft className="h-4 w-4" /> Back
             </button>
             <button
+              disabled={selectedTemplate.category === 'minecraft' && !eulaAccepted}
               onClick={() => setStep(3)}
-              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs rounded-xl flex items-center gap-2 transition shadow-lg shadow-amber-500/10"
+              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs rounded-xl flex items-center gap-2 transition shadow-lg shadow-amber-500/10 disabled:opacity-50"
             >
               Next: Name & Location <ArrowRight className="h-4 w-4" />
             </button>

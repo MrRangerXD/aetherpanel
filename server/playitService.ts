@@ -11,7 +11,20 @@ export interface PlayitStatus {
   claimCode?: string;
   tunnelAddress?: string;
   tunnelPort?: number;
-  tunnelType: 'minecraft_java' | 'minecraft_bedrock' | 'custom';
+  tunnelType: 'minecraft_java' | 'minecraft_bedrock' | 'sftp' | 'custom';
+  lastCheckedAt: string;
+  agentVersion: string;
+}
+
+export interface NodePlayitStatus {
+  nodeId: string;
+  isInstalled: boolean;
+  isRunning: boolean;
+  status: 'uninstalled' | 'installed' | 'claiming' | 'connected' | 'disconnected' | 'error';
+  claimUrl?: string;
+  claimCode?: string;
+  sftpTunnelAddress?: string;
+  sftpTunnelPort?: number;
   lastCheckedAt: string;
   agentVersion: string;
 }
@@ -24,6 +37,15 @@ export function getPlayitDir(serverId: string): string {
   return dir;
 }
 
+export function getNodePlayitDir(): string {
+  const dir = path.join(process.cwd(), 'data', 'playit_node');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+// SERVER-LEVEL PLAYIT
 export function getPlayitStatus(serverId: string): PlayitStatus {
   const playitDir = getPlayitDir(serverId);
   const configFile = path.join(playitDir, 'playit.json');
@@ -79,7 +101,7 @@ export async function installPlayitAgent(serverId: string): Promise<PlayitStatus
     status: 'connected',
     claimCode,
     claimUrl,
-    tunnelAddress: `${serverId.substring(4, 10)}.auto.playit.gg`,
+    tunnelAddress: `${serverId.substring(0, 8)}.auto.playit.gg`,
     tunnelPort: 25565,
     tunnelType: 'minecraft_java',
     lastCheckedAt: new Date().toISOString(),
@@ -119,4 +141,66 @@ export async function uninstallPlayitAgent(serverId: string): Promise<boolean> {
   }
   appendConsoleLog(serverId, `[Playit/Agent]: Playit agent removed and tunnel configuration purged.`);
   return true;
+}
+
+// NODE-LEVEL PLAYIT TUNNELS (e.g. For Global Node SFTP & Game Port Forwarding)
+export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitStatus> {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === nodeId);
+
+  if (!node) {
+    return {
+      nodeId,
+      isInstalled: false,
+      isRunning: false,
+      status: 'uninstalled',
+      lastCheckedAt: new Date().toISOString(),
+      agentVersion: 'v0.15.26'
+    };
+  }
+
+  return {
+    nodeId,
+    isInstalled: !!node.playitAgentInstalled,
+    isRunning: !!node.playitAgentRunning,
+    status: node.playitAgentRunning ? 'connected' : (node.playitAgentInstalled ? 'disconnected' : 'uninstalled'),
+    claimCode: node.playitClaimCode,
+    claimUrl: node.playitClaimUrl,
+    sftpTunnelAddress: node.playitSftpAddress || (node.playitAgentInstalled ? `sftp-${node.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}.auto.playit.gg` : undefined),
+    sftpTunnelPort: node.playitSftpPort || 2022,
+    lastCheckedAt: new Date().toISOString(),
+    agentVersion: 'v0.15.26'
+  };
+}
+
+export async function installNodePlayitAgent(nodeId: string): Promise<NodePlayitStatus> {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === nodeId);
+  if (!node) throw new Error(`Node ${nodeId} not found.`);
+
+  const claimCode = `AETH-NODE-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const claimUrl = `https://playit.gg/claim/${claimCode.toLowerCase()}`;
+  const sftpTunnelAddress = `sftp-${node.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}.auto.playit.gg`;
+
+  node.playitAgentInstalled = true;
+  node.playitAgentRunning = true;
+  node.playitClaimCode = claimCode;
+  node.playitClaimUrl = claimUrl;
+  node.playitSftpAddress = sftpTunnelAddress;
+  node.playitSftpPort = 2022;
+
+  saveDbSync();
+
+  return getNodePlayitStatus(nodeId);
+}
+
+export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Promise<NodePlayitStatus> {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === nodeId);
+  if (!node) throw new Error(`Node ${nodeId} not found.`);
+
+  node.playitAgentRunning = enable;
+  saveDbSync();
+
+  return getNodePlayitStatus(nodeId);
 }

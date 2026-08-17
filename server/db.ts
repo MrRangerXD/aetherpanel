@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import bcrypt from 'bcryptjs';
+import { getInstallationId } from './installation';
 import {
   User, Product, Plan, Server, Node, Allocation, Order, Coupon,
   SupportTicket, Announcement, AuditLog, SystemSettings, ServerBackup,
@@ -16,6 +17,7 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 export interface DatabaseSchema {
+  installationId?: string;
   users: User[];
   passwords: Record<string, string>; // userId -> passwordHash
   products: Product[];
@@ -1074,6 +1076,43 @@ export async function getDb(): Promise<DatabaseSchema> {
         dbCache!.legalPages = defaultLegalPages;
       }
 
+      // Ensure installationId is attached to all resources in this installation
+      const currentInstId = getInstallationId();
+      if (!dbCache!.installationId) {
+        dbCache!.installationId = currentInstId;
+      }
+
+      dbCache!.users.forEach(u => {
+        if (!u.installationId) u.installationId = currentInstId;
+      });
+      dbCache!.nodes.forEach(n => {
+        if (!n.installationId) n.installationId = currentInstId;
+      });
+      dbCache!.servers.forEach(s => {
+        if (!s.installationId) s.installationId = currentInstId;
+      });
+      dbCache!.allocations.forEach(a => {
+        if (!a.installationId) a.installationId = currentInstId;
+      });
+      dbCache!.backups.forEach(b => {
+        if (!b.installationId) b.installationId = currentInstId;
+      });
+      dbCache!.databases.forEach(d => {
+        if (!d.installationId) d.installationId = currentInstId;
+      });
+      dbCache!.schedules.forEach(s => {
+        if (!s.installationId) s.installationId = currentInstId;
+      });
+      dbCache!.orders.forEach(o => {
+        if (!o.installationId) o.installationId = currentInstId;
+      });
+      dbCache!.tickets.forEach(t => {
+        if (!t.installationId) t.installationId = currentInstId;
+      });
+      dbCache!.auditLogs.forEach(l => {
+        if (!l.installationId) l.installationId = currentInstId;
+      });
+
       saveDbSync();
       createDbSnapshot();
       return dbCache!;
@@ -1142,6 +1181,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
   const adminPassword = process.env.AETHER_ADMIN_PASSWORD || 'adminopp';
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
+  const currentInstId = getInstallationId();
+
   const adminUser: User = {
     id: 'usr_admin',
     username: 'admin',
@@ -1154,6 +1195,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     twoFactorEnabled: false,
     mustChangePassword: true,
     credits: 500.0,
+    installationId: currentInstId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -1405,156 +1447,17 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       serverCount: 0,
       daemonToken: 'daemon_token_local_node_secret_82910',
       lastHeartbeatAt: new Date().toISOString(),
-      isSecure: true
+      isSecure: true,
+      installationId: currentInstId
     }
   ];
 
   const allocations: Allocation[] = [
-    { id: 'alloc_1', nodeId: 'node_us_east', ip: '104.22.14.88', port: 25565, serverId: 'srv_survival', isAssigned: true },
-    { id: 'alloc_2', nodeId: 'node_us_east', ip: '104.22.14.88', port: 25566, isAssigned: false },
-    { id: 'alloc_3', nodeId: 'node_us_east', ip: '104.22.14.88', port: 3000, serverId: 'srv_discord_bot', isAssigned: true },
-    { id: 'alloc_4', nodeId: 'node_eu_central', ip: '185.120.44.12', port: 25565, isAssigned: false },
-    { id: 'alloc_5', nodeId: 'node_ap_southeast', ip: '139.180.201.5', port: 25565, isAssigned: false }
-  ];
-
-  const servers: Server[] = [
-    {
-      id: 'srv_survival',
-      name: 'Survival SMP - Season 2',
-      userId: 'usr_demo',
-      productId: 'prod_minecraft',
-      planId: 'plan_mc_pro',
-      nodeId: 'node_us_east',
-      status: 'running',
-      primaryIp: '104.22.14.88',
-      primaryPort: 25565,
-      location: 'Ashburn, VA',
-      software: 'Paper',
-      version: '1.20.4',
-      limits: {
-        ramMB: 8192,
-        cpuCores: 4,
-        diskGB: 60,
-        backups: 5,
-        databases: 3
-      },
-      createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      cpuUsage: 18.5,
-      ramUsageMB: 3420,
-      diskUsageMB: 8400,
-      uptimeSeconds: 142000
-    },
-    {
-      id: 'srv_discord_bot',
-      name: 'Community Moderation Bot',
-      userId: 'usr_demo',
-      productId: 'prod_bot',
-      planId: 'plan_bot_pro',
-      nodeId: 'node_us_east',
-      status: 'running',
-      primaryIp: '104.22.14.88',
-      primaryPort: 3000,
-      location: 'Ashburn, VA',
-      software: 'Node.js',
-      version: 'Node 20',
-      limits: {
-        ramMB: 2048,
-        cpuCores: 1.5,
-        diskGB: 15,
-        backups: 3,
-        databases: 2
-      },
-      createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      cpuUsage: 2.1,
-      ramUsageMB: 184,
-      diskUsageMB: 450,
-      uptimeSeconds: 89000
-    }
-  ];
-
-  const backups: ServerBackup[] = [
-    {
-      id: 'bk_1',
-      serverId: 'srv_survival',
-      name: 'Pre-World-Reset-Backup.tar.gz',
-      sizeMB: 1420,
-      status: 'COMPLETED',
-      type: 'manual',
-      storageProvider: 'local',
-      checksum: 'sha256_8a9f31c0e2',
-      createdAt: new Date(Date.now() - 86400000).toISOString()
-    }
-  ];
-
-  const databases: ServerDatabase[] = [
-    {
-      id: 'db_1',
-      serverId: 'srv_survival',
-      name: 's2_luckperms_db',
-      username: 'u_s2_luckperms',
-      host: 'node-us1.aetherpanel.com',
-      port: 3306,
-      dbType: 'mysql',
-      createdAt: new Date(Date.now() - 2 * 86400000).toISOString()
-    }
-  ];
-
-  const schedules: ServerSchedule[] = [
-    {
-      id: 'sch_1',
-      serverId: 'srv_survival',
-      name: 'Daily 4 AM World Save & Restart',
-      cronExpression: '0 4 * * *',
-      scheduleType: 'daily',
-      action: 'restart',
-      isEnabled: true,
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      lastRunAt: new Date(Date.now() - 14 * 3600000).toISOString(),
-      nextRunAt: new Date(Date.now() + 10 * 3600000).toISOString()
-    }
-  ];
-
-  const activities: ServerActivity[] = [
-    {
-      id: 'act_1',
-      serverId: 'srv_survival',
-      userId: 'usr_demo',
-      username: 'demouser',
-      action: 'SERVER_START',
-      details: 'Started Minecraft server instance',
-      createdAt: new Date(Date.now() - 3600000).toISOString()
-    }
-  ];
-
-  const orders: Order[] = [
-    {
-      id: 'ord_1001',
-      userId: 'usr_demo',
-      userEmail: 'demo@aetherpanel.com',
-      planId: 'plan_mc_pro',
-      planName: 'Minecraft Pro Tier',
-      billingCycle: 'monthly',
-      amount: 14.99,
-      currency: 'USD',
-      status: 'paid',
-      paymentMethod: 'Credit Card (Stripe)',
-      createdAt: new Date(Date.now() - 7 * 86400000).toISOString()
-    },
-    {
-      id: 'ord_1002',
-      userId: 'usr_demo',
-      userEmail: 'demo@aetherpanel.com',
-      planId: 'plan_bot_pro',
-      planName: 'Discord Bot Pro Tier',
-      billingCycle: 'monthly',
-      amount: 4.99,
-      currency: 'USD',
-      status: 'paid',
-      paymentMethod: 'PayPal',
-      createdAt: new Date(Date.now() - 3 * 86400000).toISOString()
-    }
+    { id: 'alloc_1', nodeId: 'node_local', ip: '127.0.0.1', port: 25565, isAssigned: false, installationId: currentInstId },
+    { id: 'alloc_2', nodeId: 'node_local', ip: '127.0.0.1', port: 25566, isAssigned: false, installationId: currentInstId },
+    { id: 'alloc_3', nodeId: 'node_local', ip: '127.0.0.1', port: 25567, isAssigned: false, installationId: currentInstId },
+    { id: 'alloc_4', nodeId: 'node_local', ip: '127.0.0.1', port: 3000, isAssigned: false, installationId: currentInstId },
+    { id: 'alloc_5', nodeId: 'node_local', ip: '127.0.0.1', port: 3001, isAssigned: false, installationId: currentInstId }
   ];
 
   const coupons: Coupon[] = [
@@ -1564,7 +1467,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       discountType: 'percent',
       discountValue: 20,
       usageLimit: 100,
-      timesUsed: 14,
+      timesUsed: 0,
       isActive: true
     },
     {
@@ -1573,60 +1476,19 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       discountType: 'percent',
       discountValue: 50,
       usageLimit: 10,
-      timesUsed: 2,
+      timesUsed: 0,
       isActive: true
-    }
-  ];
-
-  const tickets: SupportTicket[] = [
-    {
-      id: 'tkt_101',
-      userId: 'usr_demo',
-      userName: 'Alex Rivers',
-      userEmail: 'demo@aetherpanel.com',
-      subject: 'Question regarding custom Java flags',
-      category: 'Minecraft Configuration',
-      priority: 'medium',
-      status: 'answered',
-      messages: [
-        {
-          id: 'msg_1',
-          senderId: 'usr_demo',
-          senderName: 'Alex Rivers',
-          senderRole: 'user',
-          message: 'Hi team, how can I add Aikar\'s flags to my Minecraft Paper server startup options?',
-          createdAt: new Date(Date.now() - 2 * 3600000).toISOString()
-        },
-        {
-          id: 'msg_2',
-          senderId: 'usr_admin',
-          senderName: 'Aether Support Specialist',
-          senderRole: 'super_admin',
-          message: 'Hello Alex! You can easily toggle or customize Aikar\'s optimized JVM flags under the "Startup Configuration" tab on your server management dashboard.',
-          createdAt: new Date(Date.now() - 1 * 3600000).toISOString()
-        }
-      ],
-      createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-      updatedAt: new Date(Date.now() - 1 * 3600000).toISOString()
     }
   ];
 
   const announcements: Announcement[] = [
     {
       id: 'ann_1',
-      title: 'AetherPanel v2.4 Platform Upgrade',
-      content: 'We have upgraded all US East and EU Central nodes with AMD Ryzen 9 7950X processors and DDR5 ECC RAM for 35% higher TPS in Minecraft and sub-millisecond bot response times!',
+      title: 'Welcome to AetherPanel',
+      content: 'Your high-performance game and bot hosting control panel is initialized and ready for production provisioning.',
       type: 'update',
       isPublished: true,
-      createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
-    },
-    {
-      id: 'ann_2',
-      title: 'Scheduled Node Maintenance - AP South',
-      content: 'Routine firmware updates on AP South (Singapore) node scheduled for Sunday at 02:00 UTC. Expected downtime under 3 minutes.',
-      type: 'maintenance',
-      isPublished: true,
-      createdAt: new Date(Date.now() - 86400000 * 5).toISOString()
+      createdAt: new Date().toISOString()
     }
   ];
 
@@ -1634,12 +1496,13 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     {
       id: 'aud_1',
       actorId: 'usr_admin',
-      actorEmail: 'admin@aetherpanel.com',
+      actorEmail: adminEmail,
       actorRole: 'super_admin',
       action: 'SYSTEM_INIT',
       targetResource: 'DATABASE',
-      details: 'AetherPanel database initialized with security policies.',
+      details: 'AetherPanel database initialized with security policies and installation isolation.',
       ipAddress: '127.0.0.1',
+      installationId: currentInstId,
       createdAt: new Date().toISOString()
     }
   ];
@@ -1685,13 +1548,13 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       }
     },
     discordSettings: {
-      enabled: true,
-      botToken: 'bot_token_secret_aether_live_prod_2026',
-      clientId: '109283749281729384',
-      clientSecret: 'discord_client_secret_masked',
+      enabled: false,
+      botToken: '',
+      clientId: '',
+      clientSecret: '',
       redirectUri: 'http://localhost:3000/settings',
-      defaultWebhookUrl: 'https://discord.com/api/webhooks/demo/aetherpanel-notifications',
-      botStatus: 'online',
+      defaultWebhookUrl: '',
+      botStatus: 'offline',
       commandRateLimitPerMin: 10,
       defaultNotificationEvents: [
         'SERVER_STARTED',
@@ -1706,6 +1569,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
   };
 
   return {
+    installationId: currentInstId,
     users: [adminUser],
     passwords: {
       'usr_admin': adminPasswordHash
@@ -1732,60 +1596,9 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     adEvents: [],
     afkSessions: [],
     rewardTransactions: [],
-    discordLinks: {
-      'usr_admin': {
-        discordId: '987654321012345678',
-        username: 'AlexAdmin#0001',
-        globalName: 'Alex (Aether Admin)',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-        email: 'admin@aetherpanel.com',
-        linkedAt: new Date(Date.now() - 30 * 86400000).toISOString()
-      },
-      'usr_demo': {
-        discordId: '123456789012345678',
-        username: 'JohnGamer#1337',
-        globalName: 'JohnGamer',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
-        email: 'demo@aetherpanel.com',
-        linkedAt: new Date(Date.now() - 7 * 86400000).toISOString()
-      }
-    },
-    serverDiscordLinks: [
-      {
-        serverId: 'srv_survival',
-        enabled: true,
-        webhookUrl: 'https://discord.com/api/webhooks/demo/survival-server-alerts',
-        channelName: '#survival-status',
-        enabledEvents: [
-          'SERVER_STARTED',
-          'SERVER_STOPPED',
-          'SERVER_CRASHED',
-          'SERVER_RESTARTED',
-          'BACKUP_COMPLETED',
-          'BACKUP_FAILED',
-          'RESOURCE_WARNING'
-        ],
-        mentionRoleId: '112233445566778899',
-        cooldownSeconds: 60,
-        allowServerCommands: true,
-        updatedAt: new Date().toISOString()
-      }
-    ],
-    discordAuditLogs: [
-      {
-        id: 'aud_disc_1',
-        command: '/server status',
-        discordUserId: '123456789012345678',
-        discordUsername: 'JohnGamer#1337',
-        aetherUserId: 'usr_demo',
-        aetherUserEmail: 'demo@aetherpanel.com',
-        serverId: 'srv_survival',
-        serverName: 'Minecraft Survival SMP',
-        result: 'success',
-        details: 'Status requested via Discord slash command. CPU: 18.5%, RAM: 3.4GB.',
-        timestamp: new Date(Date.now() - 3600000).toISOString()
-      }
-    ],
+    discordLinks: {},
+    serverDiscordLinks: [],
+    discordAuditLogs: [],
     afkSettings: {
       enabled: true,
       creditsPerInterval: 5,

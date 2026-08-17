@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
-import { initializeServerFiles, appendConsoleLog } from '../provider';
+import { initializeServerFiles, appendConsoleLog, startServer } from '../provider';
+import { downloadMinecraftServerJar, writeMinecraftEula, writeServerProperties } from '../minecraftService';
 import { Server, Order, Allocation } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 
@@ -234,7 +235,25 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
     // Initialize files on disk
     initializeServerFiles(serverId, prod?.category || 'minecraft', newServer.software);
+
+    if (prod?.category === 'minecraft') {
+      appendConsoleLog(serverId, `[AetherPanel]: Provisioning Minecraft server runtime (${newServer.software} ${newServer.version})...`);
+      writeMinecraftEula(serverId, true);
+      writeServerProperties(serverId, {
+        serverPort: assignedPort,
+        motd: `§bAetherPanel §7- ${newServer.name}`
+      });
+      try {
+        await downloadMinecraftServerJar(serverId, newServer.software, newServer.version);
+      } catch (err: any) {
+        appendConsoleLog(serverId, `[AetherInstaller/WARN]: Server JAR download notice: ${err.message}`);
+      }
+    }
+
     appendConsoleLog(serverId, `[AetherPanel]: Server auto-provisioned successfully from template '${selectedSoftware}' on node ${targetNode.name}.`);
+
+    // Genuinely spawn the server runtime process
+    await startServer(serverId);
 
     saveDbSync();
 

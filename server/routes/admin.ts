@@ -2,6 +2,10 @@ import { Router, Response } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
 import { User, Product, Plan, Node, Allocation, Coupon, Announcement, SystemSettings } from '../../src/types';
+import { ensureLocalNode } from '../nodeAgent';
+import {
+  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent
+} from '../playitService';
 
 const router = Router();
 
@@ -354,7 +358,8 @@ router.get('/nodes', async (req: AuthenticatedRequest, res: Response) => {
 // POST /api/v1/admin/nodes
 router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
   const {
-    name, hostname, ip, fqdn, daemonPort, sftpPort, location, locationName, flagCode,
+    name, hostname, ip, fqdn, daemonPort, sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB,
     ramOverallocatePercent, cpuOverallocatePercent, diskOverallocatePercent,
     maxServers, allowedProducts
@@ -368,6 +373,9 @@ router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
     hostname: hostname.trim(),
     ip: ip.trim(),
     fqdn: fqdn ? fqdn.trim() : hostname.trim(),
+    sftpFqdn: sftpFqdn ? sftpFqdn.trim() : undefined,
+    playitSftpAddress: playitSftpAddress ? playitSftpAddress.trim() : undefined,
+    playitSftpPort: playitSftpPort ? parseInt(playitSftpPort) : undefined,
     daemonPort: parseInt(daemonPort) || 8080,
     sftpPort: parseInt(sftpPort) || 2022,
     location: location || 'us-east',
@@ -435,7 +443,7 @@ router.post('/nodes/:id/install-token', async (req: AuthenticatedRequest, res: R
   const protocol = req.protocol;
   const host = req.get('host');
   const panelUrl = `${protocol}://${host}`;
-  const installCmd = `curl -fsSL ${panelUrl}/install.sh | bash -s -- --node --token ${tokenStr} --panel ${panelUrl}`;
+  const installCmd = `bash <(curl -fsSL https://raw.githubusercontent.com/MrRangerXD/aetherpanel/refs/heads/main/install.sh) --node --token ${tokenStr} --panel ${panelUrl}`;
 
   res.json({
     success: true,
@@ -449,6 +457,39 @@ router.post('/nodes/:id/install-token', async (req: AuthenticatedRequest, res: R
   });
 });
 
+// POST /api/v1/admin/nodes/:id/repair - Hardware health check, metric sync & reconnection
+router.post('/nodes/:id/repair', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === req.params.id);
+  if (!node) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
+
+  if (node.isLocalNode || node.id === 'node_local') {
+    const updated = await ensureLocalNode();
+    await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'REPAIR_NODE', node.id, `Repaired and synchronized Local Node telemetry.`);
+    return res.json({
+      success: true,
+      data: updated,
+      message: `Local Node telemetry re-synchronized with live hardware. Status: ${updated.status}.`
+    });
+  }
+
+  // Remote node: re-verify heartbeat timestamp and server count
+  const serverCount = db.servers.filter(s => s.nodeId === node.id).length;
+  node.serverCount = serverCount;
+  const isRecent = node.lastHeartbeatAt && (Date.now() - new Date(node.lastHeartbeatAt).getTime() < 300000);
+  if (isRecent && node.status !== 'maintenance') {
+    node.status = 'online';
+  }
+  saveDbSync();
+
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'REPAIR_NODE', node.id, `Repaired and synchronized Remote Node '${node.name}'.`);
+  res.json({
+    success: true,
+    data: node,
+    message: `Remote Node '${node.name}' synchronized. Status: ${node.status}.`
+  });
+});
+
 // PUT /api/v1/admin/nodes/:id
 router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -456,7 +497,8 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (!node) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
 
   const {
-    name, hostname, ip, fqdn, daemonPort, sftpPort, location, locationName, flagCode,
+    name, hostname, ip, fqdn, daemonPort, sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB, ramOverallocatePercent, cpuOverallocatePercent,
     diskOverallocatePercent, maxServers, allowedProducts, isMaintenanceMode, status
   } = req.body;
@@ -464,7 +506,10 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (name) node.name = name;
   if (hostname) node.hostname = hostname;
   if (ip) node.ip = ip;
-  if (fqdn) node.fqdn = fqdn;
+  if (fqdn !== undefined) node.fqdn = fqdn;
+  if (sftpFqdn !== undefined) node.sftpFqdn = sftpFqdn;
+  if (playitSftpAddress !== undefined) node.playitSftpAddress = playitSftpAddress;
+  if (playitSftpPort !== undefined) node.playitSftpPort = playitSftpPort ? parseInt(playitSftpPort) : undefined;
   if (daemonPort) node.daemonPort = parseInt(daemonPort);
   if (sftpPort) node.sftpPort = parseInt(sftpPort);
   if (location) node.location = location;
@@ -484,6 +529,37 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   saveDbSync();
 
   res.json({ success: true, data: node });
+});
+
+// GET /api/v1/admin/nodes/:id/playit - Get node-level Playit tunnel status
+router.get('/nodes/:id/playit', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = await getNodePlayitStatus(req.params.id);
+    res.json({ success: true, data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/nodes/:id/playit/install - Install node-level Playit tunnel (zero port-forward SFTP)
+router.post('/nodes/:id/playit/install', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = await installNodePlayitAgent(req.params.id);
+    res.json({ success: true, message: 'Playit tunnel configured for node SFTP.', data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_INSTALL_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/nodes/:id/playit/toggle - Toggle node-level Playit tunnel
+router.post('/nodes/:id/playit/toggle', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { enable } = req.body;
+    const status = await toggleNodePlayitAgent(req.params.id, Boolean(enable));
+    res.json({ success: true, message: `Node Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
+  }
 });
 
 // DELETE /api/v1/admin/nodes/:id - Delete node safety check

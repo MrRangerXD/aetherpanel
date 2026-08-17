@@ -12,8 +12,9 @@ import {
   renameServerItem, compressServerItem, decompressServerItem,
   readServerEnv, writeServerEnv, recordServerActivity,
   listMinecraftPlugins, toggleMinecraftPlugin, getServerDir,
-  installServerDependencies
+  installServerDependencies, clearConsoleBuffer
 } from '../provider';
+import { closeServerConsoleClients } from '../consoleWs';
 import {
   getPlayitStatus, installPlayitAgent, togglePlayitAgent, uninstallPlayitAgent
 } from '../playitService';
@@ -22,6 +23,7 @@ import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProc
 import { calculateNextRunAt } from '../scheduler';
 import { ServerBackup, ServerDatabase, ServerSchedule, ServerActivity } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
+import { resolveServerSftpInfo } from '../sftpResolver';
 
 const router = Router();
 
@@ -90,6 +92,7 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
   const node = db.nodes.find(n => n.id === server.nodeId);
   const product = db.products.find(p => p.id === server.productId);
   const plan = db.plans.find(p => p.id === server.planId);
+  const sftp = await resolveServerSftpInfo(server.id, req.get('host'));
 
   res.json({
     success: true,
@@ -97,8 +100,21 @@ router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Respon
       server,
       node: node ? { id: node.id, name: node.name, locationName: node.locationName, flagCode: node.flagCode } : null,
       product,
-      plan
+      plan,
+      sftp
     }
+  });
+});
+
+// GET /api/v1/servers/:id/sftp - Resolved public SFTP Connection details
+router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const sftpInfo = await resolveServerSftpInfo(req.params.id, req.get('host'));
+  res.json({
+    success: true,
+    data: sftpInfo
   });
 });
 
@@ -871,6 +887,18 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
 
   // Stop server first
   await stopServer(server.id);
+
+  // Clear console log buffer & close active console clients
+  clearConsoleBuffer(server.id);
+  closeServerConsoleClients(server.id, `Server '${server.name}' has been deleted.`);
+
+  // Clean filesystem directory
+  const serverDir = getServerDir(server.id);
+  if (fs.existsSync(serverDir)) {
+    try {
+      fs.rmSync(serverDir, { recursive: true, force: true });
+    } catch (e) {}
+  }
 
   // Remove from DB
   db.servers = db.servers.filter(s => s.id !== server.id);

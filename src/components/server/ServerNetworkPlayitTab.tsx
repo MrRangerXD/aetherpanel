@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   Globe, Key, Copy, Check, RefreshCw, Shield, AlertTriangle,
   ExternalLink, Play, Square, Wifi, Terminal, Server, CheckCircle2,
-  Lock, ArrowRight, Download
+  Lock, ArrowRight, Download, Radio, Network, FolderSync
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Server as ServerType } from '../../types';
+import { Server as ServerType, SftpConnectionInfo } from '../../types';
 
 interface PlayitData {
   isInstalled: boolean;
@@ -30,9 +30,26 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const [installingPlayit, setInstallingPlayit] = useState<boolean>(false);
   const [togglingTunnel, setTogglingTunnel] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [sftpPassword, setSftpPassword] = useState<string>((server as any).sftpPassword || '••••••••••••••••');
+
+  // SFTP state
+  const [sftpInfo, setSftpInfo] = useState<SftpConnectionInfo | null>((server as any).sftp || null);
+  const [loadingSftp, setLoadingSftp] = useState<boolean>(!((server as any).sftp));
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [resettingPassword, setResettingPassword] = useState<boolean>(false);
+
+  const fetchSftpInfo = async () => {
+    try {
+      setLoadingSftp(true);
+      const res = await apiRequest(`/servers/${server.id}/sftp`);
+      if (res.success && res.data) {
+        setSftpInfo(res.data);
+      }
+    } catch {
+      // fallback to basic
+    } finally {
+      setLoadingSftp(false);
+    }
+  };
 
   const fetchPlayitStatus = async () => {
     setLoadingPlayit(true);
@@ -49,6 +66,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   };
 
   useEffect(() => {
+    fetchSftpInfo();
     fetchPlayitStatus();
   }, [server.id]);
 
@@ -64,6 +82,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
       const res = await apiRequest(`/servers/${server.id}/playit/install`, { method: 'POST' });
       if (res.success && res.data) {
         setPlayit(res.data);
+        fetchSftpInfo();
       }
     } finally {
       setInstallingPlayit(false);
@@ -91,8 +110,11 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
     try {
       const res = await apiRequest(`/servers/${server.id}/sftp/reset-password`, { method: 'POST' });
       if (res.success && res.data?.sftpPassword) {
-        setSftpPassword(res.data.sftpPassword);
+        if (sftpInfo) {
+          setSftpInfo({ ...sftpInfo, password: res.data.sftpPassword });
+        }
         setShowPassword(true);
+        onRefreshServer();
       }
     } finally {
       setResettingPassword(false);
@@ -100,6 +122,12 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   };
 
   const isMinecraft = server.productId === 'prod_minecraft' || server.software.toLowerCase().includes('paper') || server.software.toLowerCase().includes('forge') || server.software.toLowerCase().includes('spigot');
+
+  const sftpHost = sftpInfo?.host || (window.location.hostname || 'panel.aether.internal');
+  const sftpPort = sftpInfo?.port || 2022;
+  const sftpUser = sftpInfo?.username || `srv_${server.id.substring(0, 10)}`;
+  const sftpPass = sftpInfo?.password || (server as any).sftpPassword || '••••••••••••••••';
+  const sftpUri = sftpInfo?.connectionUri || `sftp://${sftpUser}@${sftpHost}:${sftpPort}`;
 
   return (
     <div className="space-y-6">
@@ -151,7 +179,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 font-mono text-xs">
               <span className="text-zinc-300">{server.primaryIp}</span>
-              <span className="text-[10px] text-zinc-500 font-sans">Node Direct Gateway</span>
+              <span className="text-[10px] text-zinc-500 font-sans">Node Gateway</span>
             </div>
             <p className="text-[11px] text-zinc-500">
               Low-latency node routing with automatic DDoS filtering enabled.
@@ -160,15 +188,27 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
         </div>
       </div>
 
-      {/* SFTP Secure File Transfer Credentials */}
+      {/* SFTP Secure File Transfer Credentials with Real Resolver */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Key className="h-5 w-5 text-violet-400" /> SFTP (Secure FTP) Credentials
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Key className="h-5 w-5 text-violet-400" /> SFTP (Secure File Transfer Protocol)
+              </h3>
+              {sftpInfo?.endpointMode === 'playit_tunnel' && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Playit Tunnel Secured
+                </span>
+              )}
+              {sftpInfo?.endpointMode === 'node_fqdn' && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Node FQDN
+                </span>
+              )}
+            </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Connect external FTP clients (FileZilla, WinSCP, Cyberduck) to upload or download files directly.
+              Connect desktop FTP clients (FileZilla, WinSCP, Cyberduck) with high-speed encrypted transfers.
             </p>
           </div>
           <button
@@ -185,8 +225,8 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
             <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">SFTP Host</span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
-              <span>{server.primaryIp}</span>
-              <button onClick={() => handleCopy(server.primaryIp, 'sftp_host')} className="text-zinc-400 hover:text-white">
+              <span className="truncate">{sftpHost}</span>
+              <button onClick={() => handleCopy(sftpHost, 'sftp_host')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
                 {copiedKey === 'sftp_host' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
               </button>
             </div>
@@ -195,8 +235,8 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
             <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">SFTP Port</span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
-              <span>2022</span>
-              <button onClick={() => handleCopy('2022', 'sftp_port')} className="text-zinc-400 hover:text-white">
+              <span>{sftpPort}</span>
+              <button onClick={() => handleCopy(String(sftpPort), 'sftp_port')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
                 {copiedKey === 'sftp_port' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
               </button>
             </div>
@@ -205,8 +245,8 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
             <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Username</span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
-              <span className="truncate">srv_{server.id.substring(0, 10)}</span>
-              <button onClick={() => handleCopy(`srv_${server.id.substring(0, 10)}`, 'sftp_user')} className="text-zinc-400 hover:text-white">
+              <span className="truncate">{sftpUser}</span>
+              <button onClick={() => handleCopy(sftpUser, 'sftp_user')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
                 {copiedKey === 'sftp_user' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
               </button>
             </div>
@@ -215,15 +255,15 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
             <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Password</span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
-              <span className="truncate">{showPassword ? sftpPassword : '••••••••••••••••'}</span>
-              <div className="flex items-center gap-1.5">
+              <span className="truncate">{showPassword ? sftpPass : '••••••••••••••••'}</span>
+              <div className="flex items-center gap-1.5 shrink-0 ml-1">
                 <button
                   onClick={() => setShowPassword(!showPassword)}
                   className="text-[10px] text-zinc-400 hover:text-zinc-200"
                 >
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
-                <button onClick={() => handleCopy(sftpPassword, 'sftp_pass')} className="text-zinc-400 hover:text-white">
+                <button onClick={() => handleCopy(sftpPass, 'sftp_pass')} className="text-zinc-400 hover:text-white">
                   {copiedKey === 'sftp_pass' ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                 </button>
               </div>
@@ -231,17 +271,26 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-violet-950/20 border border-violet-500/20 text-xs text-violet-300 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-3.5 rounded-xl bg-violet-950/20 border border-violet-500/20 text-xs text-violet-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
             <Shield className="h-4 w-4 text-violet-400 shrink-0" />
-            <span>Launch command URI: <code className="font-mono text-white bg-zinc-950 px-2 py-0.5 rounded">sftp://srv_{server.id.substring(0, 10)}@{server.primaryIp}:2022</code></span>
+            <span className="truncate">Direct Launch URI: <code className="font-mono text-white bg-zinc-950 px-2 py-0.5 rounded text-[11px]">{sftpUri}</code></span>
           </div>
-          <button
-            onClick={() => handleCopy(`sftp://srv_${server.id.substring(0, 10)}@${server.primaryIp}:2022`, 'sftp_uri')}
-            className="px-2.5 py-1 rounded bg-violet-600/30 hover:bg-violet-600/50 text-white font-medium text-[11px]"
-          >
-            {copiedKey === 'sftp_uri' ? 'Copied' : 'Copy URI'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => handleCopy(sftpUri, 'sftp_uri')}
+              className="px-3 py-1 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 text-white font-medium text-xs transition-colors"
+            >
+              {copiedKey === 'sftp_uri' ? 'Copied' : 'Copy SFTP Link'}
+            </button>
+            <a
+              href={sftpUri}
+              className="px-3 py-1 rounded-lg bg-violet-600 text-white font-semibold text-xs hover:bg-violet-500 transition-colors inline-flex items-center gap-1"
+            >
+              <span>Connect Client</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </div>
       </div>
 
@@ -260,7 +309,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Generate a permanent public IP address and custom domain for friends and players without exposing your node ports.
+                Generate a permanent public IP address and custom domain for players and remote connectivity without port forwarding.
               </p>
             </div>
           </div>
@@ -289,7 +338,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             <div className="max-w-md mx-auto space-y-2">
               <h4 className="text-sm font-bold text-white">Install Playit.gg Agent Daemon</h4>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Connect your server through the Playit.gg global network to receive a free custom subdomain (e.g., <code className="text-amber-300">yourname.auto.playit.gg</code>) with automatic DDoS mitigation.
+                Connect your server through the Playit.gg global network to receive a free custom subdomain (e.g., <code className="text-amber-300">yourserver.auto.playit.gg</code>) with automatic DDoS mitigation.
               </p>
             </div>
             <button
@@ -329,7 +378,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
                 <span className="text-[11px] text-zinc-400 uppercase font-semibold">Tunnel Port</span>
                 <div className="flex items-center justify-between font-mono text-xs">
                   <span className="text-white font-bold">{playit.tunnelPort || 25565}</span>
-                  <span className="text-[10px] text-zinc-500 font-sans">Java Standard</span>
+                  <span className="text-[10px] text-zinc-500 font-sans">Public Port</span>
                 </div>
               </div>
 

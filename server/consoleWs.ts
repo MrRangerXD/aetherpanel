@@ -3,13 +3,15 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { parse as parseUrl } from 'url';
 import { verifyToken } from './auth';
 import { getDb } from './db';
-import { getServerConsoleLogs, sendServerCommand, onConsoleLog } from './provider';
+import { getInstallationId } from './installation';
+import { getServerConsoleLogs, sendServerCommand, onConsoleLog, onServerStatus } from './provider';
 
 interface WsClientInfo {
   ws: WebSocket;
   serverId: string;
   userId: string;
   isAlive: boolean;
+  connectedAt: Date;
 }
 
 const activeClients: Set<WsClientInfo> = new Set();
@@ -37,6 +39,15 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     if (!token && req.headers.cookie) {
       const matchCookie = req.headers.cookie.match(/aether_token=([^;]+)/);
       if (matchCookie) token = decodeURIComponent(matchCookie[1]);
+    }
+
+    // Optional cross-installation boundary check
+    const clientInstallId = (parsed.query.installationId as string) || (req.headers['x-installation-id'] as string);
+    const currentInstallationId = getInstallationId();
+    if (clientInstallId && clientInstallId !== currentInstallationId) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
     }
 
     if (!token) {
@@ -78,7 +89,8 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
       ws,
       serverId,
       userId,
-      isAlive: true
+      isAlive: true,
+      connectedAt: new Date()
     };
     activeClients.add(clientInfo);
 
@@ -86,45 +98,55 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
       clientInfo.isAlive = true;
     });
 
-    // Send initial greeting and backlog
+    // Send connection handshake acknowledgment with server metadata
     try {
+      const db = await getDb();
+      const server = db.servers.find(s => s.id === serverId);
       const backlog = await getServerConsoleLogs(serverId);
+      
       ws.send(JSON.stringify({
-        type: 'backlog',
+        type: 'init',
         serverId,
-        logs: backlog
+        status: server?.status || 'stopped',
+        serverName: server?.name || 'Server',
+        installationId: getInstallationId(),
+        logs: backlog,
+        timestamp: new Date().toISOString()
       }));
     } catch (e) {
-      console.error('[ConsoleWS] Error fetching backlog:', e);
+      console.error('[ConsoleWS] Error fetching initial backlog:', e);
     }
 
-    // Handle incoming client command messages
+    // Handle incoming client messages (interactive stdin commands, ping, clear)
     ws.on('message', async (data: Buffer | string) => {
       try {
         const text = data.toString();
-        const payload = JSON.parse(text);
+        let payload: any = null;
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          payload = { type: 'command', command: text.trim() };
+        }
 
         if (payload.type === 'command' && typeof payload.command === 'string') {
-          const result = await sendServerCommand(serverId, payload.command);
-          ws.send(JSON.stringify({
-            type: 'command_ack',
-            command: payload.command,
-            result
-          }));
+          const cmd = payload.command.trim();
+          if (cmd) {
+            const result = await sendServerCommand(serverId, cmd);
+            ws.send(JSON.stringify({
+              type: 'command_ack',
+              command: cmd,
+              result,
+              timestamp: new Date().toISOString()
+            }));
+          }
         } else if (payload.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong' }));
+          ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
         }
       } catch (err: any) {
-        // Plain text command fallback
-        const cmd = data.toString().trim();
-        if (cmd) {
-          const result = await sendServerCommand(serverId, cmd);
-          ws.send(JSON.stringify({
-            type: 'command_ack',
-            command: cmd,
-            result
-          }));
-        }
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: err.message || 'Failed to process command'
+        }));
       }
     });
 
@@ -137,7 +159,7 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     });
   });
 
-  // Keep-alive ping interval
+  // Keep-alive ping interval to purge stale connections
   const pingInterval = setInterval(() => {
     activeClients.forEach((client) => {
       if (!client.isAlive) {
@@ -152,7 +174,7 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
         activeClients.delete(client);
       }
     });
-  }, 30000);
+  }, 25000);
 
   wss.on('close', () => {
     clearInterval(pingInterval);
@@ -176,6 +198,53 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     });
   });
 
-  console.log('[AetherPanel] Console WebSocket engine initialized and listening for socket upgrades.');
+  // Subscribe to live server status updates from provider.ts
+  onServerStatus((serverId: string, status: string, details?: any) => {
+    const payload = JSON.stringify({
+      type: 'status_change',
+      serverId,
+      status,
+      details,
+      timestamp: new Date().toISOString()
+    });
+
+    activeClients.forEach((client) => {
+      if (client.serverId === serverId && client.ws.readyState === WebSocket.OPEN) {
+        try {
+          client.ws.send(payload);
+        } catch {}
+      }
+    });
+  });
+
+  console.log('[AetherPanel] Console WebSocket engine active.');
   return wss;
 }
+
+export function getActiveConsoleConnectionsCount(serverId?: string): number {
+  if (!serverId) return activeClients.size;
+  let count = 0;
+  activeClients.forEach(c => {
+    if (c.serverId === serverId && c.ws.readyState === WebSocket.OPEN) count++;
+  });
+  return count;
+}
+
+export function closeServerConsoleClients(serverId: string, reason: string = 'Server deleted'): void {
+  activeClients.forEach((client) => {
+    if (client.serverId === serverId) {
+      try {
+        client.ws.send(JSON.stringify({
+          type: 'server_deleted',
+          message: reason,
+          serverId,
+          timestamp: new Date().toISOString()
+        }));
+        client.ws.close(1000, reason);
+      } catch {}
+      activeClients.delete(client);
+    }
+  });
+}
+
+

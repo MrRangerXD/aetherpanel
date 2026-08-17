@@ -694,6 +694,34 @@ export const AdminNodes: React.FC = () => {
                 </div>
 
                 <div>
+                  <label className="text-zinc-400 mb-1 block flex items-center justify-between">
+                    <span>Public SFTP FQDN</span>
+                    <span className="text-[10px] text-zinc-500 font-normal">e.g. sftp.node1.mydomain.com</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingNode.sftpFqdn || ''}
+                    onChange={e => setEditingNode({ ...editingNode, sftpFqdn: e.target.value })}
+                    placeholder="sftp.node1.mydomain.com"
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 mb-1 block flex items-center justify-between">
+                    <span>Playit SFTP Tunnel Address</span>
+                    <span className="text-[10px] text-amber-400/80 font-normal">Zero Port-Forwarding</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingNode.playitSftpAddress || ''}
+                    onChange={e => setEditingNode({ ...editingNode, playitSftpAddress: e.target.value })}
+                    placeholder="sftp-node.auto.playit.gg"
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+
+                <div>
                   <label className="text-zinc-400 mb-1 block">Total Physical RAM (MB)</label>
                   <input
                     type="number"

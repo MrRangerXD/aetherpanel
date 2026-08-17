@@ -20,6 +20,7 @@ import marketplaceRoutes from './server/routes/marketplace';
 import statusRoutes from './server/routes/status';
 import monitoringRoutes from './server/routes/monitoring';
 import apiKeysRoutes from './server/routes/apiKeys';
+import minecraftRoutes from './server/routes/minecraft';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
@@ -53,19 +54,6 @@ async function startServer() {
     res.json({ status: 'ok', service: 'AetherPanel Control Plane', timestamp: new Date().toISOString() });
   });
 
-  // Serve install.sh bash script directly for curl commands
-  app.get('/install.sh', (req, res) => {
-    const rootScriptPath = path.join(process.cwd(), 'install.sh');
-    const publicScriptPath = path.join(process.cwd(), 'public', 'install.sh');
-    const targetScript = fs.existsSync(rootScriptPath) ? rootScriptPath : publicScriptPath;
-
-    if (fs.existsSync(targetScript)) {
-      res.setHeader('Content-Type', 'text/x-shellscript');
-      return res.sendFile(targetScript);
-    }
-    res.status(404).send('# Installer script not found');
-  });
-
   // API Routes FIRST
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/public', publicRoutes);
@@ -83,6 +71,7 @@ async function startServer() {
   app.use('/api/v1/status', statusRoutes);
   app.use('/api/v1/monitoring', monitoringRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
+  app.use('/api/v1/minecraft', minecraftRoutes);
 
   // Vite Integration for SPA Development and Production Serving
   if (process.env.NODE_ENV !== 'production') {

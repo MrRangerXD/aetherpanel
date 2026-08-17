@@ -103,6 +103,50 @@ export interface ServerResourceLimits {
   databases: number;
 }
 
+export interface ServerStartupConfig {
+  // General & Lifecycle
+  startupCommand?: string;
+  customFlags?: string;
+  autoStartOnBoot?: boolean;
+  autoStartOnNodeReconnect?: boolean;
+  autoRestartPolicy?: 'always' | 'on_crash' | 'never';
+  restartOnCrash?: boolean;
+  maxCrashRestarts?: number;
+  crashRestartDelaySeconds?: number;
+  crashCount?: number;
+  lastCrashAt?: string;
+  lastCrashReason?: string;
+  lastStartedAt?: string;
+  lastStoppedAt?: string;
+  pid?: number;
+
+  // Minecraft Runtime
+  javaVersion?: string;
+  jvmFlags?: string;
+  xmsMB?: number;
+  xmxMB?: number;
+  serverJar?: string;
+  nogui?: boolean;
+
+  // Node.js Runtime
+  nodeVersion?: string;
+  entryFile?: string;
+  nodeOptions?: string;
+
+  // Python Runtime
+  pythonVersion?: string;
+  pythonUnbuffered?: boolean;
+  pythonExecutable?: string;
+}
+
+export interface ServerEnvVar {
+  key: string;
+  value: string;
+  isSecret?: boolean;
+  isEnabled?: boolean;
+  description?: string;
+}
+
 export interface Server {
   id: string;
   installationId?: string;
@@ -120,6 +164,8 @@ export interface Server {
   software: string; // e.g., 'Paper', 'Purpur', 'Spigot', 'Node.js', 'Python'
   version: string; // e.g. '1.20.4', 'Node 20', 'Python 3.11'
   limits: ServerResourceLimits;
+  startup?: ServerStartupConfig;
+  envVars?: ServerEnvVar[];
   createdAt: string;
   updatedAt: string;
   // Live stats cache
@@ -172,6 +218,24 @@ export interface Node {
   reservedRamMB?: number;
   reservedCpuCores?: number;
   reservedDiskGB?: number;
+  sftpFqdn?: string;
+  playitSftpAddress?: string;
+  playitSftpPort?: number;
+  playitAgentInstalled?: boolean;
+  playitAgentRunning?: boolean;
+  playitClaimCode?: string;
+  playitClaimUrl?: string;
+}
+
+export interface SftpConnectionInfo {
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  uri: string;
+  isProtected: boolean;
+  tunnelType: 'direct' | 'fqdn' | 'playit';
+  nodeName?: string;
 }
 
 export interface NodeInstallToken {

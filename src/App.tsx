@@ -161,7 +161,7 @@ function AppContent() {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-3 text-xs text-zinc-400">
-          <div className="h-8 w-8 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" />
+          <div className="h-8 w-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
           <span>Restoring your session...</span>
         </div>
       </div>
@@ -173,7 +173,7 @@ function AppContent() {
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-violet-500 selection:text-white">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       {/* Custom GPU Cursor */}
       <CustomCursor />
 

@@ -30,6 +30,27 @@ export function onConsoleLog(listener: LogListener): () => void {
   return () => logListeners.delete(listener);
 }
 
+// Server lifecycle status listeners for live WebSocket streaming
+type StatusListener = (serverId: string, status: string, details?: any) => void;
+const statusListeners: Set<StatusListener> = new Set();
+
+export function onServerStatus(listener: StatusListener): () => void {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
+export function emitServerStatus(serverId: string, status: string, details?: any) {
+  statusListeners.forEach((listener) => {
+    try {
+      listener(serverId, status, details);
+    } catch {}
+  });
+}
+
+export function clearConsoleBuffer(serverId: string) {
+  delete consoleBuffers[serverId];
+}
+
 function getConsoleBuffer(serverId: string, isRunning: boolean = false): string[] {
   if (!consoleBuffers[serverId]) {
     if (!isRunning) {
@@ -242,6 +263,23 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
   });
 }
 
+import { checkJavaRuntime, getRecommendedJavaVersion } from './minecraftService';
+
+// Remote command queue for servers running on remote nodes
+const remoteCommandQueues: Map<string, string[]> = new Map();
+
+export function pullRemoteServerCommands(serverId: string): string[] {
+  const queue = remoteCommandQueues.get(serverId) || [];
+  remoteCommandQueues.delete(serverId);
+  return queue;
+}
+
+export function queueRemoteServerCommand(serverId: string, command: string) {
+  const q = remoteCommandQueues.get(serverId) || [];
+  q.push(command);
+  remoteCommandQueues.set(serverId, q);
+}
+
 // Server Control Actions
 export async function startServer(serverId: string): Promise<boolean> {
   const db = await getDb();
@@ -255,6 +293,7 @@ export async function startServer(serverId: string): Promise<boolean> {
 
   server.status = 'starting';
   saveDbSync();
+  emitServerStatus(serverId, 'starting');
 
   // Clear previous log buffer for a fresh session if starting
   consoleBuffers[serverId] = [];
@@ -262,22 +301,64 @@ export async function startServer(serverId: string): Promise<boolean> {
   appendConsoleLog(serverId, `[AetherDaemon/INFO]: Initializing container sandbox & allocating limits (${server.limits.ramMB}MB RAM, ${server.limits.cpuCores} vCPU)...`);
 
   const prod = db.products.find(p => p.id === server.productId);
-  const category = prod?.category || 'minecraft';
+  const isBotSoftware = /bot|python|node|discord|telegram|js/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
+  const category = prod?.category || (isBotSoftware ? 'bot' : 'minecraft');
   const dir = getServerDir(serverId);
 
   initializeServerFiles(serverId, category, server.software);
 
-  const env = { ...process.env, ...readServerEnv(serverId) };
+  const customEnv = readServerEnv(serverId);
+  const cleanEnv: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    ...customEnv,
+    SERVER_ID: serverId,
+    SERVER_PORT: String(server.primaryPort),
+    SERVER_IP: server.primaryIp || '0.0.0.0'
+  };
 
   if (category === 'bot') {
     const isPython = server.software.toLowerCase().includes('python');
     const executable = isPython ? 'python3' : 'node';
-    const scriptFile = isPython ? 'bot.py' : 'index.js';
+    
+    let scriptFile = isPython ? 'bot.py' : 'index.js';
+    if (isPython) {
+      if (!fs.existsSync(path.join(dir, scriptFile))) {
+        if (fs.existsSync(path.join(dir, 'main.py'))) scriptFile = 'main.py';
+        else if (fs.existsSync(path.join(dir, 'app.py'))) scriptFile = 'app.py';
+      }
+    } else {
+      if (!fs.existsSync(path.join(dir, scriptFile))) {
+        if (fs.existsSync(path.join(dir, 'main.js'))) scriptFile = 'main.js';
+        else if (fs.existsSync(path.join(dir, 'bot.js'))) scriptFile = 'bot.js';
+        else if (fs.existsSync(path.join(dir, 'app.js'))) scriptFile = 'app.js';
+        else if (fs.existsSync(path.join(dir, 'server.js'))) scriptFile = 'server.js';
+      }
+    }
+
+    const scriptPath = path.join(dir, scriptFile);
+    if (!fs.existsSync(scriptPath)) {
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Bot entrypoint script '${scriptFile}' not found in server directory.`);
+      server.status = 'error';
+      saveDbSync();
+      emitServerStatus(serverId, 'error', { error: `Entrypoint script '${scriptFile}' missing` });
+      return false;
+    }
+
+    const args: string[] = [];
+    if (!isPython) {
+      // Apply memory limits to Node.js v8 engine
+      args.push(`--max-old-space-size=${server.limits.ramMB}`);
+    }
+    args.push(scriptFile);
+
+    if (isPython) {
+      cleanEnv.PYTHONUNBUFFERED = '1';
+    }
 
     try {
-      const child = spawn(executable, [scriptFile], {
+      const child = spawn(executable, args, {
         cwd: dir,
-        env,
+        env: cleanEnv,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -289,7 +370,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       };
       activeProcesses.set(serverId, entry);
 
-      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned (PID: ${child.pid}) in ${dir}`);
+      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned (PID: ${child.pid}) running ${executable} ${scriptFile}`);
 
       child.stdout?.on('data', (chunk) => {
         appendConsoleLog(serverId, chunk.toString());
@@ -306,6 +387,7 @@ export async function startServer(serverId: string): Promise<boolean> {
         server.ramUsageMB = 0;
         activeProcesses.delete(serverId);
         saveDbSync();
+        emitServerStatus(serverId, 'error', { error: err.message });
       });
 
       child.on('exit', (code, signal) => {
@@ -315,13 +397,15 @@ export async function startServer(serverId: string): Promise<boolean> {
         server.ramUsageMB = 0;
         activeProcesses.delete(serverId);
         saveDbSync();
+        emitServerStatus(serverId, 'stopped', { exitCode: code, signal });
       });
 
       server.status = 'running';
-      server.cpuUsage = 1.8;
-      server.ramUsageMB = 48;
+      server.cpuUsage = 1.2;
+      server.ramUsageMB = isPython ? 32 : 45;
       server.uptimeSeconds = 0;
       saveDbSync();
+      emitServerStatus(serverId, 'running', { pid: child.pid });
 
       dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
         message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
@@ -329,14 +413,37 @@ export async function startServer(serverId: string): Promise<boolean> {
 
       return true;
     } catch (err: any) {
-      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Failed to start process: ${err.message}`);
-      server.status = 'stopped';
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Failed to start bot process: ${err.message}`);
+      server.status = 'error';
       saveDbSync();
+      emitServerStatus(serverId, 'error', { error: err.message });
       return false;
     }
   } else {
     // Minecraft Server Runtime Runner
-    // Write assigned port into server.properties
+    // 1. Verify Java Runtime Compatibility
+    const reqJava = getRecommendedJavaVersion(server.version);
+    const javaCheck = checkJavaRuntime(reqJava);
+    if (!javaCheck.available) {
+      appendConsoleLog(serverId, `[Server thread/ERROR]: Java Runtime is not available on host. ${javaCheck.message}`);
+      server.status = 'error';
+      saveDbSync();
+      emitServerStatus(serverId, 'error', { error: javaCheck.message });
+      return false;
+    }
+
+    // 2. Verify server.jar exists
+    const serverJarPath = path.join(dir, 'server.jar');
+    if (!fs.existsSync(serverJarPath) || fs.statSync(serverJarPath).size < 1024) {
+      appendConsoleLog(serverId, `[Server thread/ERROR]: 'server.jar' artifact is missing or invalid in server root.`);
+      appendConsoleLog(serverId, `[Server thread/INFO]: Please use the Reinstall function to download the official server JAR.`);
+      server.status = 'error';
+      saveDbSync();
+      emitServerStatus(serverId, 'error', { error: 'server.jar missing' });
+      return false;
+    }
+
+    // 3. Sync assigned primary port into server.properties
     const propPath = path.join(dir, 'server.properties');
     if (fs.existsSync(propPath)) {
       let propContent = fs.readFileSync(propPath, 'utf8');
@@ -344,40 +451,17 @@ export async function startServer(serverId: string): Promise<boolean> {
       fs.writeFileSync(propPath, propContent, 'utf8');
     }
 
-    appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version})`);
-    appendConsoleLog(serverId, `[Server thread/INFO]: Loading server.properties, eula.txt, and active plugins...`);
-    appendConsoleLog(serverId, `[Server thread/INFO]: Generating keypair & binding socket on ${server.primaryIp}:${server.primaryPort}`);
+    appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);
+    appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: 128M initial, ${server.limits.ramMB}M max`);
+    appendConsoleLog(serverId, `[Server thread/INFO]: Binding socket on ${server.primaryIp || '0.0.0.0'}:${server.primaryPort}`);
 
     try {
-      const serverJarPath = path.join(dir, 'server.jar');
-      let executable = 'java';
-      let args = ['-Xms128M', `-Xmx${server.limits.ramMB}M`, '-jar', 'server.jar', 'nogui'];
-
-      // If server.jar doesn't exist yet, run a dedicated Node runner simulation process that binds stdin/stdout
-      if (!fs.existsSync(serverJarPath)) {
-        executable = 'node';
-        args = ['-e', `
-          console.log("[Server thread/INFO]: Preparing level 'world'");
-          console.log("[Server thread/INFO]: Done! For help, type 'help'");
-          console.log("[Server thread/INFO]: Listening on ${server.primaryIp}:${server.primaryPort}");
-          process.stdin.on('data', (d) => {
-            const cmd = d.toString().trim();
-            if (cmd === 'stop') {
-              console.log('[Server thread/INFO]: Stopping the server');
-              process.exit(0);
-            } else if (cmd === 'list') {
-              console.log('[Server thread/INFO]: There are 0 of a max 20 players online');
-            } else if (cmd) {
-              console.log('[Server thread/INFO]: Executed: ' + cmd);
-            }
-          });
-          setInterval(() => {}, 1000);
-        `];
-      }
+      const executable = javaCheck.path || 'java';
+      const args = ['-Xms128M', `-Xmx${server.limits.ramMB}M`, '-jar', 'server.jar', 'nogui'];
 
       const child = spawn(executable, args, {
         cwd: dir,
-        env,
+        env: cleanEnv,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -404,6 +488,7 @@ export async function startServer(serverId: string): Promise<boolean> {
         server.ramUsageMB = 0;
         activeProcesses.delete(serverId);
         saveDbSync();
+        emitServerStatus(serverId, 'error', { error: err.message });
       });
 
       child.on('exit', (code, signal) => {
@@ -413,13 +498,15 @@ export async function startServer(serverId: string): Promise<boolean> {
         server.ramUsageMB = 0;
         activeProcesses.delete(serverId);
         saveDbSync();
+        emitServerStatus(serverId, 'stopped', { exitCode: code, signal });
       });
 
       server.status = 'running';
-      server.cpuUsage = 3.5;
-      server.ramUsageMB = 512;
+      server.cpuUsage = 2.8;
+      server.ramUsageMB = 480;
       server.uptimeSeconds = 0;
       saveDbSync();
+      emitServerStatus(serverId, 'running', { pid: child.pid });
 
       dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
         message: `Minecraft Server '${server.name}' started successfully and is listening on ${server.primaryIp}:${server.primaryPort}.`
@@ -428,8 +515,9 @@ export async function startServer(serverId: string): Promise<boolean> {
       return true;
     } catch (err: any) {
       appendConsoleLog(serverId, `[Server thread/ERROR]: Failed to start: ${err.message}`);
-      server.status = 'stopped';
+      server.status = 'error';
       saveDbSync();
+      emitServerStatus(serverId, 'error', { error: err.message });
       return false;
     }
   }
@@ -447,11 +535,13 @@ export async function stopServer(serverId: string): Promise<boolean> {
     server.ramUsageMB = 0;
     server.uptimeSeconds = 0;
     saveDbSync();
+    emitServerStatus(serverId, 'stopped');
     return true;
   }
 
   server.status = 'stopping';
   saveDbSync();
+  emitServerStatus(serverId, 'stopping');
 
   appendConsoleLog(serverId, `[AetherDaemon/INFO]: Sending graceful shutdown signal (SIGTERM)...`);
 
@@ -478,6 +568,7 @@ export async function stopServer(serverId: string): Promise<boolean> {
   server.ramUsageMB = 0;
   server.uptimeSeconds = 0;
   saveDbSync();
+  emitServerStatus(serverId, 'stopped');
 
   dispatchDiscordNotification(serverId, 'SERVER_STOPPED', {
     message: `Server '${server.name}' has been stopped.`
@@ -494,6 +585,7 @@ export async function restartServer(serverId: string): Promise<boolean> {
       message: `Server '${server.name}' restart sequence initiated.`
     }).catch(() => {});
   }
+  emitServerStatus(serverId, 'restarting');
   await stopServer(serverId);
   setTimeout(async () => {
     await startServer(serverId);
@@ -510,6 +602,7 @@ export async function reinstallServer(serverId: string): Promise<boolean> {
 
   server.status = 'installing';
   saveDbSync();
+  emitServerStatus(serverId, 'installing');
 
   appendConsoleLog(serverId, `[AetherDaemon/WARN]: Wiping server filesystem and reinstalling fresh base template...`);
 
@@ -525,6 +618,7 @@ export async function reinstallServer(serverId: string): Promise<boolean> {
     appendConsoleLog(serverId, `[AetherDaemon/SUCCESS]: Reinstallation completed successfully. Ready to start.`);
     server.status = 'stopped';
     saveDbSync();
+    emitServerStatus(serverId, 'stopped');
   }, 1200);
 
   return true;
@@ -533,9 +627,30 @@ export async function reinstallServer(serverId: string): Promise<boolean> {
 export async function sendServerCommand(serverId: string, command: string): Promise<string> {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
+
+  if (!server) {
+    const errorMsg = 'Server not found.';
+    return errorMsg;
+  }
+
+  // Check if server is running on a remote node
+  const node = db.nodes.find(n => n.id === server.nodeId);
+  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+
+  if (isRemote) {
+    if (server.status !== 'running') {
+      const errorMsg = 'Server is offline. Start the server to send commands.';
+      appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${errorMsg})`);
+      return errorMsg;
+    }
+    appendConsoleLog(serverId, `[UserCommand]: > ${command}`);
+    queueRemoteServerCommand(serverId, command);
+    return `Dispatched command '${command}' to remote node daemon for server ${serverId}.`;
+  }
+
   const entry = activeProcesses.get(serverId);
 
-  if (!server || server.status !== 'running' || !entry) {
+  if (server.status !== 'running' || !entry) {
     const errorMsg = 'Server is offline. Start the server to send commands.';
     appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${errorMsg})`);
     return errorMsg;
@@ -553,10 +668,25 @@ export async function sendServerCommand(serverId: string, command: string): Prom
     }
   }
 
-  return `Command sent.`;
+  return `Command dispatched.`;
 }
 
 export const sendServerConsoleInput = sendServerCommand;
+
+/**
+ * Resolves and sanitizes a relative path within a server's root directory, preventing directory traversal.
+ */
+export function safePath(serverId: string, relPath: string = ''): string {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const sanitized = (relPath || '').replace(/\0/g, '');
+  const cleaned = path.normalize(sanitized).replace(/^(\.\.[\/\\])+/, '');
+  const resolved = path.resolve(baseDir, '.' + (cleaned.startsWith('/') ? cleaned : '/' + cleaned));
+
+  if (!resolved.startsWith(baseDir)) {
+    return baseDir;
+  }
+  return resolved;
+}
 
 // File Operations
 export function listServerFiles(serverId: string, relPath: string = ''): ServerFile[] {
