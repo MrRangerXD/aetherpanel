@@ -10,7 +10,7 @@ import {
   AdItem, AdEvent, AfkSession, RewardTransaction, AfkSettings, ServerTemplate,
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
-  AlertIncident, TelemetryPoint, DayUptime, ApiKey, WebhookSubscription, LegalPage
+  AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage
 } from '../src/types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -54,6 +54,7 @@ export interface DatabaseSchema {
   alertIncidents: AlertIncident[];
   telemetryHistory: Record<string, TelemetryPoint[]>;
   apiKeys: ApiKey[];
+  apiAuditLogs: ApiAuditLog[];
   webhooks: WebhookSubscription[];
   legalPages: LegalPage[];
 }
@@ -622,7 +623,8 @@ let dbCache: DatabaseSchema | null = null;
 let isWriting = false;
 let pendingSave: Promise<void> | null = null;
 
-export async function getDb(): Promise<DatabaseSchema> {
+export async function getDb(reload = false): Promise<DatabaseSchema> {
+  if (reload) dbCache = null;
   if (dbCache) return dbCache;
 
   if (!fs.existsSync(DATA_DIR)) {
@@ -1371,6 +1373,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     alertIncidents: [],
     telemetryHistory: {},
     apiKeys: [],
+    apiAuditLogs: [],
     webhooks: [],
     legalPages: defaultLegalPages
   };

@@ -35,11 +35,11 @@ async function runPhase6Verification() {
 
   // --- STEP 1: TEST DATA SETUP ---
   console.log('📦 Step 1: Setting up isolated test server & node in DB...');
-  const db = await getDb();
+  const db = await getDb(true);
 
-  const testNodeId = `node_test_phase6_${Date.now()}`;
-  const testServerId = `srv_phase6_${Date.now()}`;
-  const testServer2Id = `srv_phase6_other_${Date.now()}`;
+  const testNodeId = `node_p6_${Date.now()}`;
+  const testServerId = `p6s_${Date.now()}`;
+  const testServer2Id = `p6s2_${Date.now()}`;
   const testPassword = 'test_sftp_secure_pwd_123';
 
   db.nodes.push({
@@ -50,7 +50,7 @@ async function runPhase6Verification() {
     fqdn: 'node-eu1.aetherpanel.com',
     sftpFqdn: 'sftp.node-eu1.aetherpanel.com',
     daemonPort: 8080,
-    sftpPort: 22022,
+    sftpPort: 2022,
     location: 'eu-west',
     locationName: 'Frankfurt, Germany',
     flagCode: 'DE',
@@ -130,7 +130,7 @@ async function runPhase6Verification() {
   // Case A: Node has configured sftpFqdn
   const resolvedA = await resolveServerSftpInfo(testServerId);
   assert(resolvedA.host === 'sftp.node-eu1.aetherpanel.com', 'SFTP Resolver picks node.sftpFqdn', `Got: ${resolvedA.host}`);
-  assert(resolvedA.port === 22022, 'SFTP Resolver picks node.sftpPort', `Got: ${resolvedA.port}`);
+  assert(resolvedA.port === 2022, 'SFTP Resolver picks node.sftpPort', `Got: ${resolvedA.port}`);
   assert(resolvedA.tunnelType === 'fqdn', 'Endpoint mode correctly labeled as fqdn');
   assert(!resolvedA.uri.includes('127.0.0.1'), 'Connection URI NEVER contains loopback');
 
@@ -155,7 +155,7 @@ async function runPhase6Verification() {
   saveDbSync();
   const resolvedC = await resolveServerSftpInfo(testServerId, 'mypanel.hosting.net:3000');
   assert(resolvedC.host === 'sftp.mypanel.hosting.net', 'SFTP Resolver falls back to sftp.<hostHeader> without port 3000', `Got: ${resolvedC.host}`);
-  assert(resolvedC.port === 22022, 'SFTP Resolver maintains node sftpPort on fallback', `Got: ${resolvedC.port}`);
+  assert(resolvedC.port === 2022, 'SFTP Resolver maintains node sftpPort on fallback', `Got: ${resolvedC.port}`);
 
   console.log('\n');
 
@@ -245,14 +245,14 @@ async function runPhase6Verification() {
   console.log('\n');
 
   // --- STEP 6: REAL SSH2 SFTP SERVER PROTOCOL VERIFICATION ---
-  console.log('🔐 Step 6: Testing Real SSH2 SFTP Protocol Over Live Socket (Port 22022)...');
+  console.log('🔐 Step 6: Testing Real SSH2 SFTP Protocol Over Live Socket (Port 2024)...');
 
-  // Start the real SFTP daemon on test port
-  const sftpServerInstance = startSftpServer(22022);
+  // Start isolated test SFTP server on port 2024
+  const sftpServerInstance = startSftpServer(2024);
   await new Promise(r => setTimeout(r, 600));
 
   // Connect real SSH2 client to SFTP server
-  const clientUsername = `srv_${testServerId.substring(0, 10)}`;
+  const clientUsername = `srv_${testServerId}`;
   const sftpClient = new Client();
 
   const sftpTestSuccess = await new Promise<boolean>((resolve) => {
@@ -303,7 +303,7 @@ async function runPhase6Verification() {
 
     sftpClient.connect({
       host: '127.0.0.1',
-      port: 22022,
+      port: 2024,
       username: clientUsername,
       password: testPassword,
       readyTimeout: 5000
@@ -324,7 +324,7 @@ async function runPhase6Verification() {
     });
     badClient.connect({
       host: '127.0.0.1',
-      port: 22022,
+      port: 2024,
       username: clientUsername,
       password: 'WRONG_PASSWORD_XYZ',
       readyTimeout: 3000
@@ -336,6 +336,7 @@ async function runPhase6Verification() {
   // Cleanup test data & stop test SFTP server
   stopSftpServer();
 
+  // Cleanup test data
   // Clean test files
   if (fs.existsSync(serverADir)) fs.rmSync(serverADir, { recursive: true, force: true });
   if (fs.existsSync(serverBDir)) fs.rmSync(serverBDir, { recursive: true, force: true });

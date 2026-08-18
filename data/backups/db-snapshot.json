@@ -35,7 +35,7 @@
     }
   ],
   "passwords": {
-    "usr_admin": "$2b$10$oOeTwX4tZRDdmChyv1clheE3RvhSjU9vACeo3SSwPjCfIS.vhg4Cu",
+    "usr_admin": "$2b$10$3kP5RVOkVz3/DdF8vMWxVOAWSZ82YxYNQddrkk2OKdBD8.edZoXBq",
     "usr_1787049212458_sl4b": "$2b$10$9Bica5HsMORrC7D3V.1t2u2ha7pj4iYLYHQTizX7/RhKuQfgQidAS"
   },
   "products": [
@@ -329,7 +329,107 @@
       "isActive": true
     }
   ],
-  "servers": [],
+  "servers": [
+    {
+      "id": "test-node-1",
+      "name": "Node Test",
+      "software": "Node.js",
+      "ownerId": "usr_admin",
+      "status": "stopped",
+      "limits": {
+        "ramMB": 512,
+        "cpuCores": 1,
+        "diskMB": 1024
+      },
+      "startup": {
+        "botRuntime": "nodejs",
+        "entryFile": "index.js",
+        "nodeConfig": {
+          "startupFile": "index.js"
+        },
+        "compiledCommand": "node --max-old-space-size=512 index.js",
+        "lastStartedAt": "2026-08-18T14:10:00.288Z",
+        "lastStoppedAt": "2026-08-18T14:10:01.849Z"
+      },
+      "envVars": [
+        {
+          "id": "1",
+          "key": "TEST_STARTUP_VAR",
+          "value": "hello_node_from_envVars"
+        }
+      ],
+      "cpuUsage": 0,
+      "ramUsageMB": 0,
+      "uptimeSeconds": 0,
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
+    {
+      "id": "test-python-1",
+      "name": "Python Test",
+      "software": "Python",
+      "ownerId": "usr_admin",
+      "status": "stopped",
+      "limits": {
+        "ramMB": 512,
+        "cpuCores": 1,
+        "diskMB": 1024
+      },
+      "startup": {
+        "botRuntime": "python",
+        "entryFile": "main.py",
+        "pythonConfig": {
+          "startupFile": "main.py"
+        },
+        "compiledCommand": "python3 -u main.py",
+        "lastStartedAt": "2026-08-18T14:10:01.846Z",
+        "lastStoppedAt": "2026-08-18T14:10:03.365Z"
+      },
+      "envVars": [
+        {
+          "id": "2",
+          "key": "TEST_STARTUP_VAR",
+          "value": "hello_python_from_envVars"
+        }
+      ],
+      "cpuUsage": 0,
+      "ramUsageMB": 0,
+      "uptimeSeconds": 0,
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
+    {
+      "id": "test-bun-1",
+      "name": "Bun Test",
+      "software": "Bun",
+      "ownerId": "usr_admin",
+      "status": "stopped",
+      "limits": {
+        "ramMB": 512,
+        "cpuCores": 1,
+        "diskMB": 1024
+      },
+      "startup": {
+        "botRuntime": "bun",
+        "entryFile": "index.ts",
+        "bunConfig": {
+          "startupFile": "index.ts"
+        },
+        "compiledCommand": "bun run index.ts",
+        "lastStartedAt": "2026-08-18T14:10:03.363Z",
+        "lastStoppedAt": "2026-08-18T14:10:04.869Z"
+      },
+      "envVars": [
+        {
+          "id": "3",
+          "key": "TEST_STARTUP_VAR",
+          "value": "hello_bun_from_envVars"
+        }
+      ],
+      "cpuUsage": 0,
+      "ramUsageMB": 0,
+      "uptimeSeconds": 0,
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    }
+  ],
   "templates": [],
   "locations": [
     {
@@ -382,7 +482,7 @@
       "locationName": "Primary Control Plane VPS",
       "flagCode": "LOCAL",
       "totalRamMB": 4096,
-      "usedRamMB": 787,
+      "usedRamMB": 1265,
       "totalCpuCores": 2,
       "usedCpuCores": 0.1,
       "totalDiskGB": 504,
@@ -403,7 +503,7 @@
       "isLocalNode": true,
       "serverCount": 0,
       "daemonToken": "daemon_token_local_node_secret_82910",
-      "lastHeartbeatAt": "2026-08-18T11:39:27.746Z",
+      "lastHeartbeatAt": "2026-08-18T14:37:11.928Z",
       "isSecure": true,
       "installationId": "aep_msyg5eju579c2ae019a7193d"
     }
@@ -466,6 +566,20 @@
   "activities": [],
   "orders": [
     {
+      "id": "ord_1787059471431",
+      "userId": "usr_admin",
+      "userEmail": "admin@aetherpanel.in",
+      "planId": "plan_bot_free",
+      "planName": "Discord Bot Hosting - Free Bot Tier",
+      "billingCycle": "monthly",
+      "amount": 0,
+      "currency": "USD",
+      "status": "paid",
+      "paymentMethod": "Aether Account Credits",
+      "createdAt": "2026-08-18T13:24:31.431Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
+    {
       "id": "ord_1787048210628",
       "userId": "usr_admin",
       "userEmail": "admin@aetherpanel.in",
@@ -487,7 +601,7 @@
       "discountType": "percent",
       "discountValue": 20,
       "usageLimit": 100,
-      "timesUsed": 1,
+      "timesUsed": 2,
       "isActive": true
     },
     {
@@ -568,6 +682,30 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "aud_1787059585208_8cou",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_SERVER",
+      "targetResource": "srv_1787059471431_dyca",
+      "details": "Deleted server Python Instance",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-18T13:26:25.208Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
+    {
+      "id": "aud_1787059471435_4gbx",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.in",
+      "actorRole": "super_admin",
+      "action": "SERVER_PROVISION",
+      "targetResource": "srv_1787059471431_dyca",
+      "details": "Provisioned server 'Python Instance' from template 'Python' ($0.00)",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-18T13:24:31.435Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
     {
       "id": "aud_1787049317296_ce0x",
       "actorId": "usr_admin",

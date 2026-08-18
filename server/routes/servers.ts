@@ -4,6 +4,7 @@ import fs from 'fs';
 import multer from 'multer';
 import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
+import { parseEnvContent, mergeEnvVariables, serializeEnvLines, EnvLine } from '../utils/envHelper';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import {
   startServer, stopServer, restartServer, reinstallServer, killServer,
@@ -541,12 +542,76 @@ router.get('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
   if (!access) return;
 
   const { server } = access;
+  const baseDir = getServerDir(req.params.id);
+  
+  // Optional custom file path query param (can be passed when user selects a file or triggers a reload)
+  const queryPath = req.query.filePath as string;
+  const resolvedPath = queryPath || server.selectedEnvPath;
+
+  if (resolvedPath) {
+    const targetPath = path.join(baseDir, resolvedPath);
+    if (!targetPath.startsWith(baseDir)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_PATH', message: 'Access denied: Path is outside the server root' }
+      });
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      return res.json({
+        success: true,
+        data: {
+          env: {},
+          envVars: [],
+          selectedEnvPath: resolvedPath,
+          exists: false
+        }
+      });
+    }
+
+    try {
+      const content = fs.readFileSync(targetPath, 'utf-8');
+      const lines = parseEnvContent(content);
+      const parsedVars = lines
+        .filter(l => l.type === 'variable')
+        .map(l => ({
+          key: l.key!,
+          value: l.value!,
+          isSecret: /token|secret|key|password|auth/i.test(l.key!),
+          isEnabled: true
+        }));
+      
+      const envMap: Record<string, string> = {};
+      for (const item of parsedVars) {
+        envMap[item.key] = item.value;
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          env: envMap,
+          envVars: parsedVars,
+          selectedEnvPath: resolvedPath,
+          exists: true
+        }
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'PARSE_ERROR', message: `Failed to parse .env file: ${err.message}` }
+      });
+    }
+  }
+
+  // Fallback to default behavior (root .env file)
   const envMap = readServerEnv(req.params.id);
   res.json({
     success: true,
     data: {
       env: envMap,
-      envVars: server.envVars || []
+      envVars: server.envVars || [],
+      selectedEnvPath: null,
+      exists: fs.existsSync(path.join(baseDir, '.env'))
     }
   });
 });
@@ -557,37 +622,116 @@ router.put('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
   if (!access) return;
 
   const { server } = access;
-  const { env, envVars } = req.body;
+  const { envVars, selectedEnvPath, createFile } = req.body;
 
-  let envMap: Record<string, string> = env || {};
+  const baseDir = getServerDir(req.params.id);
+  const targetPath = selectedEnvPath ? path.join(baseDir, selectedEnvPath) : path.join(baseDir, '.env');
 
-  if (Array.isArray(envVars)) {
-    server.envVars = envVars;
-    envMap = {};
-    for (const item of envVars) {
-      if (item && item.key) {
-        envMap[item.key.trim()] = item.value || '';
-      }
-    }
-  } else if (env && typeof env === 'object') {
-    // Also build envVars array from map if array not given
-    server.envVars = Object.entries(env).map(([k, v]) => ({
-      key: k,
-      value: String(v),
-      isSecret: /token|secret|key|password|auth/i.test(k),
-      isEnabled: true
-    }));
+  // Path safety verification
+  if (!targetPath.startsWith(baseDir)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PATH', message: 'Access denied: Path is outside the server root' }
+    });
   }
 
-  writeServerEnv(req.params.id, envMap);
+  // 18. VARIABLE KEY VALIDATION
+  if (Array.isArray(envVars)) {
+    const keys = new Set<string>();
+    for (const item of envVars) {
+      if (!item || !item.key) continue;
+      const key = item.key.trim();
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_KEY', message: `Invalid environment variable key: "${key}". Keys must start with a letter or underscore and contain only alphanumeric characters and underscores.` }
+        });
+      }
+      if (keys.has(key)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'DUPLICATE_KEY', message: `Duplicate key detected: "${key}". Duplicate environment variable keys are not allowed.` }
+        });
+      }
+      keys.add(key);
+    }
+  }
+
+  // Check if file exists when selectedEnvPath is given
+  if (selectedEnvPath) {
+    const exists = fs.existsSync(targetPath);
+    if (!exists && !createFile) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'FILE_NOT_FOUND', message: 'The selected environment file does not exist.' }
+      });
+    }
+
+    if (!exists && createFile) {
+      // Create directories if necessary
+      const parentDir = path.dirname(targetPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      // Create empty file
+      fs.writeFileSync(targetPath, '', 'utf-8');
+    }
+  }
+
+  // Parse current file content if it exists
+  let existingLines: EnvLine[] = [];
+  if (fs.existsSync(targetPath)) {
+    const currentContent = fs.readFileSync(targetPath, 'utf-8');
+    existingLines = parseEnvContent(currentContent);
+  }
+
+  // Prepare new envVars
+  const cleanList = Array.isArray(envVars) ? envVars.filter(item => item && item.key && item.key.trim().length > 0) : [];
+  
+  // Merge & Serialize
+  const mergedLines = mergeEnvVariables(existingLines, cleanList);
+  const newContent = serializeEnvLines(mergedLines);
+
+  // Atomic write strategy
+  const tmpPath = `${targetPath}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, newContent, 'utf-8');
+    fs.renameSync(tmpPath, targetPath);
+  } catch (err: any) {
+    if (fs.existsSync(tmpPath)) {
+      try { fs.unlinkSync(tmpPath); } catch {}
+    }
+    return res.status(500).json({
+      success: false,
+      error: { code: 'WRITE_ERROR', message: `Failed to write file atomically: ${err.message}` }
+    });
+  }
+
+  // Update server DB state
+  server.selectedEnvPath = selectedEnvPath || null;
+  server.envVars = cleanList;
   saveDbSync();
+
+  const envMap: Record<string, string> = {};
+  for (const item of cleanList) {
+    envMap[item.key.trim()] = item.value || '';
+  }
 
   await recordServerActivity(
     req.params.id, req.user!.id, req.user!.username,
-    'ENV_UPDATE', 'Updated environment variables (.env)'
+    'ENV_UPDATE', `Updated environment variables (${selectedEnvPath || '.env'})`
   );
 
-  res.json({ success: true, message: 'Environment variables saved successfully.', data: { env: envMap, envVars: server.envVars } });
+  res.json({
+    success: true,
+    message: 'Environment variables saved successfully.',
+    data: {
+      env: envMap,
+      envVars: server.envVars,
+      selectedEnvPath: server.selectedEnvPath,
+      exists: true
+    }
+  });
 });
 
 // GET /api/v1/servers/:id/activity - Server activity history

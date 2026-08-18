@@ -1,1 +1,0 @@
-console.log("[AuditBun]: Hello from Bun runtime!"); setInterval(() => console.log("[AuditBun]: Bun tick"), 1000);

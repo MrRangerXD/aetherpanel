@@ -388,10 +388,99 @@ export function downloadFile(url: string, destPath: string): Promise<boolean> {
 
 import { execSync } from 'child_process';
 
-// Java Runtime Checker
-export function checkJavaRuntime(requiredJava?: number | string): { available: boolean; installedVersion?: number; path?: string; message: string } {
+// Centralized Java Runtime Discovery
+export function discoverJavaBinaries(): Record<number, { available: boolean; path: string }> {
+  const runtimes: Record<number, { available: boolean; path: string }> = {
+    8: { available: false, path: '' },
+    11: { available: false, path: '' },
+    17: { available: false, path: '' },
+    21: { available: false, path: '' },
+    25: { available: false, path: '' }
+  };
+
+  const candidates = new Set<string>();
+
+  // 1. Check system PATH
   try {
-    let reqNum: number | undefined;
+    const pathJava = execSync('which java 2>/dev/null', { env: process.env, encoding: 'utf8' }).trim();
+    if (pathJava && fs.existsSync(pathJava)) {
+      candidates.add(pathJava);
+    }
+  } catch {}
+
+  // 2. Use update-alternatives to list java paths
+  try {
+    const altOutput = execSync('update-alternatives --list java 2>/dev/null', { env: process.env, encoding: 'utf8' });
+    for (const line of altOutput.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed && fs.existsSync(trimmed)) {
+        candidates.add(trimmed);
+      }
+    }
+  } catch {}
+
+  // 3. Scan standard Linux JVM folder
+  const jvmDir = '/usr/lib/jvm';
+  if (fs.existsSync(jvmDir)) {
+    try {
+      const subs = fs.readdirSync(jvmDir);
+      for (const sub of subs) {
+        const full = path.join(jvmDir, sub, 'bin', 'java');
+        if (fs.existsSync(full)) {
+          candidates.add(full);
+        }
+      }
+    } catch {}
+  }
+
+  // 4. Scan other typical directories
+  const commonDirs = ['/usr/java', '/opt', '/usr/local'];
+  for (const cDir of commonDirs) {
+    if (fs.existsSync(cDir)) {
+      try {
+        const subs = fs.readdirSync(cDir);
+        for (const sub of subs) {
+          const full = path.join(cDir, sub, 'bin', 'java');
+          if (fs.existsSync(full)) {
+            candidates.add(full);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Evaluate each candidate and cache real physical paths
+  for (const c of candidates) {
+    try {
+      const real = fs.realpathSync(c);
+      const out = execSync(`"${real}" -version 2>&1`, { env: process.env, encoding: 'utf8' });
+      // Match both 1.8.x and major version structures (e.g. "21.0.1" or "1.8.0_292" or "openjdk 17.0.10")
+      // Robust regex that searches for e.g. "version "17.0.1"" or "openjdk 21.0.1"
+      const match = out.match(/(?:openjdk|java)(?:\s+version\s+)?\s*"?(?:1\.)?(\d+)/i);
+      if (match) {
+        const major = parseInt(match[1], 10);
+        if (!runtimes[major] || !runtimes[major].available) {
+          runtimes[major] = { available: true, path: real };
+        }
+      }
+    } catch {}
+  }
+
+  return runtimes;
+}
+
+// Java Runtime Checker with backwards compatibility matching
+export function checkJavaRuntime(requiredJava?: number | string): { 
+  available: boolean; 
+  installedVersion?: number; 
+  path?: string; 
+  message: string;
+  code?: 'JAVA_VERSION_MISMATCH' | 'JAVA_RUNTIME_UNAVAILABLE';
+  required?: number;
+  detected?: number;
+} {
+  try {
+    let reqNum = 21; // Default
     if (typeof requiredJava === 'string') {
       const parsed = parseInt(requiredJava.replace(/[^0-9]/g, ''), 10);
       if (!isNaN(parsed)) reqNum = parsed;
@@ -399,41 +488,149 @@ export function checkJavaRuntime(requiredJava?: number | string): { available: b
       reqNum = requiredJava;
     }
 
-    let javaPath = '';
-    try {
-      javaPath = execSync('which java 2>/dev/null', { env: process.env, encoding: 'utf8' }).trim();
-    } catch {
-      return { available: false, message: 'Java runtime binary not found on system PATH.' };
-    }
+    const detectedRuntimes = discoverJavaBinaries();
 
-    if (!javaPath) {
-      return { available: false, message: 'Java runtime binary not found on system PATH.' };
-    }
-
-    const versionOutput = execSync(`${javaPath} -version 2>&1`, { env: process.env, encoding: 'utf8' });
-    const match = versionOutput.match(/(?:openjdk|java) version "(?:1\.)?(\d+)/i);
-    const installedVersion = match ? parseInt(match[1], 10) : undefined;
-
-    if (reqNum && installedVersion && installedVersion < reqNum) {
+    // 1. First priority: exact matching version
+    if (detectedRuntimes[reqNum] && detectedRuntimes[reqNum].available) {
       return {
         available: true,
-        installedVersion,
-        path: javaPath,
-        message: `Java ${installedVersion} is installed, but Java ${reqNum}+ is recommended for this Minecraft version.`
+        installedVersion: reqNum,
+        path: detectedRuntimes[reqNum].path,
+        message: `Resolved exact required Java ${reqNum} at ${detectedRuntimes[reqNum].path}.`
+      };
+    }
+
+    // 2. Second priority: higher compatible version
+    const supportedVersions = [8, 11, 17, 21, 25];
+    for (const v of supportedVersions) {
+      if (v > reqNum && detectedRuntimes[v] && detectedRuntimes[v].available) {
+        return {
+          available: true,
+          installedVersion: v,
+          path: detectedRuntimes[v].path,
+          message: `Required Java ${reqNum} not found. Resolved higher compatible Java ${v} at ${detectedRuntimes[v].path}.`
+        };
+      }
+    }
+
+    // Find any installed version for the error report
+    let highestDetected: number | undefined;
+    let highestDetectedPath: string | undefined;
+    for (const v of supportedVersions) {
+      if (detectedRuntimes[v] && detectedRuntimes[v].available) {
+        highestDetected = v;
+        highestDetectedPath = detectedRuntimes[v].path;
+      }
+    }
+
+    // 3. Fallback error if we detected a lower incompatible version (e.g. require 21 but only have 17)
+    if (highestDetected && highestDetected < reqNum) {
+      return {
+        available: false,
+        code: 'JAVA_VERSION_MISMATCH',
+        required: reqNum,
+        detected: highestDetected,
+        path: highestDetectedPath,
+        message: `Incompatible Java version. Required: ${reqNum}, Detected: ${highestDetected}.`
       };
     }
 
     return {
-      available: true,
-      installedVersion: installedVersion || 21,
-      path: javaPath,
-      message: `Java ${installedVersion || 21} is available at ${javaPath}.`
+      available: false,
+      code: 'JAVA_RUNTIME_UNAVAILABLE',
+      required: reqNum,
+      message: `Required Java ${reqNum} runtime is not installed on this system.`
     };
   } catch (err: any) {
     return {
       available: false,
+      code: 'JAVA_RUNTIME_UNAVAILABLE',
       message: `Failed to detect Java runtime: ${err.message}`
     };
+  }
+}
+
+// Java installation async progress state
+export interface JavaInstallProgress {
+  status: 'idle' | 'installing' | 'success' | 'failed';
+  version: number;
+  logs: string[];
+}
+
+export let javaInstallProgress: JavaInstallProgress = {
+  status: 'idle',
+  version: 0,
+  logs: []
+};
+
+// Spawn background child process to install Java with live logging
+import { spawn as spawnProcess } from 'child_process';
+
+export function runJavaInstallation(version: number) {
+  javaInstallProgress = {
+    status: 'installing',
+    version,
+    logs: [`[AetherInstaller/INFO]: Starting background installation for Java ${version}...`]
+  };
+
+  const isDebian = fs.existsSync('/usr/bin/apt-get');
+  let cmd = '';
+  let args: string[] = [];
+
+  if (isDebian) {
+    cmd = 'bash';
+    let pkgName = `openjdk-${version}-jre-headless`;
+    if (version === 8) pkgName = 'openjdk-8-jre-headless';
+    else if (version === 11) pkgName = 'openjdk-11-jre-headless';
+    else if (version === 17) pkgName = 'openjdk-17-jre-headless';
+    else if (version === 21) pkgName = 'openjdk-21-jre-headless';
+    else if (version === 25) pkgName = 'openjdk-25-jre-headless';
+
+    args = ['-c', `DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgName}`];
+  } else {
+    javaInstallProgress.status = 'failed';
+    javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Unsupported system. Apt package manager not found.`);
+    return;
+  }
+
+  try {
+    const child = spawnProcess(cmd, args, { env: process.env });
+
+    child.stdout?.on('data', (data) => {
+      const lines = data.toString().split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          javaInstallProgress.logs.push(`[STDOUT]: ${line.trim()}`);
+        }
+      }
+    });
+
+    child.stderr?.on('data', (data) => {
+      const lines = data.toString().split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          javaInstallProgress.logs.push(`[STDERR]: ${line.trim()}`);
+        }
+      }
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        javaInstallProgress.status = 'success';
+        javaInstallProgress.logs.push(`[AetherInstaller/SUCCESS]: Java ${version} installation finished successfully.`);
+      } else {
+        javaInstallProgress.status = 'failed';
+        javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Package installation failed with exit code: ${code}`);
+      }
+    });
+
+    child.on('error', (err) => {
+      javaInstallProgress.status = 'failed';
+      javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Process launch error: ${err.message}`);
+    });
+  } catch (err: any) {
+    javaInstallProgress.status = 'failed';
+    javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Exec error: ${err.message}`);
   }
 }
 
@@ -452,21 +649,31 @@ export async function downloadMinecraftServerJar(
   try {
     if (norm.includes('paper')) {
       // 1. Get builds for version from PaperMC Fill v3 API
-      const buildsData = await fetchJson<{ builds: number[] }>(
-        `https://fill.papermc.io/v3/projects/paper/versions/${version}`
-      );
+      let buildsData;
+      try {
+        buildsData = await fetchJson<{ builds: number[] }>(
+          `https://fill.papermc.io/v3/projects/paper/versions/${version}`
+        );
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       if (!buildsData || !buildsData.builds || buildsData.builds.length === 0) {
-        throw new Error(`No builds found for Paper version ${version}`);
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
       }
       const latestBuild = Math.max(...buildsData.builds);
 
       // 2. Query build detail to get safe object CDN URL
-      const buildDetail = await fetchJson<{ downloads?: { 'server:default'?: { url?: string } } }>(
-        `https://fill.papermc.io/v3/projects/paper/versions/${version}/builds/${latestBuild}`
-      );
+      let buildDetail;
+      try {
+        buildDetail = await fetchJson<{ downloads?: { 'server:default'?: { url?: string } } }>(
+          `https://fill.papermc.io/v3/projects/paper/versions/${version}/builds/${latestBuild}`
+        );
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       const downloadUrl = buildDetail?.downloads?.['server:default']?.url;
       if (!downloadUrl) {
-        throw new Error(`No download URL available for Paper build #${latestBuild}`);
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
       }
 
       appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading Paper build #${latestBuild} from PaperMC CDN...`);
@@ -477,20 +684,34 @@ export async function downloadMinecraftServerJar(
     } else if (norm.includes('purpur')) {
       const downloadUrl = `https://api.purpurmc.org/v2/purpur/${version}/latest/download`;
       appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading Purpur ${version} from PurpurMC CDN...`);
-      await downloadFile(downloadUrl, targetJar);
+      try {
+        await downloadFile(downloadUrl, targetJar);
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: Purpur ${version} downloaded successfully.`);
       return { success: true, message: `Purpur ${version} downloaded`, jarPath: targetJar };
 
     } else if (norm.includes('vanilla')) {
       // 1. Query version manifest
-      const manifest = await fetchJson<{ versions: Array<{ id: string; url: string }> }>(
-        'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
-      );
+      let manifest;
+      try {
+        manifest = await fetchJson<{ versions: Array<{ id: string; url: string }> }>(
+          'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+        );
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       const entry = manifest.versions.find(v => v.id === version);
       if (!entry) {
         throw new Error(`Vanilla version ${version} not found in Mojang version manifest`);
       }
-      const packageData = await fetchJson<{ downloads: { server?: { url: string } } }>(entry.url);
+      let packageData;
+      try {
+        packageData = await fetchJson<{ downloads: { server?: { url: string } } }>(entry.url);
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       if (!packageData.downloads?.server?.url) {
         throw new Error(`Server download artifact not available for Vanilla ${version}`);
       }
@@ -501,18 +722,28 @@ export async function downloadMinecraftServerJar(
 
     } else if (norm.includes('fabric')) {
       // 1. Resolve loader version
-      const loaders = await fetchJson<Array<{ loader: { version: string; stable: boolean } }>>(
-        `https://meta.fabricmc.net/v2/versions/loader/${version}`
-      );
+      let loaders;
+      try {
+        loaders = await fetchJson<Array<{ loader: { version: string; stable: boolean } }>>(
+          `https://meta.fabricmc.net/v2/versions/loader/${version}`
+        );
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       if (!loaders || loaders.length === 0) {
         throw new Error(`Fabric loader not available for Minecraft ${version}`);
       }
       const loaderVer = loaders[0].loader.version;
 
       // 2. Resolve installer version
-      const installers = await fetchJson<Array<{ version: string; stable: boolean }>>(
-        'https://meta.fabricmc.net/v2/versions/installer'
-      );
+      let installers;
+      try {
+        installers = await fetchJson<Array<{ version: string; stable: boolean }>>(
+          'https://meta.fabricmc.net/v2/versions/installer'
+        );
+      } catch (err: any) {
+        throw new Error(`Minecraft version service unavailable.\nUnable to safely resolve the selected server build.`);
+      }
       const installerVer = installers && installers.length > 0 ? installers[0].version : '1.0.1';
 
       const downloadUrl = `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVer}/${installerVer}/server/jar`;
@@ -534,6 +765,10 @@ export async function downloadMinecraftServerJar(
     // Clean up partial invalid files
     if (fs.existsSync(targetJar)) {
       try { fs.unlinkSync(targetJar); } catch {}
+    }
+    // Retain the core descriptive messages
+    if (err.message.includes('service unavailable')) {
+      throw err;
     }
     throw new Error(`Failed to download ${software} ${version}: ${err.message}`);
   }

@@ -202,10 +202,10 @@ export const AdminDiscord: React.FC = () => {
   });
 
   const getBotInviteUrl = () => {
-    const id = clientId.trim() || '109283749281729384';
+    const id = clientId.trim();
     // Permissions: Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands
     const perms = '2147551296';
-    return `https://discord.com/api/oauth2/authorize?client_id=${id}&permissions=${perms}&scope=bot%20applications.commands`;
+    return id ? `https://discord.com/api/oauth2/authorize?client_id=${id}&permissions=${perms}&scope=bot%20applications.commands` : '#';
   };
 
   if (loading) {

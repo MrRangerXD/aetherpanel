@@ -1,0 +1,593 @@
+AETHERPANEL PROPRIETARY SOFTWARE LICENSE AGREEMENT
+
+Copyright © 2025–2026 AetherPanel. All Rights Reserved.
+
+Product: AetherPanel
+License Type: Proprietary / Commercial Software License
+Official Repository: https://github.com/mrrangerxd/aetherpanel
+Official Product: AetherPanel
+
+ 
+
+IMPORTANT NOTICE
+
+PLEASE READ THIS LICENSE AGREEMENT CAREFULLY BEFORE INSTALLING, ACTIVATING, ACCESSING, COPYING, OR USING AETHERPANEL.
+
+AetherPanel is proprietary software and is protected by applicable copyright, intellectual property, and other laws.
+
+This agreement governs your use of AetherPanel.
+
+By installing, activating, accessing, or using AetherPanel, you acknowledge that you have read and understood this agreement and agree to comply with its terms.
+
+If you do not agree with these terms, you must not install, activate, access, or use AetherPanel.
+
+ 
+
+1. DEFINITIONS
+
+For the purposes of this Agreement:
+
+ AetherPanelmeans the AetherPanel software, including its source code, compiled code, frontend, backend, APIs, administrative systems, node systems, installation scripts, configuration systems, documentation, assets, branding, and related proprietary components, except where a component is separately licensed under a third party license.
+
+ Official Releaseeans a version of AetherPanel distributed or authorized by AetherPanel.
+
+ Authorized Usermeans an individual or organization that has been granted permission to use AetherPanel under the applicable license.
+
+ Licensemeans the permission granted under this Agreement or under a separate license authorization issued by AetherPanel.
+
+ Unauthorized Modificationmeans any modification, alteration, patch, replacement, removal, bypass, or other change to protected or proprietary portions of AetherPanel that has not been expressly authorized.
+
+ License Keymeans an authorization credential issued by AetherPanel for activation or use of a licensed version where licensing is enabled.
+
+ 
+
+2. OWNERSHIP
+
+AetherPanel is licensed, not sold.
+
+All rights, title, and interest in AetherPanel remain with AetherPanel and/or its respective rights holders.
+
+This Agreement does not transfer ownership of:
+
+Source code
+Software architecture
+Copyright
+Trademarks
+Logos
+Branding
+Documentation
+Proprietary technology
+License infrastructure
+Security mechanisms
+Node infrastructure
+Other intellectual property rights
+
+No ownership rights are granted except for the limited right to use the software as expressly permitted by this Agreement.
+
+ 
+
+3. LIMITED LICENSE GRANT
+
+Subject to compliance with this Agreement, AetherPanel grants the Authorized User a limited, non exclusive, non transferable, revocable license to install and use the Official Release of AetherPanel for its intended hosting management purposes.
+
+The license does not grant permission to:
+
+Own the software.
+Claim the software as your own.
+Create an unauthorized derivative product.
+Redistribute the software.
+Resell the software.
+Sublicense the software.
+Circumvent technical protections.
+Modify protected functionality without authorization.
+
+The scope of any commercial, installation based, server based, domain based, or other license restrictions may be defined separately by AetherPanel.
+
+ 
+
+4. OFFICIAL SOFTWARE ONLY
+
+AetherPanel must be used in the form officially distributed or expressly authorized by AetherPanel.
+
+You may not create or distribute an unauthorized modified version of AetherPanel.
+
+This includes, without limitation:
+
+Modified builds
+Unauthorized forks
+Repackaged releases
+Patched releases
+Cracked releases
+Modified installers
+Modified node agents
+Modified licensing components
+Unauthorized distributions
+
+ 
+
+5. PROHIBITED MODIFICATIONS
+
+Without prior written authorization, you may not modify or replace proprietary portions of AetherPanel, including:
+
+Frontend source code
+Backend source code
+Authentication systems
+Authorization systems
+Security mechanisms
+License systems
+License validation
+Node authentication
+Node provisioning
+Server provisioning
+Protected APIs
+Administrative security controls
+Proprietary branding
+Copyright notices
+Proprietary notices
+Installation mechanisms
+Software protection mechanisms
+
+This restriction does not override rights that may be granted by applicable third party open source licenses.
+
+ 
+
+6. NO LICENSE BYPASS
+
+The following activities are strictly prohibited:
+
+Bypassing license activation.
+Circumventing license validation.
+Disabling license checks.
+Altering license validation logic.
+Forging license credentials.
+Generating unauthorized license keys.
+Reusing unauthorized license keys.
+Sharing confidential license credentials.
+Patching the software to accept invalid licenses.
+Blocking required license communication for the purpose of bypassing restrictions.
+Circumventing installation restrictions.
+Circumventing server or node restrictions.
+Circumventing access controls.
+Removing technical protections designed to enforce licensing.
+
+Attempting to bypass a protection is prohibited even if the bypass is not publicly distributed.
+
+ 
+
+7. LICENSE KEYS AND CREDENTIALS
+
+Where AetherPanel uses license keys, activation tokens, installation identifiers, or similar authorization credentials, such credentials are confidential and must be treated as protected access credentials.
+
+You may not:
+
+Publish license keys.
+Upload license keys to public repositories.
+Sell unauthorized license keys.
+Share license keys with unauthorized users.
+Attempt to duplicate license keys.
+Attempt to generate license keys.
+Manipulate license metadata.
+Modify the software to accept unauthorized keys.
+Remove restrictions associated with a license.
+
+A license may be associated with one or more identifiers, including but not limited to:
+
+Customer
+Installation
+VPS
+Server
+Domain
+Hostname
+Organization
+
+depending on the applicable licensing model.
+
+ 
+
+8. REDISTRIBUTION
+
+Unless expressly authorized in writing, you may not:
+
+Copy AetherPanel for redistribution.
+Upload AetherPanel to public repositories.
+Mirror AetherPanel on download websites.
+Upload AetherPanel to file sharing services.
+Publish unauthorized releases.
+Distribute modified versions.
+Distribute cracked versions.
+Package AetherPanel with another product for redistribution.
+Offer AetherPanel as a downloadable product.
+Distribute AetherPanel through software marketplaces.
+
+The existence of an accessible source repository does not automatically grant redistribution rights.
+
+ 
+
+9. RESALE AND SUBLICENSING
+
+You may not sell, rent, lease, sublicense, transfer, or commercially redistribute AetherPanel itself unless expressly permitted by a separate written agreement.
+
+Using AetherPanel to operate your own hosting business does not, by itself, grant you the right to sell or redistribute AetherPanel software.
+
+Your customers may use the hosting services you operate where permitted, but they do not automatically receive a license to AetherPanel itself.
+
+ 
+
+10. BRANDING AND COPYRIGHT
+
+AetherPanel branding, logos, copyright notices, proprietary notices, and attribution must not be removed or intentionally concealed where they are included as part of the Official Release.
+
+You may not represent AetherPanel as software developed entirely by you.
+
+You may not falsely represent an unauthorized modified version as an official AetherPanel release.
+
+You may not use AetherPanel branding in a manner that falsely suggests official endorsement, partnership, or authorization.
+
+ 
+
+11. DERIVATIVE PRODUCTS
+
+You may not create, publish, distribute, or commercially exploit a derivative product based substantially on proprietary AetherPanel code or architecture without prior written authorization.
+
+This includes:
+
+Rebranded versions
+Forked commercial versions
+Modified hosting panels
+Republished builds
+White label distributions
+Unauthorized SaaS versions
+Unauthorized reseller versions
+
+ 
+
+12. SECURITY AND ACCESS CONTROLS
+
+You may not intentionally circumvent or disable security mechanisms implemented in AetherPanel.
+
+This includes mechanisms controlling:
+
+Authentication
+Authorization
+Administrative access
+Node access
+Server access
+License access
+API access
+Protected resources
+Installation authorization
+
+Good faith security research and vulnerability reporting should be directed to the AetherPanel owner through an appropriate private channel where available.
+
+Nothing in this section is intended to prohibit activity that cannot lawfully be restricted under applicable law.
+
+ 
+
+13. NODE AND SERVER INFRASTRUCTURE
+
+AetherPanel may include systems responsible for managing:
+
+Hosting nodes
+Server provisioning
+Resource allocation
+Server lifecycle operations
+Node authentication
+Server authentication
+Infrastructure communication
+
+You may not modify or circumvent these systems for the purpose of defeating security, licensing, resource restrictions, or access controls.
+
+ 
+
+14. THIRD PARTY SOFTWARE
+
+AetherPanel may contain, depend upon, or integrate with third party libraries, frameworks, services, or software components.
+
+Such components remain subject to their respective licenses.
+
+Where a third party license grants rights that cannot legally be restricted by this Agreement, those rights remain unaffected.
+
+Nothing in this Agreement is intended to remove or restrict rights granted under applicable third party open source licenses.
+
+ 
+
+15. UPDATES AND SUPPORT
+
+AetherPanel may release:
+
+Updates
+Bug fixes
+Security patches
+Feature updates
+Node agent updates
+Installation updates
+Compatibility updates
+
+AetherPanel may change, improve, remove, or replace features in future releases.
+
+Certain versions or features may require a valid license or additional authorization where applicable.
+
+ 
+
+16. LICENSE TERMINATION
+
+AetherPanel may terminate or revoke a license where permitted by applicable law if the Authorized User materially violates this Agreement.
+
+Examples of material violations may include:
+
+Unauthorized redistribution
+License bypass
+License key abuse
+Unauthorized resale
+Unauthorized modification
+Circumvention of security protections
+Deliberate removal of proprietary protections
+Distribution of cracked versions
+
+Upon termination, the affected user must cease the unauthorized use of AetherPanel and comply with any legally applicable requirements concerning copies of the software.
+
+ 
+
+17. EFFECT OF TERMINATION
+
+Termination of a license does not transfer ownership of AetherPanel to the user.
+
+All ownership and intellectual property rights remain with their respective rights holders.
+
+Termination does not limit any rights or remedies that may otherwise be available under applicable law.
+
+ 
+
+18. ENFORCEMENT AND REMEDIES
+
+AetherPanel reserves the right, subject to applicable law, to take appropriate action against material violations of this Agreement.
+
+Depending on the circumstances and applicable law, available remedies may include:
+
+License revocation
+Suspension of authorization
+Termination of access to licensed services
+Blocking unauthorized installations
+Requesting removal of unauthorized distributions
+Requesting cessation of unauthorized use
+Recovery of demonstrable damages where legally available
+Recovery of reasonable costs where legally available
+Other remedies available under applicable law
+
+There is no automatic fixed monetary penalty under this Agreement unless separately agreed in writing and legally enforceable.
+
+Any legal remedy will depend on the applicable law, jurisdiction, facts, evidence, and circumstances of the violation.
+
+ 
+
+19. NO IMPLIED RIGHTS
+
+Any rights not expressly granted by this Agreement are reserved by AetherPanel and/or the applicable rights holders.
+
+Failure to immediately enforce a provision of this Agreement does not necessarily constitute a permanent waiver of that provision.
+
+ 
+
+20. NO OWNERSHIP OR INTELLECTUAL PROPERTY TRANSFER
+
+Using AetherPanel does not give the user ownership of the software.
+
+The user does not acquire rights to:
+
+Copyright
+Source code
+Trademarks
+Software architecture
+Proprietary systems
+Licensing technology
+Documentation
+Branding
+
+except where such rights are expressly granted.
+
+ 
+
+21. COMMERCIAL USE
+
+Commercial use of AetherPanel may be permitted under the applicable license.
+
+For example, an authorized user may use AetherPanel to operate a hosting service where their license permits such use.
+
+Commercial use of the software itself does not grant permission to redistribute, resell, sublicense, or modify AetherPanel.
+
+ 
+
+22. CUSTOM MODIFICATIONS
+
+If you require changes to AetherPanel, custom functionality, custom branding, integrations, or other modifications, contact the AetherPanel owner before modifying proprietary portions of the software.
+
+Written authorization may define:
+
+Permitted modifications
+Scope of modifications
+Distribution rights
+Ownership of custom work
+Commercial rights
+Support obligations
+Additional licensing terms
+
+No verbal assumption should be treated as authorization unless confirmed through an appropriate written agreement.
+
+ 
+
+23. PRIVACY AND EXTERNAL SERVICES
+
+AetherPanel may communicate with external services where required for functionality, licensing, updates, authentication, telemetry, or other supported features.
+
+The specific handling of information may be governed by applicable privacy documentation and third party service terms.
+
+Users should review the applicable documentation before deploying AetherPanel in production environments.
+
+ 
+
+24. DISCLAIMER OF WARRANTY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AETHERPANEL IS PROVIDED ON AN AS IS AND AS AVAILABLE BASIS.
+
+AETHERPANEL DOES NOT GUARANTEE THAT THE SOFTWARE WILL:
+
+OPERATE WITHOUT INTERRUPTION;
+BE COMPLETELY ERROR FREE;
+BE COMPATIBLE WITH EVERY VPS OR OPERATING SYSTEM;
+REMAIN COMPATIBLE WITH EVERY THIRD PARTY SERVICE;
+MEET EVERY PARTICULAR BUSINESS REQUIREMENT.
+
+Users are responsible for evaluating the software and its suitability for their environment.
+
+ 
+
+25. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AETHERPANEL AND ITS CONTRIBUTORS SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES ARISING FROM OR RELATED TO THE USE OR INABILITY TO USE THE SOFTWARE.
+
+This may include, where legally permitted:
+
+Loss of revenue
+Loss of profits
+Loss of data
+Business interruption
+Service interruption
+Infrastructure failure
+Hosting losses
+
+Nothing in this Agreement excludes or limits liability that cannot legally be excluded or limited.
+
+ 
+
+26. USER RESPONSIBILITY
+
+The user is responsible for:
+
+Maintaining appropriate backups.
+Securing their VPS.
+Securing their administrator credentials.
+Securing their database.
+Configuring their firewall appropriately.
+Maintaining their operating system.
+Maintaining supported dependencies.
+Monitoring their infrastructure.
+Complying with applicable laws.
+Using AetherPanel only in accordance with this Agreement.
+
+AetherPanel should not be treated as a replacement for proper infrastructure security practices.
+
+ 
+
+27. ACCEPTANCE
+
+By installing, activating, accessing, or using AetherPanel, you acknowledge that:
+
+1. You have read this Agreement.
+2. You understand its restrictions.
+3. You agree to comply with its terms.
+4. You understand that AetherPanel is proprietary software.
+5. You understand that unauthorized redistribution is prohibited.
+6. You understand that unauthorized modification is prohibited.
+7. You understand that license bypass is prohibited where licensing protections apply.
+8. You understand that ownership of AetherPanel is not transferred to you.
+
+If you do not agree to these terms, do not install, activate, access, or use AetherPanel.
+
+ 
+
+28. SEVERABILITY
+
+If any provision of this Agreement is determined to be invalid, unlawful, or unenforceable under applicable law, that provision shall be interpreted or limited to the minimum extent necessary, and the remaining provisions shall continue to the extent legally permitted.
+
+ 
+
+29. ENTIRE AGREEMENT
+
+This Agreement, together with any applicable written license terms, commercial agreement, or supplemental terms issued by AetherPanel, constitutes the applicable agreement concerning the licensed use of AetherPanel.
+
+Where a separate written agreement expressly conflicts with this Agreement, the applicable written agreement shall control to the extent of the conflict.
+
+ 
+
+30. CHANGES TO THIS LICENSE
+
+AetherPanel may update this Agreement for future releases or licensing models.
+
+The applicable license terms for a particular release may be identified in the release documentation or accompanying license file.
+
+Users should review the applicable license before upgrading to a version governed by updated terms.
+
+ 
+
+31. GOVERNING LAW
+
+This Agreement shall be interpreted and enforced according to the applicable laws and jurisdiction specified by AetherPanel in a separate written agreement or, where no such designation exists, according to the laws and jurisdiction otherwise applicable to the relevant dispute.
+
+Nothing in this section is intended to remove mandatory rights or protections provided by applicable law.
+
+ 
+
+32. CONTACT AND AUTHORIZATION
+
+Requests concerning:
+
+Commercial licensing
+Custom modifications
+Redistribution
+White label arrangements
+Reseller arrangements
+Security reports
+Partnership
+Special permissions
+
+should be directed to the official AetherPanel owner or authorized representative.
+
+Authorization to modify or redistribute AetherPanel should be obtained in writing.
+
+ 
+
+33. OFFICIAL SOURCE
+
+The official AetherPanel repository is:
+
+https://github.com/mrrangerxd/aetherpanel
+
+Users should obtain AetherPanel only from an official or explicitly authorized distribution channel.
+
+A copy obtained from an unknown third party should not automatically be considered an Official Release.
+
+ 
+
+34. COPYRIGHT NOTICE
+
+AetherPanel
+Copyright © 2025–2026 AetherPanel
+All Rights Reserved.
+
+AetherPanel and associated branding may constitute trademarks, service marks, or other protected identifiers where applicable.
+
+Unauthorized use of proprietary branding is prohibited where applicable.
+
+ 
+
+35. FINAL NOTICE
+
+AetherPanel is provided so that authorized users can operate and manage their hosting infrastructure.
+
+You are welcome to use the official software for its intended purpose and build your hosting service around it where your license permits.
+
+What you are not permitted to do is take the software, bypass its protections, modify proprietary systems without authorization, remove ownership notices, redistribute it as your own, or distribute unauthorized copies.
+
+If you want a custom version, additional rights, redistribution permission, or other special arrangement, obtain written authorization first.
+
+Respect the software, its licensing terms, and the work behind it.
+
+ 
+
+AetherPanel
+Copyright © 2025–2026 AetherPanel. All Rights Reserved.
+
+Official Repository:
+https://github.com/mrrangerxd/aetherpanel
+
+END OF LICENSE

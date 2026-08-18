@@ -7,7 +7,10 @@ import {
   readServerProperties,
   writeServerProperties,
   writeMinecraftEula,
-  downloadMinecraftServerJar
+  downloadMinecraftServerJar,
+  discoverJavaBinaries,
+  runJavaInstallation,
+  javaInstallProgress
 } from '../minecraftService';
 import { getServerDir, startServer, stopServer, appendConsoleLog } from '../provider';
 import { dispatchWebhookEvent } from '../webhookService';
@@ -128,7 +131,15 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
   const { software, version, preserveData } = req.body;
 
   const targetSoftware = software || server.software || 'Paper';
-  const targetVersion = version || server.version || '1.21.4';
+  let targetVersion = version || server.version;
+  if (!targetVersion) {
+    try {
+      const verInfo = await getMinecraftVersions(targetSoftware);
+      targetVersion = verInfo.latest;
+    } catch {
+      targetVersion = '1.20.4';
+    }
+  }
 
   try {
     // 1. Stop active process
@@ -191,6 +202,63 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
     server.deploymentState = 'FAILED';
     saveDbSync();
     res.status(500).json({ success: false, error: { code: 'REINSTALL_FAILED', message: err.message } });
+  }
+});
+
+// GET /api/v1/minecraft/java-runtimes - Query discovered Java runtimes
+router.get('/java-runtimes', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const runtimes = discoverJavaBinaries();
+    res.json({
+      success: true,
+      data: runtimes
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'DISCOVERY_FAILED', message: err.message } });
+  }
+});
+
+// GET /api/v1/minecraft/install-java/status - Query progress of Java installer
+router.get('/install-java/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  res.json({
+    success: true,
+    data: javaInstallProgress
+  });
+});
+
+// POST /api/v1/minecraft/install-java - Install missing Java runtime (Admin only)
+router.post('/install-java', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const isAdmin = ['admin', 'super_admin', 'moderator'].includes(req.user!.role);
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only administrators can install Java runtimes.' } });
+    }
+
+    const { version } = req.body;
+    const vNum = parseInt(version, 10);
+    if (isNaN(vNum) || ![8, 11, 17, 21, 25].includes(vNum)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_VERSION', message: 'Valid versions are 8, 11, 17, 21, 25' } });
+    }
+
+    if (javaInstallProgress.status === 'installing') {
+      return res.status(409).json({ success: false, error: { code: 'ALREADY_RUNNING', message: `An installation for Java ${javaInstallProgress.version} is already in progress.` } });
+    }
+
+    // Trigger installation asynchronously
+    runJavaInstallation(vNum);
+
+    await createAuditLog(
+      req.user!.id, req.user!.email, req.user!.role,
+      'INSTALL_JAVA', 'SYSTEM',
+      `Triggered installation of Java ${vNum}`
+    );
+
+    res.json({
+      success: true,
+      message: `Asynchronous background installation of Java ${vNum} started.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'INSTALL_TRIGGER_FAILED', message: err.message } });
   }
 });
 

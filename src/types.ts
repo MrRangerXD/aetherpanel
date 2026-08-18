@@ -103,6 +103,15 @@ export interface ServerResourceLimits {
   databases: number;
 }
 
+export interface BotRuntimeSettings {
+  version?: string;
+  startupFile?: string;
+  startupArguments?: string;
+  memoryLimitMB?: number;
+  packageManager?: string;
+  requirementsFile?: string;
+}
+
 export interface ServerStartupConfig {
   // General & Lifecycle
   startupCommand?: string;
@@ -129,12 +138,16 @@ export interface ServerStartupConfig {
   serverJar?: string;
   nogui?: boolean;
 
-  // Node.js Runtime
+  // Bot Hosting Independent Runtimes
+  botRuntime?: 'nodejs' | 'python' | 'bun';
+  nodeConfig?: BotRuntimeSettings;
+  pythonConfig?: BotRuntimeSettings;
+  bunConfig?: BotRuntimeSettings;
+
+  // Legacy / Flat fallback fields
   nodeVersion?: string;
   entryFile?: string;
   nodeOptions?: string;
-
-  // Python Runtime
   pythonVersion?: string;
   pythonUnbuffered?: boolean;
   pythonExecutable?: string;
@@ -167,6 +180,7 @@ export interface Server {
   limits: ServerResourceLimits;
   startup?: ServerStartupConfig;
   envVars?: ServerEnvVar[];
+  selectedEnvPath?: string;
   createdAt: string;
   updatedAt: string;
   // Live stats cache
@@ -365,6 +379,8 @@ export interface Coupon {
   discountType: 'percent' | 'fixed';
   discountValue: number;
   expiresAt?: string;
+  status?: 'active' | 'revoked';
+  scopes?: string[];
   usageLimit?: number;
   timesUsed: number;
   isActive: boolean;
@@ -762,6 +778,8 @@ export interface ApiKey {
   role: UserRole;
   allowedIps?: string[];
   expiresAt?: string;
+  status?: 'active' | 'revoked';
+  scopes?: string[];
   lastUsedAt?: string;
   createdAt: string;
 }
@@ -907,3 +925,14 @@ export interface UpdateJobState {
 
 
 
+
+export interface ApiAuditLog {
+  id: string;
+  apiKeyId: string;
+  userId: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  ipAddress: string;
+  createdAt: string;
+}

@@ -249,7 +249,11 @@ router.post('/command', authMiddleware, async (req: AuthenticatedRequest, res: R
   const userId = req.user!.id;
   const userDiscordAccount = db.discordLinks ? db.discordLinks[userId] : null;
 
-  const discordUserId = req.body.discordUserId || userDiscordAccount?.discordId || '123456789012345678';
+  const discordUserId = req.body.discordUserId || userDiscordAccount?.discordId;
+  
+  if (!discordUserId) {
+    return res.status(400).json({ success: false, message: 'Discord user ID not found or not linked.' });
+  }
   const commandStr = req.body.command || '/server status';
   const serverId = req.body.serverId;
 
@@ -276,23 +280,15 @@ router.get('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, 
 
   const db = await getDb();
   const defaultDiscordSettings: DiscordBotSettings = {
-    enabled: true,
-    botToken: 'bot_token_secret_aether_live_prod_2026',
-    clientId: '109283749281729384',
-    clientSecret: 'discord_client_secret_masked',
-    redirectUri: 'http://localhost:3000/settings',
-    defaultWebhookUrl: 'https://discord.com/api/webhooks/demo/aetherpanel-notifications',
-    botStatus: 'online',
+    enabled: false,
+    botToken: '',
+    clientId: '',
+    clientSecret: '',
+    redirectUri: '',
+    defaultWebhookUrl: '',
+    botStatus: 'offline',
     commandRateLimitPerMin: 10,
-    defaultNotificationEvents: [
-      'SERVER_STARTED',
-      'SERVER_STOPPED',
-      'SERVER_CRASHED',
-      'SERVER_RESTARTED',
-      'BACKUP_COMPLETED',
-      'BACKUP_FAILED',
-      'RESOURCE_WARNING'
-    ]
+    defaultNotificationEvents: []
   };
 
   const settings = db.settings?.discordSettings || defaultDiscordSettings;

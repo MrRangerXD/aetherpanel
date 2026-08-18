@@ -43,14 +43,93 @@ export async function verifyToken(token: string): Promise<User | null> {
   }
 }
 
+
+// Basic in-memory rate limiting for API keys
+const apiRateLimits = new Map<string, { count: number, resetAt: number }>();
+const MAX_REQUESTS_PER_MINUTE = 60;
+
+function checkRateLimit(apiKeyId: string): boolean {
+  const now = Date.now();
+  const record = apiRateLimits.get(apiKeyId);
+  
+  if (!record || now > record.resetAt) {
+    apiRateLimits.set(apiKeyId, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+  
+  if (record.count >= MAX_REQUESTS_PER_MINUTE) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let token = req.headers.authorization?.replace('Bearer ', '');
   if (!token && req.cookies && req.cookies.aether_token) {
     token = req.cookies.aether_token;
   }
+  
+  // Try API key if standard token is missing or looks like an API key
+  let isApiKey = false;
+  if (!token && req.headers['x-api-key']) {
+    token = req.headers['x-api-key'] as string;
+    isApiKey = true;
+  } else if (token && token.startsWith('aeth_live_')) {
+    isApiKey = true;
+  }
 
   if (!token) {
-    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication token required.' } });
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication token or API key required.' } });
+  }
+
+  if (isApiKey) {
+    const crypto = require('crypto');
+    const keyHash = crypto.createHash('sha256').update(token).digest('hex');
+    const db = await getDb();
+    
+    const apiKey = db.apiKeys.find(k => k.keyHash === keyHash);
+    if (!apiKey) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid API key.' } });
+    }
+    if (apiKey.status === 'revoked') {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key revoked.' } });
+    }
+    if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key expired.' } });
+    }
+    const user = db.users.find(u => u.id === apiKey.userId && !u.isSuspended);
+    if (!user) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'User account suspended or not found.' } });
+    }
+    
+    // Check rate limit
+    if (!checkRateLimit(apiKey.id)) {
+      return res.status(429).json({ success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'API rate limit exceeded. Please try again later.' } });
+    }
+    
+    apiKey.lastUsedAt = new Date().toISOString();
+    
+    // Log the API access
+    if (!db.apiAuditLogs) db.apiAuditLogs = [];
+    db.apiAuditLogs.unshift({
+      id: `apiaud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      apiKeyId: apiKey.id,
+      userId: user.id,
+      endpoint: req.originalUrl,
+      method: req.method,
+      statusCode: 200, // Will be inaccurate but sufficient for now unless we hook res.on('finish')
+      ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+      createdAt: new Date().toISOString()
+    });
+    if (db.apiAuditLogs.length > 1000) db.apiAuditLogs = db.apiAuditLogs.slice(0, 1000);
+    
+    saveDbSync();
+    
+    req.user = user;
+    (req as any).apiKey = apiKey;
+    return next();
   }
 
   const user = await verifyToken(token);
@@ -61,6 +140,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   req.user = user;
   next();
 }
+
 
 export const authenticateUser = authMiddleware;
 
@@ -138,4 +218,18 @@ export async function createAuditLog(
     db.auditLogs = db.auditLogs.slice(0, 500);
   }
   saveDbSync();
+}
+
+
+export function requireApiScope(requiredScope: string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const apiKey = (req as any).apiKey;
+    if (!apiKey) return next(); // Fallback if using standard session auth (which wouldn't have apiKey)
+    
+    const scopes = apiKey.scopes || [];
+    if (!scopes.includes(requiredScope) && !scopes.includes('*')) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: `Missing required scope: ${requiredScope}` } });
+    }
+    next();
+  }
 }

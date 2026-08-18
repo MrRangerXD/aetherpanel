@@ -1124,9 +1124,10 @@ while true; do
   echo -e "  ${GREEN}5)${NC} Uninstall Panel"
   echo -e "  ${GREEN}6)${NC} Tutorial (Installation)"
   echo -e "  ${GREEN}7)${NC} System Health Verification & Repair"
+  echo -e "  ${GREEN}8)${NC} Create Admin User"
   echo -e "  ${RED}0)${NC} Exit\n"
   
-  read -p "Enter choice [0-7]: " CHOICE
+  read -p "Enter choice [0-8]: " CHOICE
 
   case $CHOICE in
     1)
@@ -1155,12 +1156,21 @@ while true; do
     7)
       repair_and_health_check
       ;;
+    8)
+      echo -e "\n${CYAN}Starting interactive Admin User creation...${NC}"
+      if [ -d "$INSTALL_DIR" ]; then
+        (cd "$INSTALL_DIR" && npx tsx server/scripts/create-admin.ts)
+      else
+        npx tsx server/scripts/create-admin.ts
+      fi
+      read -p "Press Enter to return to menu..."
+      ;;
     0)
       echo -e "\n${CYAN}Thank you for choosing AetherPanel. Goodbye!${NC}\n"
       exit 0
       ;;
     *)
-      echo -e "${RED}Invalid selection. Please choose an option between 0 and 7.${NC}"
+      echo -e "${RED}Invalid selection. Please choose an option between 0 and 8.${NC}"
       sleep 1
       ;;
   esac

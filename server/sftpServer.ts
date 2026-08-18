@@ -103,24 +103,24 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
               return ctx.reject();
             }
 
-            // Check authentication: either user's password hash OR server's sftpPassword
+            // Check authentication: prioritize server's sftpPassword for srv_ connection, then user password hash
             let isAuthenticated = false;
 
-            if (user) {
-              const passwordHash = db.passwords[user.id];
-              if (passwordHash) {
-                try {
-                  isAuthenticated = await bcrypt.compare(password, passwordHash);
-                } catch {}
-              }
-            }
-
-            if (!isAuthenticated && userServer && (userServer as any).sftpPassword) {
+            if (userServer && (userServer as any).sftpPassword) {
               if (password === (userServer as any).sftpPassword) {
                 isAuthenticated = true;
                 if (!user) {
                   user = db.users.find((u) => u.id === userServer.userId) || db.users[0];
                 }
+              }
+            }
+
+            if (!isAuthenticated && user) {
+              const passwordHash = db.passwords[user.id];
+              if (passwordHash) {
+                try {
+                  isAuthenticated = await bcrypt.compare(password, passwordHash);
+                } catch {}
               }
             }
 

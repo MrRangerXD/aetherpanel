@@ -32,6 +32,8 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     role: k.role,
     allowedIps: k.allowedIps,
     expiresAt: k.expiresAt,
+    status: k.status,
+    scopes: k.scopes,
     lastUsedAt: k.lastUsedAt,
     createdAt: k.createdAt
   }));
@@ -41,7 +43,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
 
 // POST /api/v1/api-keys - Generate a new API key
 router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { name, allowedIps, expiresInDays } = req.body;
+  const { name, allowedIps, expiresInDays, scopes } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: { code: 'NAME_REQUIRED', message: 'API key name is required.' } });
   }
@@ -67,6 +69,8 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     role: req.user!.role,
     allowedIps: Array.isArray(allowedIps) ? allowedIps.filter(Boolean) : undefined,
     expiresAt,
+    status: 'active',
+    scopes: Array.isArray(scopes) ? scopes : ['*'],
     createdAt: new Date().toISOString()
   };
 

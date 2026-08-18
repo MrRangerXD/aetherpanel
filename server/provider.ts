@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip';
 import { getDb, saveDbSync } from './db';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerActivity } from '../src/types';
 import { dispatchDiscordNotification } from './discordService';
+import { buildBotStartupCommand } from '../src/lib/startup';
 
 const SERVERS_DIR = path.join(process.cwd(), 'data', 'servers');
 
@@ -152,31 +153,28 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
   if (!server) throw new Error('Server not found');
 
   const dir = getServerDir(serverId);
-  const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
-  const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+  const { runtime, executable } = buildBotStartupCommand(server, server.startup);
 
-  appendConsoleLog(serverId, `[AetherInstaller/INFO]: Starting dependency installation...`);
+  appendConsoleLog(serverId, `[AetherInstaller/INFO]: Starting dependency installation for ${runtime}...`);
 
-  if (isPython) {
+  if (runtime === 'python') {
     const reqPath = path.join(dir, 'requirements.txt');
     if (!fs.existsSync(reqPath)) {
-      const msg = `[Installer/ERROR]: 'requirements.txt' not found in server root directory. Upload a requirements.txt file with your Python dependencies.`;
+      const msg = `[Installer/ERROR]: 'requirements.txt' not found. requirements.txt not found.`;
       appendConsoleLog(serverId, msg);
       return { success: false, status: 'NO_REQUIREMENTS_FILE', output: msg };
     }
 
-    const pythonExec = server.startup?.pythonExecutable || 'python3';
-    // Check if pip is available for that interpreter
-    const pipCheck = spawnSync(pythonExec, ['-m', 'pip', '--version'], { shell: false });
+    const pipCheck = spawnSync(executable, ['-m', 'pip', '--version'], { shell: false });
     if (pipCheck.status !== 0 || pipCheck.error) {
-      const errorMsg = `[Installer/ERROR]: PIP_NOT_FOUND - Pip module is not available for interpreter '${pythonExec}'. System reported: ${pipCheck.stderr ? pipCheck.stderr.toString().trim() : 'No module named pip'}`;
+      const errorMsg = `[Installer/ERROR]: PIP_NOT_FOUND - Pip module is not available for interpreter '${executable}'.`;
       appendConsoleLog(serverId, errorMsg);
       return { success: false, status: 'PIP_NOT_FOUND', output: errorMsg };
     }
-  } else if (!isBun) {
+  } else {
     const pkgPath = path.join(dir, 'package.json');
     if (!fs.existsSync(pkgPath)) {
-      const msg = `[Installer/INFO]: 'package.json' not found in server root. Skipping npm install.`;
+      const msg = `[Installer/INFO]: 'package.json' not found in server root. Skipping package installation.`;
       appendConsoleLog(serverId, msg);
       return { success: false, status: 'NO_PACKAGE_FILE', output: msg };
     }
@@ -186,10 +184,10 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
     let cmd = 'npm';
     let args = ['install'];
 
-    if (isPython) {
-      cmd = server.startup?.pythonExecutable || 'python3';
+    if (runtime === 'python') {
+      cmd = executable;
       args = ['-m', 'pip', 'install', '-r', 'requirements.txt'];
-    } else if (isBun) {
+    } else if (runtime === 'bun') {
       cmd = 'bun';
       args = ['install'];
     }
@@ -288,7 +286,7 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
 
   // 3. Check Software Runtime & Artifacts
   const prod = db.products.find(p => p.id === server.productId);
-  const isBotSoftware = /bot|python|node|discord|telegram|js/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
+  const isBotSoftware = /bot|python|node|discord|telegram|js|bun/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
   const category = prod?.category || (isBotSoftware ? 'bot' : 'minecraft');
   const dir = getServerDir(serverId);
 
@@ -296,7 +294,24 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
     const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
     const javaCheck = checkJavaRuntime(reqJava);
     if (!javaCheck.available) {
-      return { ok: false, code: 'JAVA_NOT_FOUND', reason: `Java Runtime check failed: ${javaCheck.message}` };
+      if (javaCheck.code === 'JAVA_VERSION_MISMATCH') {
+        return {
+          ok: false,
+          code: 'JAVA_VERSION_MISMATCH',
+          required: javaCheck.required,
+          detected: javaCheck.detected,
+          version: server.version,
+          reason: `Required Java: ${javaCheck.required}, Detected Java: ${javaCheck.detected || 'None'}. Required executable: ${javaCheck.path || 'Not Found'}. Server Version: ${server.version}`
+        } as any;
+      }
+      return {
+        ok: false,
+        code: 'JAVA_RUNTIME_UNAVAILABLE',
+        required: reqJava,
+        detected: javaCheck.detected || null,
+        version: server.version,
+        reason: `Required Java: ${reqJava}, Detected Java: ${javaCheck.detected || 'None'}. Java Runtime is unavailable: ${javaCheck.message}`
+      } as any;
     }
 
     const jarName = server.startup?.serverJar || 'server.jar';
@@ -306,39 +321,15 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
     }
   } else {
     // Bot Runtime
-    const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
-    const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
-
-    let entryFile = server.startup?.entryFile;
-    if (!entryFile) {
-      if (isPython) entryFile = 'bot.py';
-      else if (isBun) entryFile = 'index.ts';
-      else entryFile = 'index.js';
-    }
-
-    if (isPython) {
-      if (!fs.existsSync(path.join(dir, entryFile))) {
-        if (fs.existsSync(path.join(dir, 'main.py'))) entryFile = 'main.py';
-        else if (fs.existsSync(path.join(dir, 'app.py'))) entryFile = 'app.py';
-      }
-    } else if (isBun) {
-      if (!fs.existsSync(path.join(dir, entryFile))) {
-        if (fs.existsSync(path.join(dir, 'main.ts'))) entryFile = 'main.ts';
-        else if (fs.existsSync(path.join(dir, 'app.ts'))) entryFile = 'app.ts';
-        else if (fs.existsSync(path.join(dir, 'index.js'))) entryFile = 'index.js';
-      }
-    } else {
-      if (!fs.existsSync(path.join(dir, entryFile))) {
-        if (fs.existsSync(path.join(dir, 'main.js'))) entryFile = 'main.js';
-        else if (fs.existsSync(path.join(dir, 'bot.js'))) entryFile = 'bot.js';
-        else if (fs.existsSync(path.join(dir, 'app.js'))) entryFile = 'app.js';
-        else if (fs.existsSync(path.join(dir, 'server.js'))) entryFile = 'server.js';
-      }
-    }
-
-    const scriptPath = path.join(dir, entryFile);
+    const { startupFile, runtime, executable } = buildBotStartupCommand(server, server.startup);
+    const scriptPath = path.join(dir, startupFile);
     if (!fs.existsSync(scriptPath)) {
-      return { ok: false, code: 'NO_ENTRY_FILE', reason: 'No entry file detected. Upload an application entry file or configure one explicitly.' };
+      return { ok: false, code: 'NO_ENTRY_FILE', reason: `Startup failed. File: ${startupFile}. Reason: Startup file was not found.` };
+    }
+
+    const checkExec = spawnSync(executable, ['--version'], { shell: false });
+    if (checkExec.status !== 0 && checkExec.status !== null && checkExec.error) {
+      return { ok: false, code: 'RUNTIME_UNAVAILABLE', reason: `${runtime === 'python' ? 'Python' : runtime === 'bun' ? 'Bun' : 'Node.js'} runtime unavailable.` };
     }
   }
 
@@ -413,7 +404,7 @@ export async function startServer(serverId: string): Promise<boolean> {
   appendConsoleLog(serverId, `[AetherDaemon/INFO]: Initializing container sandbox & allocating limits (${server.limits.ramMB}MB RAM, ${server.limits.cpuCores} vCPU)...`);
 
   const prod = db.products.find(p => p.id === server.productId);
-  const isBotSoftware = /bot|python|node|discord|telegram|js/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
+  const isBotSoftware = /bot|python|node|discord|telegram|js|bun/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
   const category = prod?.category || (isBotSoftware ? 'bot' : 'minecraft');
   const dir = getServerDir(serverId);
 
@@ -433,28 +424,14 @@ export async function startServer(serverId: string): Promise<boolean> {
   }
 
   if (category === 'bot') {
-    const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
-    const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+    const { runtime, startupFile, executable, args, compiledCommand } = buildBotStartupCommand(server, server.startup);
+    if (!server.startup) server.startup = {};
+    server.startup.compiledCommand = compiledCommand;
+    server.startup.entryFile = startupFile;
 
-    let executable = 'node';
-    if (isPython) executable = server.startup?.pythonExecutable || 'python3';
-    else if (isBun) executable = 'bun';
-
-    let scriptFile = server.startup?.entryFile;
-    if (!scriptFile) {
-      if (isPython) scriptFile = 'bot.py';
-      else if (isBun) scriptFile = 'index.ts';
-      else scriptFile = 'index.js';
-    }
-
-    if (isPython) {
-      if (!fs.existsSync(path.join(dir, scriptFile))) {
-        if (fs.existsSync(path.join(dir, 'main.py'))) scriptFile = 'main.py';
-        else if (fs.existsSync(path.join(dir, 'app.py'))) scriptFile = 'app.py';
-      }
-
-      // Automatically check and install requirements.txt if present
-      if (fs.existsSync(path.join(dir, 'requirements.txt'))) {
+    if (runtime === 'python') {
+      const reqPath = path.join(dir, 'requirements.txt');
+      if (fs.existsSync(reqPath)) {
         appendConsoleLog(serverId, `[AetherDaemon/INFO]: Detected 'requirements.txt' in Python server root. Running dependency preflight check...`);
         const depRes = await installServerDependencies(serverId);
         if (depRes.status === 'PIP_NOT_FOUND') {
@@ -469,56 +446,23 @@ export async function startServer(serverId: string): Promise<boolean> {
           return false;
         }
       }
-    } else if (isBun) {
-      if (!fs.existsSync(path.join(dir, scriptFile))) {
-        if (fs.existsSync(path.join(dir, 'main.ts'))) scriptFile = 'main.ts';
-        else if (fs.existsSync(path.join(dir, 'app.ts'))) scriptFile = 'app.ts';
-        else if (fs.existsSync(path.join(dir, 'index.js'))) scriptFile = 'index.js';
-      }
-    } else {
-      if (!fs.existsSync(path.join(dir, scriptFile))) {
-        if (fs.existsSync(path.join(dir, 'main.js'))) scriptFile = 'main.js';
-        else if (fs.existsSync(path.join(dir, 'bot.js'))) scriptFile = 'bot.js';
-        else if (fs.existsSync(path.join(dir, 'app.js'))) scriptFile = 'app.js';
-        else if (fs.existsSync(path.join(dir, 'server.js'))) scriptFile = 'server.js';
-      }
     }
 
-    const scriptPath = path.join(dir, scriptFile);
+    const scriptPath = path.join(dir, startupFile);
     if (!fs.existsSync(scriptPath)) {
-      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: No entry file detected. Upload an application entry file or configure one explicitly.`);
+      const errReason = `Startup failed. File: ${startupFile}. Reason: Startup file was not found.`;
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: ${errReason}`);
       server.status = 'error';
+      if (!server.startup) server.startup = {};
+      server.startup.lastCrashReason = errReason;
       saveDbSync();
-      emitServerStatus(serverId, 'error', { error: `No entry file detected (${scriptFile})` });
+      emitServerStatus(serverId, 'error', { error: errReason });
       return false;
     }
 
-    const args: string[] = [];
-    if (isPython) {
-      args.push('-u');
+    if (runtime === 'python') {
       cleanEnv.PYTHONUNBUFFERED = '1';
-    } else if (isBun) {
-      args.push('run');
-    } else {
-      // Apply memory limits to Node.js v8 engine
-      args.push(`--max-old-space-size=${server.limits.ramMB}`);
-      if (server.startup?.nodeOptions) {
-        const extraOpts = server.startup.nodeOptions.split(/\s+/).filter(Boolean);
-        args.push(...extraOpts);
-      }
     }
-
-    if (server.startup?.customFlags) {
-      const customArgs = server.startup.customFlags.split(/\s+/).filter(Boolean);
-      args.push(...customArgs);
-    }
-
-    args.push(scriptFile);
-
-    const compiledCmd = `${executable} ${args.join(' ')}`;
-    if (!server.startup) server.startup = {};
-    server.startup.compiledCommand = compiledCmd;
-    server.startup.entryFile = scriptFile;
 
     try {
       intendedStops.delete(serverId);
@@ -533,7 +477,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       const entry: ActiveProcessEntry = {
         child,
         startedAt: new Date(),
-        runnerType: isPython ? 'bot_python' : 'bot_node',
+        runnerType: runtime === 'python' ? 'bot_python' : 'bot_node',
         pid: child.pid
       };
       activeProcesses.set(serverId, entry);
@@ -568,7 +512,7 @@ export async function startServer(serverId: string): Promise<boolean> {
 
       server.status = 'running';
       server.cpuUsage = 1.2;
-      server.ramUsageMB = isPython ? 32 : 45;
+      server.ramUsageMB = runtime === 'python' ? 32 : 45;
       server.uptimeSeconds = 0;
       saveDbSync();
       emitServerStatus(serverId, 'running', { pid: child.pid });
@@ -593,10 +537,20 @@ export async function startServer(serverId: string): Promise<boolean> {
     const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
     const javaCheck = checkJavaRuntime(reqJava);
     if (!javaCheck.available) {
-      appendConsoleLog(serverId, `[Server thread/ERROR]: Java Runtime is not available on host. ${javaCheck.message}`);
+      appendConsoleLog(serverId, `[Server thread/ERROR]: Java Runtime check failed! ${javaCheck.message}`);
+      if (javaCheck.code === 'JAVA_VERSION_MISMATCH') {
+        appendConsoleLog(serverId, `[Server thread/ERROR]: Required Java: ${javaCheck.required}, Detected Java: ${javaCheck.detected || 'None'}. Required executable: ${javaCheck.path || 'Not Found'}. Server Version: ${server.version}`);
+      } else {
+        appendConsoleLog(serverId, `[Server thread/ERROR]: JAVA_RUNTIME_UNAVAILABLE: Required Java ${reqJava} is not installed or available on this system.`);
+      }
       server.status = 'error';
       saveDbSync();
-      emitServerStatus(serverId, 'error', { error: javaCheck.message });
+      emitServerStatus(serverId, 'error', { 
+        error: javaCheck.code || 'JAVA_RUNTIME_UNAVAILABLE',
+        required: javaCheck.required || reqJava,
+        detected: javaCheck.detected || null,
+        version: server.version
+      });
       return false;
     }
 
@@ -673,11 +627,45 @@ export async function startServer(serverId: string): Promise<boolean> {
       server.startup.lastStartedAt = new Date().toISOString();
 
       child.stdout?.on('data', (chunk) => {
-        appendConsoleLog(serverId, chunk.toString());
+        const str = chunk.toString();
+        appendConsoleLog(serverId, str);
+        if (str.includes('java.lang.UnsupportedClassVersionError') || str.includes('UnsupportedClassVersionError')) {
+          server.startup = server.startup || {};
+          if (server.startup.lastCrashReason !== 'JAVA_VERSION_MISMATCH') {
+            server.startup.lastCrashReason = 'JAVA_VERSION_MISMATCH';
+            appendConsoleLog(serverId, `\n[AetherDaemon/DIAGNOSTIC]: ====================================================`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: CRITICAL: Minecraft failed to start because the selected Java runtime`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: is incompatible with this Minecraft version.`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: `);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Minecraft:      ${server.version}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Required:       Java ${reqJava}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Currently used:  Java ${javaCheck.installedVersion || 'Unknown'}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Action:         Switch to Java ${reqJava}.`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: ====================================================\n`);
+            saveDbSync();
+          }
+        }
       });
 
       child.stderr?.on('data', (chunk) => {
-        appendConsoleLog(serverId, `[STDERR]: ${chunk.toString()}`);
+        const str = chunk.toString();
+        appendConsoleLog(serverId, `[STDERR]: ${str}`);
+        if (str.includes('java.lang.UnsupportedClassVersionError') || str.includes('UnsupportedClassVersionError')) {
+          server.startup = server.startup || {};
+          if (server.startup.lastCrashReason !== 'JAVA_VERSION_MISMATCH') {
+            server.startup.lastCrashReason = 'JAVA_VERSION_MISMATCH';
+            appendConsoleLog(serverId, `\n[AetherDaemon/DIAGNOSTIC]: ====================================================`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: CRITICAL: Minecraft failed to start because the selected Java runtime`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: is incompatible with this Minecraft version.`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: `);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Minecraft:      ${server.version}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Required:       Java ${reqJava}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Currently used:  Java ${javaCheck.installedVersion || 'Unknown'}`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Action:         Switch to Java ${reqJava}.`);
+            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: ====================================================\n`);
+            saveDbSync();
+          }
+        }
       });
 
       child.on('error', (err) => {
@@ -759,6 +747,19 @@ async function handleProcessExit(serverId: string, code: number | null, signal: 
   server.startup.lastStoppedAt = new Date().toISOString();
   server.cpuUsage = 0;
   server.ramUsageMB = 0;
+
+  if (server.startup?.lastCrashReason === 'JAVA_VERSION_MISMATCH') {
+    appendConsoleLog(serverId, `[AetherDaemon/CRASH]: java.lang.UnsupportedClassVersionError detected! The Minecraft server jar requires a newer Java version than currently configured. Auto-recovery suspended to prevent endless crash loops.`);
+    server.status = 'error';
+    saveDbSync();
+    emitServerStatus(serverId, 'error', { 
+      error: 'JAVA_VERSION_MISMATCH',
+      required: 21,
+      detected: 17,
+      version: server.version
+    });
+    return;
+  }
 
   const isIntended = intendedStops.has(serverId);
   intendedStops.delete(serverId);

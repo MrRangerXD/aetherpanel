@@ -6,7 +6,7 @@ import {
   Save, PlayCircle, Shield, AlertTriangle, ArrowLeft, Key, ExternalLink,
   Layers, CheckCircle2, ChevronRight, Zap, RefreshCcw, Upload, FileArchive,
   Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare,
-  Globe, Wifi, Sliders
+  Globe, Wifi, Sliders, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem, ServerStartupConfig, ServerEnvVar } from '../../types';
@@ -16,6 +16,21 @@ import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
+import { buildBotStartupCommand } from '../../lib/startup';
+
+function getRecommendedJava(version?: string): number {
+  if (!version) return 21;
+  const clean = version.replace(/^v/i, '').trim();
+  const parts = clean.split(/[-.]/).map(p => parseInt(p, 10));
+  const major = isNaN(parts[0]) ? 1 : parts[0];
+  const minor = parts[1] !== undefined && !isNaN(parts[1]) ? parts[1] : 0;
+  const patch = parts[2] !== undefined && !isNaN(parts[2]) ? parts[2] : 0;
+  if (major >= 26 || (major === 1 && minor >= 26)) return 25;
+  if (major > 1 || minor > 20 || (minor === 20 && patch >= 5)) return 21;
+  if (minor >= 17) return 17;
+  if (minor === 16) return 11;
+  return 8;
+}
 
 interface ServerManageProps {
   serverId: string;
@@ -39,6 +54,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   }, [initialTab]);
 
   const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
+    if (activeTab === 'env' && isEnvDirty) {
+      const confirmLeave = window.confirm("You have unsaved environment variable changes. Are you sure you want to leave and discard these changes?");
+      if (!confirmLeave) return;
+    }
     setActiveTab(tab);
     setIsEditingFile(false);
     onNavigate('server-manage', { serverId, initialTab: tab });
@@ -80,9 +99,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [isUploadingPlugin, setIsUploadingPlugin] = useState(false);
 
   // Environment state (.env)
-  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
+  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string; isSecret?: boolean; isEnabled?: boolean; description?: string }>>([]);
   const [showEnvValues, setShowEnvValues] = useState<Record<number, boolean>>({});
   const [envSavedMessage, setEnvSavedMessage] = useState(false);
+  const [selectedEnvPath, setSelectedEnvPath] = useState<string | null>(null);
+  const [isEnvFileExists, setIsEnvFileExists] = useState(true);
+  const [isEnvDirty, setIsEnvDirty] = useState(false);
+  const [showEnvFileBrowser, setShowEnvFileBrowser] = useState(false);
+  const [envBrowsePath, setEnvBrowsePath] = useState('/');
+  const [envBrowseFiles, setEnvBrowseFiles] = useState<ServerFile[]>([]);
+  const [envBrowseLoading, setEnvBrowseLoading] = useState(false);
+  const [envError, setEnvError] = useState<string | null>(null);
 
   // Backups state
   const [backups, setBackups] = useState<ServerBackup[]>([]);
@@ -139,6 +166,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   });
   const [preflightResult, setPreflightResult] = useState<{ ok: boolean; code?: string; reason?: string } | null>(null);
   const [isCheckingPreflight, setIsCheckingPreflight] = useState(false);
+  const [activeBotRuntime, setActiveBotRuntime] = useState<'nodejs' | 'python' | 'bun'>('nodejs');
+  const [showFileBrowserModal, setShowFileBrowserModal] = useState(false);
+  const [fileBrowserTargetRuntime, setFileBrowserTargetRuntime] = useState<'nodejs' | 'python' | 'bun' | null>(null);
+  const [browserFilesList, setBrowserFilesList] = useState<ServerFile[]>([]);
+  const [isBrowsingFiles, setIsBrowsingFiles] = useState(false);
   const [botRuntime, setBotRuntime] = useState('Node.js');
   const [botVersion, setBotVersion] = useState('Node 20 LTS');
   const [botEntryPoint, setBotEntryPoint] = useState('index.js');
@@ -156,6 +188,67 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Java discovery and installation states
+  const [javaRuntimes, setJavaRuntimes] = useState<Record<number, { available: boolean; path: string }>>({});
+  const [javaInstalling, setJavaInstalling] = useState(false);
+  const [javaInstallerLogs, setJavaInstallerLogs] = useState<string[]>([]);
+  const [javaInstallerStatus, setJavaInstallerStatus] = useState<'idle' | 'installing' | 'success' | 'failed'>('idle');
+
+  const fetchJavaRuntimes = async () => {
+    try {
+      const res = await apiRequest('/minecraft/java-runtimes');
+      if (res.success && res.data) {
+        setJavaRuntimes(res.data);
+      }
+    } catch {}
+  };
+
+  const startJavaInstallation = async (version: number) => {
+    setJavaInstalling(true);
+    setJavaInstallerStatus('installing');
+    setJavaInstallerLogs([`[AetherInstaller/INFO]: Requesting installation of Java ${version}...`]);
+    try {
+      const res = await apiRequest('/minecraft/install-java', {
+        method: 'POST',
+        body: JSON.stringify({ version })
+      });
+      if (res.success) {
+        pollJavaInstallation();
+      } else {
+        setJavaInstallerStatus('failed');
+        setJavaInstallerLogs(prev => [...prev, `[AetherInstaller/ERROR]: ${res.error?.message || 'Failed to trigger installation'}`]);
+        setJavaInstalling(false);
+      }
+    } catch (err: any) {
+      setJavaInstallerStatus('failed');
+      setJavaInstallerLogs(prev => [...prev, `[AetherInstaller/ERROR]: ${err.message}`]);
+      setJavaInstalling(false);
+    }
+  };
+
+  const pollJavaInstallation = () => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiRequest('/minecraft/install-java/status');
+        if (res.success && res.data) {
+          const progress = res.data;
+          if (progress.logs) {
+            setJavaInstallerLogs(progress.logs);
+          }
+          if (progress.status !== 'installing') {
+            setJavaInstallerStatus(progress.status);
+            setJavaInstalling(false);
+            clearInterval(interval);
+            fetchJavaRuntimes();
+          }
+        }
+      } catch {
+        clearInterval(interval);
+        setJavaInstalling(false);
+      }
+    }, 2000);
+  };
 
   // Minecraft Properties state
   const [mcProps, setMcProps] = useState<any>({
@@ -262,10 +355,54 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         }));
         setStartupFlags(s.startup.jvmFlags || s.startup.customFlags || '');
         if (s.startup.javaVersion) setJavaVersion(s.startup.javaVersion);
+        if (s.startup.botRuntime) {
+          setActiveBotRuntime(s.startup.botRuntime);
+        } else if (s.software.toLowerCase().includes('python')) {
+          setActiveBotRuntime('python');
+        } else if (s.software.toLowerCase().includes('bun')) {
+          setActiveBotRuntime('bun');
+        } else {
+          setActiveBotRuntime('nodejs');
+        }
       } else {
         setStartupFlags('-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200');
       }
     }
+  };
+
+  const openFileBrowser = async (runtime: 'nodejs' | 'python' | 'bun') => {
+    setFileBrowserTargetRuntime(runtime);
+    setShowFileBrowserModal(true);
+    setIsBrowsingFiles(true);
+    const res = await apiRequest(`/servers/${serverId}/files?path=`);
+    if (res.success && res.data?.files) {
+      setBrowserFilesList(res.data.files);
+    }
+    setIsBrowsingFiles(false);
+  };
+
+  const selectFileForRuntime = (fileName: string) => {
+    if (!fileBrowserTargetRuntime) return;
+    if (fileBrowserTargetRuntime === 'nodejs') {
+      setStartupConfig(prev => ({
+        ...prev,
+        nodeConfig: { ...prev.nodeConfig, startupFile: fileName },
+        entryFile: fileName
+      }));
+    } else if (fileBrowserTargetRuntime === 'python') {
+      setStartupConfig(prev => ({
+        ...prev,
+        pythonConfig: { ...prev.pythonConfig, startupFile: fileName },
+        entryFile: fileName
+      }));
+    } else if (fileBrowserTargetRuntime === 'bun') {
+      setStartupConfig(prev => ({
+        ...prev,
+        bunConfig: { ...prev.bunConfig, startupFile: fileName },
+        entryFile: fileName
+      }));
+    }
+    setShowFileBrowserModal(false);
   };
 
   // Fetch Console Logs
@@ -396,11 +533,20 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   };
 
   // Fetch Environment Variables
-  const fetchEnvVars = async () => {
-    const res = await apiRequest(`/servers/${serverId}/env`);
+  const fetchEnvVars = async (filePath?: string) => {
+    setEnvError(null);
+    let url = `/servers/${serverId}/env`;
+    if (filePath) {
+      url += `?filePath=${encodeURIComponent(filePath)}`;
+    }
+    const res = await apiRequest(url);
     if (res.success && res.data) {
       const respData = res.data;
-      if (Array.isArray(respData.envVars) && respData.envVars.length > 0) {
+      setSelectedEnvPath(respData.selectedEnvPath || null);
+      setIsEnvFileExists(respData.exists !== false);
+      setIsEnvDirty(false);
+
+      if (Array.isArray(respData.envVars)) {
         setEnvVars(respData.envVars);
       } else if (respData.env && Object.keys(respData.env).length > 0) {
         const entries = Object.entries(respData.env).map(([key, value]) => ({
@@ -410,41 +556,80 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           isEnabled: true
         }));
         setEnvVars(entries);
-      } else if (typeof respData === 'object' && !respData.env && Object.keys(respData).length > 0) {
-        const entries = Object.entries(respData).map(([key, value]) => ({
-          key,
-          value: String(value),
-          isSecret: /token|secret|key|password|auth/i.test(key),
-          isEnabled: true
-        }));
-        setEnvVars(entries);
       } else {
-        setEnvVars([
-          { key: 'PORT', value: '3000', isSecret: false, isEnabled: true },
-          { key: 'NODE_ENV', value: 'production', isSecret: false, isEnabled: true },
-          { key: 'DISCORD_TOKEN', value: '', isSecret: true, isEnabled: true }
-        ]);
+        setEnvVars([]);
       }
+    } else if (res.error) {
+      setEnvError(res.error.message || 'Failed to load environment variables.');
     }
   };
 
-  const handleSaveEnvVars = async () => {
+  const handleSaveEnvVars = async (createFile = false) => {
+    setEnvError(null);
     const cleanList = envVars.filter(item => item.key && item.key.trim().length > 0);
-    const envObj: Record<string, string> = {};
-    cleanList.forEach(item => {
-      if (item.isEnabled !== false) {
-        envObj[item.key.trim()] = item.value || '';
+
+    // Validate keys and duplicate keys in client too for instant feedback
+    const keys = new Set<string>();
+    for (const item of cleanList) {
+      const k = item.key.trim();
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) {
+        setEnvError(`Invalid environment variable key: "${k}". Keys must start with a letter or underscore and contain only alphanumeric characters and underscores.`);
+        return;
       }
-    });
+      if (keys.has(k)) {
+        setEnvError(`Duplicate key detected: "${k}". Duplicate environment variable keys are not allowed.`);
+        return;
+      }
+      keys.add(k);
+    }
 
-    await apiRequest(`/servers/${serverId}/env`, {
+    const res = await apiRequest(`/servers/${serverId}/env`, {
       method: 'PUT',
-      body: JSON.stringify({ env: envObj, envVars: cleanList })
+      body: JSON.stringify({
+        envVars: cleanList,
+        selectedEnvPath: selectedEnvPath,
+        createFile
+      })
     });
 
-    setEnvSavedMessage(true);
-    setTimeout(() => setEnvSavedMessage(false), 3000);
-    fetchServerDetails();
+    if (res.success) {
+      setEnvSavedMessage(true);
+      setTimeout(() => setEnvSavedMessage(false), 3000);
+      setIsEnvDirty(false);
+      setIsEnvFileExists(true);
+      fetchServerDetails();
+      // Reload values from disk to get normalized representation
+      if (res.data?.selectedEnvPath) {
+        fetchEnvVars(res.data.selectedEnvPath);
+      } else {
+        fetchEnvVars();
+      }
+    } else {
+      setEnvError(res.error?.message || 'Failed to save environment variables.');
+    }
+  };
+
+  const fetchEnvBrowseFiles = async (pathStr: string) => {
+    setEnvBrowseLoading(true);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/files?path=${encodeURIComponent(pathStr)}`);
+      if (res.success && res.data?.files) {
+        setEnvBrowseFiles(res.data.files);
+        setEnvBrowsePath(pathStr);
+      }
+    } catch (err) {
+      console.error('Failed to browse env files', err);
+    } finally {
+      setEnvBrowseLoading(false);
+    }
+  };
+
+  const handleEnvBrowseParent = () => {
+    if (envBrowsePath === '/') return;
+    const parts = envBrowsePath.split('/').filter(Boolean);
+    parts.pop();
+    const parentPath = '/' + parts.join('/');
+    fetchEnvBrowseFiles(parentPath);
   };
 
   // Fetch Backups
@@ -482,6 +667,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   useEffect(() => {
     setLoading(true);
     fetchServerDetails().then(() => setLoading(false));
+    fetchJavaRuntimes();
   }, [serverId]);
 
   useEffect(() => {
@@ -828,6 +1014,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const handleSaveSettings = async () => {
     const mergedStartup: ServerStartupConfig = {
       ...startupConfig,
+      botRuntime: activeBotRuntime,
       javaVersion,
       jvmFlags: isMinecraft ? startupFlags : undefined,
       customFlags: !isMinecraft ? startupFlags : startupConfig.customFlags
@@ -1904,7 +2091,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB 4: ENVIRONMENT VARIABLES (.ENV) */}
       {activeTab === 'env' && (
         <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Header Panel */}
+          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Key className="h-4 w-4 text-violet-400" /> Environment Variables & Secrets (.env)
@@ -1912,10 +2100,93 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               <p className="text-xs text-zinc-400 mt-1">
                 Configure runtime environment flags, secret tokens, database credentials, and port bindings.
               </p>
+              
+              {/* File Info Block */}
+              <div className="mt-3 flex flex-wrap items-center gap-2.5 text-xs text-zinc-400">
+                <span className="font-semibold text-zinc-500">File Sync Path:</span>
+                <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[11px] font-mono font-semibold text-violet-300">
+                  {selectedEnvPath ? selectedEnvPath : 'Manual Mode (.env virtual)'}
+                </span>
+                
+                {/* Status Badges */}
+                {selectedEnvPath && (
+                  <>
+                    {isEnvFileExists ? (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+                        <Check className="h-3 w-3" /> Synced with File
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-[10px] font-semibold text-rose-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> File Does Not Exist
+                      </span>
+                    )}
+                  </>
+                )}
+
+                {isEnvDirty ? (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-semibold text-amber-400 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Unsaved Changes
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[10px] text-zinc-500">
+                    No Changes
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
+
+            {/* Actions Panel */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Browse Button */}
               <button
-                onClick={handleSaveEnvVars}
+                onClick={() => {
+                  setEnvBrowsePath('/');
+                  fetchEnvBrowseFiles('/');
+                  setShowEnvFileBrowser(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                title="Select .env file to load/sync variables"
+              >
+                <Folder className="h-4 w-4 text-amber-400" /> Browse Server Files
+              </button>
+
+              {/* Refresh/Reload Button */}
+              {selectedEnvPath && (
+                <button
+                  onClick={() => {
+                    if (isEnvDirty) {
+                      const confirmReload = window.confirm("You have unsaved changes in the panel. Reloading will discard them. Are you sure?");
+                      if (!confirmReload) return;
+                    }
+                    fetchEnvVars(selectedEnvPath);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                  title="Reload environment variables directly from disk"
+                >
+                  <RefreshCw className="h-4 w-4 text-zinc-400 animate-spin-slow" /> Reload From File
+                </button>
+              )}
+
+              {/* Switch to Manual Mode */}
+              {selectedEnvPath && (
+                <button
+                  onClick={() => {
+                    const confirmSwitch = window.confirm("Switch back to default root .env management? This won't delete the selected file, but will deselect it.");
+                    if (!confirmSwitch) return;
+                    setSelectedEnvPath(null);
+                    setIsEnvFileExists(true);
+                    setIsEnvDirty(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+                  title="Stop syncing with custom file path and go back to default mode"
+                >
+                  Disconnect File
+                </button>
+              )}
+
+              {/* Save Variables Button */}
+              <button
+                onClick={() => handleSaveEnvVars(false)}
                 className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-violet-600/20"
               >
                 <Save className="h-4 w-4" /> Save Variables
@@ -1923,9 +2194,37 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             </div>
           </div>
 
+          {/* Success messages & Errors */}
           {envSavedMessage && (
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-semibold flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4" /> Saved environment variables to server instance & .env file!
+            </div>
+          )}
+
+          {envError && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-rose-400" /> {envError}
+            </div>
+          )}
+
+          {/* File Missing Banner & Create Action */}
+          {selectedEnvPath && !isEnvFileExists && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300">Target environment file does not exist physically on disk</h4>
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Path: <code className="font-mono text-zinc-300">{selectedEnvPath}</code>. Saving changes now will automatically create the file and any necessary parent directories.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleSaveEnvVars(true)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-md shadow-amber-500/10 transition-all"
+              >
+                <Plus className="h-4 w-4" /> Create & Save .env
+              </button>
             </div>
           )}
 
@@ -1936,6 +2235,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               onClick={() => {
                 if (!envVars.some(v => v.key === 'DISCORD_TOKEN')) {
                   setEnvVars([...envVars, { key: 'DISCORD_TOKEN', value: '', isSecret: true, isEnabled: true, description: 'Bot authentication token' }]);
+                  setIsEnvDirty(true);
                 }
               }}
               className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
@@ -1946,6 +2246,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               onClick={() => {
                 if (!envVars.some(v => v.key === 'CLIENT_ID')) {
                   setEnvVars([...envVars, { key: 'CLIENT_ID', value: '', isSecret: false, isEnabled: true, description: 'Discord Application ID' }]);
+                  setIsEnvDirty(true);
                 }
               }}
               className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
@@ -1956,6 +2257,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               onClick={() => {
                 if (!envVars.some(v => v.key === 'PREFIX')) {
                   setEnvVars([...envVars, { key: 'PREFIX', value: '!', isSecret: false, isEnabled: true, description: 'Bot command prefix' }]);
+                  setIsEnvDirty(true);
                 }
               }}
               className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
@@ -1966,6 +2268,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               onClick={() => {
                 if (!envVars.some(v => v.key === 'NODE_ENV')) {
                   setEnvVars([...envVars, { key: 'NODE_ENV', value: 'production', isSecret: false, isEnabled: true, description: 'Runtime environment mode' }]);
+                  setIsEnvDirty(true);
                 }
               }}
               className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
@@ -1974,95 +2277,227 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             </button>
           </div>
 
+          {/* List of variables */}
           <div className="space-y-3">
-            {envVars.map((item, idx) => (
-              <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 transition-colors">
-                <div className="flex items-center gap-2 sm:w-1/3">
-                  <input
-                    type="checkbox"
-                    checked={item.isEnabled !== false}
-                    onChange={(e) => {
-                      const copy = [...envVars];
-                      copy[idx].isEnabled = e.target.checked;
-                      setEnvVars(copy);
-                    }}
-                    title="Enable / Disable variable"
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-violet-500 focus:ring-violet-500 shrink-0"
-                  />
-                  <input
-                    type="text"
-                    value={item.key}
-                    onChange={(e) => {
-                      const copy = [...envVars];
-                      copy[idx].key = e.target.value;
-                      setEnvVars(copy);
-                    }}
-                    placeholder="KEY_NAME"
-                    className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="relative flex-1">
-                  <input
-                    type={showEnvValues[idx] || (!item.isSecret && !/token|secret|key|password|auth/i.test(item.key)) ? 'text' : 'password'}
-                    value={item.value}
-                    onChange={(e) => {
-                      const copy = [...envVars];
-                      copy[idx].value = e.target.value;
-                      setEnvVars(copy);
-                    }}
-                    placeholder="Value..."
-                    className="w-full rounded-lg bg-zinc-900 border border-zinc-800 pl-3 pr-10 py-1.5 text-xs font-mono text-emerald-400 focus:border-emerald-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowEnvValues(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                    className="absolute right-2.5 top-2 text-zinc-500 hover:text-white"
-                    title={showEnvValues[idx] ? 'Hide value' : 'Reveal value'}
-                  >
-                    {showEnvValues[idx] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const copy = [...envVars];
-                      copy[idx].isSecret = !copy[idx].isSecret;
-                      setEnvVars(copy);
-                    }}
-                    className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${
-                      item.isSecret || /token|secret|key|password|auth/i.test(item.key)
-                        ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                    }`}
-                    title="Mark as sensitive secret"
-                  >
-                    {item.isSecret || /token|secret|key|password|auth/i.test(item.key) ? 'SECRET' : 'PLAIN'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
-                    className="p-1.5 text-zinc-500 hover:text-rose-400 transition-colors"
-                    title="Delete variable"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+            {envVars.length === 0 ? (
+              <div className="p-8 text-center rounded-2xl bg-zinc-950/40 border border-zinc-800/80">
+                <Key className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
+                <p className="text-xs text-zinc-400">No environment variables configured in this file.</p>
+                <p className="text-[11px] text-zinc-500 mt-1">Use the "Add Variable" or "Quick Add" buttons to get started.</p>
               </div>
-            ))}
+            ) : (
+              envVars.map((item, idx) => (
+                <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 transition-colors">
+                  <div className="flex items-center gap-2 sm:w-1/3">
+                    <input
+                      type="checkbox"
+                      checked={item.isEnabled !== false}
+                      onChange={(e) => {
+                        const copy = [...envVars];
+                        copy[idx].isEnabled = e.target.checked;
+                        setEnvVars(copy);
+                        setIsEnvDirty(true);
+                      }}
+                      title="Enable / Disable variable"
+                      className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-violet-500 focus:ring-violet-500 shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={item.key}
+                      onChange={(e) => {
+                        const copy = [...envVars];
+                        copy[idx].key = e.target.value;
+                        setEnvVars(copy);
+                        setIsEnvDirty(true);
+                      }}
+                      placeholder="KEY_NAME"
+                      className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="relative flex-1">
+                    <input
+                      type={showEnvValues[idx] || (!item.isSecret && !/token|secret|key|password|auth/i.test(item.key)) ? 'text' : 'password'}
+                      value={item.value}
+                      onChange={(e) => {
+                        const copy = [...envVars];
+                        copy[idx].value = e.target.value;
+                        setEnvVars(copy);
+                        setIsEnvDirty(true);
+                      }}
+                      placeholder="Value..."
+                      className="w-full rounded-lg bg-zinc-900 border border-zinc-800 pl-3 pr-10 py-1.5 text-xs font-mono text-emerald-400 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEnvValues(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                      className="absolute right-2.5 top-2 text-zinc-500 hover:text-white"
+                      title={showEnvValues[idx] ? 'Hide value' : 'Reveal value'}
+                    >
+                      {showEnvValues[idx] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const copy = [...envVars];
+                        copy[idx].isSecret = !copy[idx].isSecret;
+                        setEnvVars(copy);
+                        setIsEnvDirty(true);
+                      }}
+                      className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${
+                        item.isSecret || /token|secret|key|password|auth/i.test(item.key)
+                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                      title="Mark as sensitive secret"
+                    >
+                      {item.isSecret || /token|secret|key|password|auth/i.test(item.key) ? 'SECRET' : 'PLAIN'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEnvVars(envVars.filter((_, i) => i !== idx));
+                        setIsEnvDirty(true);
+                      }}
+                      className="p-1.5 text-zinc-500 hover:text-rose-400 transition-colors"
+                      title="Delete variable"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
 
             <div className="pt-2">
               <button
-                onClick={() => setEnvVars([...envVars, { key: '', value: '', isSecret: false, isEnabled: true }])}
+                onClick={() => {
+                  setEnvVars([...envVars, { key: '', value: '', isSecret: false, isEnabled: true }]);
+                  setIsEnvDirty(true);
+                }}
                 className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Variable
               </button>
             </div>
           </div>
+
+          {/* Environment File Browser Modal */}
+          {showEnvFileBrowser && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+                <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Folder className="h-4 w-4 text-amber-400" /> Select Environment File
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Choose an environment configuration file from your server directories to synchronize.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowEnvFileBrowser(false)}
+                    className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Directory Navigation Bar */}
+                <div className="px-4 py-2 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-2 text-zinc-300 truncate">
+                    <span className="text-zinc-500">Path:</span>
+                    <span className="font-semibold text-violet-300">{envBrowsePath}</span>
+                  </div>
+                  {envBrowsePath !== '/' && (
+                    <button
+                      onClick={handleEnvBrowseParent}
+                      className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] font-bold text-zinc-400 hover:text-white shrink-0 transition-colors"
+                    >
+                      Up One Level
+                    </button>
+                  )}
+                </div>
+
+                {/* Files & Folders List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1 max-h-[350px]">
+                  {envBrowseLoading ? (
+                    <div className="py-12 text-center text-xs text-zinc-400 flex flex-col items-center justify-center gap-2">
+                      <RefreshCw className="h-5 w-5 text-violet-500 animate-spin" />
+                      Loading files...
+                    </div>
+                  ) : envBrowseFiles.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-zinc-500">
+                      This directory is empty.
+                    </div>
+                  ) : (
+                    envBrowseFiles.map((f, idx) => {
+                      const isEnvCompatible = f.name === '.env' || f.name.startsWith('.env.');
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (f.isDir) {
+                              fetchEnvBrowseFiles(f.path);
+                            } else {
+                              // If it's a file, we set selected path
+                              setSelectedEnvPath(f.path);
+                              setShowEnvFileBrowser(false);
+                              fetchEnvVars(f.path);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer border transition-all ${
+                            f.isDir
+                              ? 'bg-zinc-900/40 hover:bg-zinc-900 border-transparent hover:border-zinc-800'
+                              : isEnvCompatible
+                                ? 'bg-violet-950/20 hover:bg-violet-950/30 border-violet-900/40 hover:border-violet-800/60'
+                                : 'bg-transparent hover:bg-zinc-900/40 border-transparent hover:border-zinc-850'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {f.isDir ? (
+                              <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+                            ) : (
+                              <FileText className={`h-4 w-4 shrink-0 ${isEnvCompatible ? 'text-violet-400' : 'text-zinc-500'}`} />
+                            )}
+                            <span className={`text-xs font-mono truncate ${f.isDir ? 'text-zinc-200' : isEnvCompatible ? 'text-violet-200 font-bold' : 'text-zinc-400'}`}>
+                              {f.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 shrink-0 text-[10px] text-zinc-500 font-mono">
+                            {f.isDir ? (
+                              <span className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wider bg-amber-500/10 px-1.5 py-0.5 rounded">Folder</span>
+                            ) : (
+                              <>
+                                {isEnvCompatible && (
+                                  <span className="text-[10px] text-violet-400 font-bold uppercase tracking-wider bg-violet-500/10 px-1.5 py-0.5 rounded">Env File</span>
+                                )}
+                                <span>{(f.size / 1024).toFixed(1)} KB</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setShowEnvFileBrowser(false)}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2547,27 +2982,41 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                  {isMinecraft ? 'Runtime Build / Java Version' : 'Runtime Engine & Version'}
+                  {isMinecraft ? 'Runtime Build / Java Version' : isPython ? 'Python Version' : isBun ? 'Bun Version' : 'Node.js Version'}
                 </label>
                 <select
                   value={javaVersion}
                   onChange={(e) => setJavaVersion(e.target.value)}
                   className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 >
-                  {isMinecraft ? (
+                  {isMinecraft && (
                     <>
                       <option value="Java 25">Java 25 (Recommended for Paper 26.1+)</option>
-                      <option value="Java 21">Java 21 (Recommended for 1.20+)</option>
-                      <option value="Java 17">Java 17 (LTS for 1.18 - 1.19)</option>
+                      <option value="Java 21">Java 21 (Recommended for 1.20.5+)</option>
+                      <option value="Java 17">Java 17 (Recommended for 1.18–1.20.4)</option>
                       <option value="Java 11">Java 11 (Legacy 1.16 - 1.17)</option>
                       <option value="Java 8">Java 8 (Legacy 1.8 - 1.12)</option>
                     </>
-                  ) : (
+                  )}
+                  {isNode && (
                     <>
+                      <option value="Node.js 18">Node.js 18 LTS</option>
                       <option value="Node.js 20">Node.js 20 LTS (Recommended)</option>
                       <option value="Node.js 22">Node.js 22 Current</option>
-                      <option value="Python 3.11">Python 3.11 LTS</option>
+                    </>
+                  )}
+                  {isPython && (
+                    <>
+                      <option value="Python 3.10">Python 3.10 LTS</option>
+                      <option value="Python 3.11">Python 3.11 LTS (Recommended)</option>
                       <option value="Python 3.12">Python 3.12</option>
+                    </>
+                  )}
+                  {isBun && (
+                    <>
+                      <option value="Bun 1.0">Bun 1.0</option>
+                      <option value="Bun 1.1">Bun 1.1 (Recommended)</option>
+                      <option value="Bun 1.2">Bun 1.2</option>
                     </>
                   )}
                 </select>
@@ -2639,17 +3088,13 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   <TerminalIcon className="h-3.5 w-3.5 text-violet-400" /> Compiled Startup Execution Command
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400 font-medium uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-cyan-400">
-                  {isMinecraft ? 'Minecraft Java VM' : isPython ? 'Python Runtime' : isBun ? 'Bun Engine' : 'Node.js Runtime'}
+                  {isMinecraft ? 'Minecraft Java VM' : activeBotRuntime === 'python' ? 'Python Runtime' : activeBotRuntime === 'bun' ? 'Bun Engine' : 'Node.js Runtime'}
                 </span>
               </div>
               <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 font-mono text-xs text-emerald-400 break-all select-all">
                 {isMinecraft
                   ? `java -Xms${startupConfig.xmsMB || 128}M -Xmx${startupConfig.xmxMB || server?.limits?.ramMB || 1024}M ${startupFlags} -jar ${startupConfig.serverJar || 'server.jar'} ${startupConfig.nogui !== false ? 'nogui' : ''}`
-                  : isPython
-                  ? `${startupConfig.pythonExecutable || 'python3'} ${startupConfig.pythonUnbuffered !== false ? '-u' : ''} ${startupFlags} ${startupConfig.entryFile || 'main.py'}`
-                  : isBun
-                  ? `bun run ${startupFlags} ${startupConfig.entryFile || 'index.ts'}`
-                  : `node --max-old-space-size=${server?.limits?.ramMB || 512} ${startupConfig.nodeOptions || ''} ${startupFlags} ${startupConfig.entryFile || 'index.js'}`
+                  : buildBotStartupCommand(server || {}, { ...startupConfig, botRuntime: activeBotRuntime, customFlags: startupFlags }).compiledCommand
                 }
               </div>
             </div>
@@ -2658,7 +3103,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
               <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-zinc-800/60 pb-2">
                 <Sliders className="h-3.5 w-3.5 text-amber-400" />
-                {isMinecraft ? 'Minecraft Java & Heap Allocation' : isPython ? 'Python Interpreter & Entry Settings' : isBun ? 'Bun Runtime Settings' : 'Node.js V8 Engine & Entry Settings'}
+                {isMinecraft ? 'Minecraft Java & Heap Allocation' : activeBotRuntime === 'python' ? 'Python Bot Runtime & Entry Settings' : activeBotRuntime === 'bun' ? 'Bun Bot Runtime & Entry Settings' : 'Node.js Bot Runtime & Entry Settings'}
               </h4>
 
               {/* 1. MINECRAFT CONFIGURATION */}
@@ -2720,129 +3165,350 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                       className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
                     />
                   </div>
+
+                  {/* Interactive Java Runtime Selector & Management Panel */}
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/60 pb-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Shield className="h-3.5 w-3.5 text-amber-400" /> Java Runtime Environment Manager
+                        </h4>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Assign the physical execution Java binary for your Minecraft engine.</p>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-amber-400 self-start sm:self-center">
+                        Required: Java {getRecommendedJava(server?.version)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Left side: Version overridden list */}
+                      <div className="space-y-1.5">
+                        <span className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">Select Installed Version</span>
+                        {[8, 11, 17, 21, 25].map((v) => {
+                          const isRecommended = v === getRecommendedJava(server?.version);
+                          const detected = javaRuntimes[v];
+                          const isSelected = javaVersion === `Java ${v}`;
+
+                          return (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => {
+                                setJavaVersion(`Java ${v}`);
+                              }}
+                              className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between text-xs cursor-pointer ${
+                                isSelected
+                                  ? 'bg-violet-600/10 border-violet-500 text-white'
+                                  : 'bg-zinc-950/40 border-zinc-800/60 text-zinc-300 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                  isSelected ? 'border-violet-400 text-violet-400' : 'border-zinc-700'
+                                }`}>
+                                  {isSelected && <div className="h-2 w-2 rounded-full bg-violet-400" />}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold">Java {v}</span>
+                                  {isRecommended && (
+                                    <span className="text-[9px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-md font-bold font-sans">
+                                      ✦ Recommended
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-[11px] font-mono">
+                                {detected?.available ? (
+                                  <span className="text-emerald-400 font-semibold">✓ Installed</span>
+                                ) : (
+                                  <span className="text-zinc-500">Not Installed</span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Right side: Active Status, Path and Actions */}
+                      <div className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 flex flex-col justify-between space-y-3">
+                        <div className="space-y-2 text-xs">
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 block">Active Status Summary</span>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-[11px] bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                            <div>
+                              <span className="text-zinc-500">Active Selection:</span>
+                              <div className="font-mono text-zinc-200 mt-0.5 font-bold">{javaVersion}</div>
+                            </div>
+                            <div>
+                              <span className="text-zinc-500">Compatibility:</span>
+                              <div className="font-mono mt-0.5">
+                                {parseInt(javaVersion.replace(/[^0-9]/g, ''), 10) >= getRecommendedJava(server?.version) ? (
+                                  <span className="text-emerald-400 font-bold">✓ Compatible</span>
+                                ) : (
+                                  <span className="text-rose-400 font-bold">⚠️ Incompatible</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-zinc-500 text-[10px] block font-medium">Physical Binary Executable Path:</span>
+                            <div className="font-mono text-[10px] text-zinc-300 break-all bg-zinc-900/80 p-2 rounded-lg border border-zinc-800/60 leading-relaxed">
+                              {javaRuntimes[parseInt(javaVersion.replace(/[^0-9]/g, ''), 10)]?.path || 'None (Missing/Incompatible — Click Install to deploy)'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Admin triggers installer */}
+                        {['admin', 'super_admin', 'moderator'].includes(user?.role || '') && (
+                          <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                            <span className="text-[9px] uppercase font-bold text-zinc-500 block">Administration Node Controls</span>
+                            
+                            {!javaRuntimes[parseInt(javaVersion.replace(/[^0-9]/g, ''), 10)]?.available ? (
+                              <button
+                                type="button"
+                                onClick={() => startJavaInstallation(parseInt(javaVersion.replace(/[^0-9]/g, ''), 10))}
+                                disabled={javaInstalling}
+                                className="w-full py-2 px-3 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                              >
+                                {javaInstalling ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                                <span>Install {javaVersion} Binary (Apt-Get)</span>
+                              </button>
+                            ) : (
+                              <div className="text-[11px] flex items-center gap-1.5 p-2 bg-emerald-500/5 rounded-lg border border-emerald-500/10 text-emerald-300">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                <span>Binary successfully provisioned.</span>
+                              </div>
+                            )}
+
+                            {javaInstallerStatus === 'installing' && (
+                              <div className="space-y-1">
+                                <div className="text-[10px] text-amber-400 animate-pulse font-mono flex items-center gap-1.5">
+                                  <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                                  <span>Installer background process is active...</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {javaInstallerLogs.length > 0 && (
+                              <div className="rounded-lg p-2 bg-zinc-900 border border-zinc-800 text-[9px] font-mono text-zinc-400 max-h-20 overflow-y-auto space-y-1">
+                                {javaInstallerLogs.slice(-3).map((log, idx) => (
+                                  <div key={idx} className="truncate">{log}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* 2. PYTHON CONFIGURATION */}
-              {isPython && (
+              {/* BOT HOSTING RUNTIME TABS & CONFIGURATION */}
+              {!isMinecraft && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Application Entry File (.py)
-                      </label>
-                      <input
-                        type="text"
-                        value={startupConfig.entryFile || 'main.py'}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
-                        placeholder="main.py or bot.py"
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                      />
+                  {/* Runtime Tabs Selector */}
+                  <div className="grid grid-cols-3 gap-2 bg-zinc-900/80 p-1.5 rounded-xl border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setActiveBotRuntime('nodejs')}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeBotRuntime === 'nodejs'
+                          ? 'bg-violet-600 text-white shadow-lg'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                      }`}
+                    >
+                      <span>Node.js</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveBotRuntime('python')}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeBotRuntime === 'python'
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                      }`}
+                    >
+                      <span>Python</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveBotRuntime('bun')}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeBotRuntime === 'bun'
+                          ? 'bg-amber-600 text-white shadow-lg'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                      }`}
+                    >
+                      <span>Bun</span>
+                    </button>
+                  </div>
+
+                  {/* 1. NODE.JS RUNTIME CONFIGURATION */}
+                  {activeBotRuntime === 'nodejs' && (
+                    <div className="space-y-4 pt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-medium text-zinc-300 mb-1 flex items-center justify-between">
+                            <span>Application Entry File (.js)</span>
+                            <button
+                              type="button"
+                              onClick={() => openFileBrowser('nodejs')}
+                              className="text-[10px] text-violet-400 hover:text-violet-300 font-mono flex items-center gap-1"
+                            >
+                              <Folder className="h-3 w-3" /> Browse File
+                            </button>
+                          </label>
+                          <input
+                            type="text"
+                            value={startupConfig.nodeConfig?.startupFile || startupConfig.entryFile || 'index.js'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setStartupConfig(prev => ({
+                                ...prev,
+                                entryFile: val,
+                                nodeConfig: { ...prev.nodeConfig, startupFile: val }
+                              }));
+                            }}
+                            placeholder="index.js or bot.js"
+                            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                            Node V8 Engine Options
+                          </label>
+                          <input
+                            type="text"
+                            value={startupConfig.nodeOptions || ''}
+                            onChange={(e) => setStartupConfig({ ...startupConfig, nodeOptions: e.target.value })}
+                            placeholder="--max-old-space-size=1024"
+                            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                          Custom Command Arguments & Flags
+                        </label>
+                        <input
+                          type="text"
+                          value={startupFlags}
+                          onChange={(e) => setStartupFlags(e.target.value)}
+                          placeholder="--experimental-modules"
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                        />
+                      </div>
                     </div>
+                  )}
 
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Python Interpreter Binary
-                      </label>
-                      <input
-                        type="text"
-                        value={startupConfig.pythonExecutable || 'python3'}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, pythonExecutable: e.target.value })}
-                        placeholder="python3"
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                      />
+                  {/* 2. PYTHON RUNTIME CONFIGURATION */}
+                  {activeBotRuntime === 'python' && (
+                    <div className="space-y-4 pt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-medium text-zinc-300 mb-1 flex items-center justify-between">
+                            <span>Application Entry File (.py)</span>
+                            <button
+                              type="button"
+                              onClick={() => openFileBrowser('python')}
+                              className="text-[10px] text-blue-400 hover:text-blue-300 font-mono flex items-center gap-1"
+                            >
+                              <Folder className="h-3 w-3" /> Browse File
+                            </button>
+                          </label>
+                          <input
+                            type="text"
+                            value={startupConfig.pythonConfig?.startupFile || startupConfig.entryFile || 'main.py'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setStartupConfig(prev => ({
+                                ...prev,
+                                entryFile: val,
+                                pythonConfig: { ...prev.pythonConfig, startupFile: val }
+                              }));
+                            }}
+                            placeholder="main.py or bot.py"
+                            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                            Python Interpreter Binary
+                          </label>
+                          <input
+                            type="text"
+                            value={startupConfig.pythonExecutable || 'python3'}
+                            onChange={(e) => setStartupConfig({ ...startupConfig, pythonExecutable: e.target.value })}
+                            placeholder="python3"
+                            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                          Custom Python Command Arguments (-u, etc.)
+                        </label>
+                        <input
+                          type="text"
+                          value={startupFlags}
+                          onChange={(e) => setStartupFlags(e.target.value)}
+                          placeholder="-u"
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-blue-300 focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      Custom Command Arguments & Flags
-                    </label>
-                    <input
-                      type="text"
-                      value={startupFlags}
-                      onChange={(e) => setStartupFlags(e.target.value)}
-                      placeholder="-u"
-                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
+                  {/* 3. BUN RUNTIME CONFIGURATION */}
+                  {activeBotRuntime === 'bun' && (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-zinc-300 mb-1 flex items-center justify-between">
+                          <span>Application Entry File (.ts or .js)</span>
+                          <button
+                            type="button"
+                            onClick={() => openFileBrowser('bun')}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 font-mono flex items-center gap-1"
+                          >
+                            <Folder className="h-3 w-3" /> Browse File
+                          </button>
+                        </label>
+                        <input
+                          type="text"
+                          value={startupConfig.bunConfig?.startupFile || startupConfig.entryFile || 'index.ts'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStartupConfig(prev => ({
+                              ...prev,
+                              entryFile: val,
+                              bunConfig: { ...prev.bunConfig, startupFile: val }
+                            }));
+                          }}
+                          placeholder="index.ts or main.ts"
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                        />
+                      </div>
 
-              {/* 3. BUN CONFIGURATION */}
-              {isBun && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                      Application Entry File (.ts or .js)
-                    </label>
-                    <input
-                      type="text"
-                      value={startupConfig.entryFile || 'index.ts'}
-                      onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
-                      placeholder="index.ts or main.ts"
-                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      Custom Bun Command Flags
-                    </label>
-                    <input
-                      type="text"
-                      value={startupFlags}
-                      onChange={(e) => setStartupFlags(e.target.value)}
-                      placeholder="--watch"
-                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 4. NODE.JS CONFIGURATION */}
-              {isNode && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Application Entry File (.js)
-                      </label>
-                      <input
-                        type="text"
-                        value={startupConfig.entryFile || 'index.js'}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
-                        placeholder="index.js or app.js"
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                      />
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                          Custom Bun Command Flags
+                        </label>
+                        <input
+                          type="text"
+                          value={startupFlags}
+                          onChange={(e) => setStartupFlags(e.target.value)}
+                          placeholder="--watch"
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-amber-300 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
                     </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Node Engine Options & V8 Flags
-                      </label>
-                      <input
-                        type="text"
-                        value={startupConfig.nodeOptions || ''}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, nodeOptions: e.target.value })}
-                        placeholder="--max-old-space-size=1024"
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      Custom Command Arguments & Flags
-                    </label>
-                    <input
-                      type="text"
-                      value={startupFlags}
-                      onChange={(e) => setStartupFlags(e.target.value)}
-                      placeholder="--experimental-modules"
-                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
-                    />
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3039,6 +3705,47 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       )}
 
       {/* Modals */}
+
+      {/* File Browser Modal */}
+      {showFileBrowserModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center justify-between">
+              <span>Select Entry File</span>
+              <button onClick={() => setShowFileBrowserModal(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="h-4 w-4" />
+              </button>
+            </h3>
+            <div className="max-h-96 overflow-y-auto space-y-1 pr-2">
+              {isBrowsingFiles ? (
+                <div className="flex justify-center p-4">
+                  <RefreshCw className="h-5 w-5 animate-spin text-zinc-500" />
+                </div>
+              ) : browserFilesList.filter(f => f.isFile).length === 0 ? (
+                <div className="p-4 text-center text-zinc-500 text-xs">No files found.</div>
+              ) : (
+                browserFilesList.filter(f => f.isFile).map(file => (
+                  <button
+                    key={file.name}
+                    onClick={() => selectFileForRuntime(file.name)}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-zinc-400 group-hover:text-violet-400" />
+                      <span className="text-xs font-mono text-zinc-300 group-hover:text-white">{file.name}</span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setShowFileBrowserModal(false)} className="px-4 py-2 bg-zinc-900 text-xs text-zinc-300 rounded-xl">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New File Modal */}
       {showNewFileModal && (
