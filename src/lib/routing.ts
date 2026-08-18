@@ -39,7 +39,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
 
   // Customer pages
   if (first === 'dashboard') return { page: 'dashboard', params: queryObj };
-  if (first === 'marketplace' || first === 'market') return { page: 'marketplace', params: queryObj };
+  if (first === 'marketplace' || first === 'market') return { page: 'dashboard', params: queryObj };
   if (first === 'deploy') return { page: 'deploy', params: queryObj };
   if (first === 'billing') return { page: 'billing', params: queryObj };
   if (first === 'support') return { page: 'support', params: queryObj };
@@ -71,7 +71,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'users') return { page: 'admin-users', params: queryObj };
     if (sub === 'servers') return { page: 'admin-servers', params: queryObj };
     if (sub === 'products' || sub === 'plans') return { page: 'admin-products', params: queryObj };
-    if (sub === 'templates' || sub === 'template') return { page: 'admin-templates', params: queryObj };
+    if (sub === 'templates' || sub === 'template') return { page: 'admin-dashboard', params: queryObj };
     if (sub === 'backups' || sub === 'backup') return { page: 'admin-backups', params: queryObj };
     if (sub === 'nodes') return { page: 'admin-nodes', params: queryObj };
     if (sub === 'monitoring' || sub === 'alerts' || sub === 'health') return { page: 'admin-monitoring', params: queryObj };
@@ -82,7 +82,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'ads') return { page: 'admin-ads', params: queryObj };
     if (sub === 'rewards' || sub === 'afk') return { page: 'admin-rewards', params: queryObj };
     if (sub === 'discord' || sub === 'bot') return { page: 'admin-discord', params: queryObj };
-    if (sub === 'marketplace' || sub === 'market') return { page: 'admin-marketplace', params: queryObj };
+    if (sub === 'marketplace' || sub === 'market') return { page: 'admin-dashboard', params: queryObj };
     if (sub === 'appearance' || sub === 'fonts-themes' || sub === 'theme') return { page: 'admin-appearance', params: queryObj };
     if (sub === 'support') return { page: 'admin-support', params: queryObj };
     if (sub === 'audit-logs' || sub === 'logs') return { page: 'admin-audit-logs', params: queryObj };

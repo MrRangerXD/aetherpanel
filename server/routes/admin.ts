@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Router, Response } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
@@ -6,6 +7,9 @@ import { ensureLocalNode } from '../nodeAgent';
 import {
   getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent
 } from '../playitService';
+import { stopServer, getServerDir } from '../provider';
+import { clearConsoleBuffer, closeServerConsoleClients } from '../consoleWs';
+import { dispatchWebhookEvent } from '../webhookService';
 
 const router = Router();
 
@@ -655,6 +659,67 @@ router.get('/servers', async (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, data: db.servers });
 });
 
+// DELETE /api/v1/admin/servers/:id - Forcible admin deletion of a server container
+router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === req.params.id);
+  if (!server) {
+    return res.status(404).json({ success: false, error: { code: 'SERVER_NOT_FOUND', message: 'Server not found' } });
+  }
+
+  // 1. Terminate running process if any
+  try {
+    await stopServer(server.id);
+  } catch (e) {}
+
+  // 2. Clear console logs buffer & disconnect streaming clients
+  clearConsoleBuffer(server.id);
+  closeServerConsoleClients(server.id, `Server '${server.name}' deleted by administrator.`);
+
+  // 3. Remove filesystem directory recursively
+  const serverDir = getServerDir(server.id);
+  if (fs.existsSync(serverDir)) {
+    try {
+      fs.rmSync(serverDir, { recursive: true, force: true });
+    } catch (e) {}
+  }
+
+  // 4. Free allocations
+  db.allocations.filter(a => a.serverId === server.id).forEach(a => {
+    a.serverId = undefined;
+    a.isAssigned = false;
+  });
+
+  // 5. Remove associated databases, backups, and schedules
+  db.backups = db.backups.filter(b => b.serverId !== server.id);
+  db.databases = db.databases.filter(d => d.serverId !== server.id);
+  db.schedules = db.schedules.filter(sc => sc.serverId !== server.id);
+
+  // 6. Remove from servers list
+  db.servers = db.servers.filter(s => s.id !== server.id);
+  saveDbSync();
+
+  // 7. Audit log & webhook
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_DELETE_SERVER',
+    server.id,
+    `Admin deleted server '${server.name}' (${server.id}) owned by user ${server.userId}`
+  );
+
+  dispatchWebhookEvent('server.deleted', {
+    serverId: server.id,
+    serverName: server.name,
+    userId: server.userId,
+    deletedBy: req.user!.email,
+    adminForced: true
+  }, server.userId).catch(() => {});
+
+  res.json({ success: true, message: `Server '${server.name}' deleted successfully.` });
+});
+
 // --- COUPONS ---
 // GET /api/v1/admin/coupons
 router.get('/coupons', async (req: AuthenticatedRequest, res: Response) => {
@@ -1089,6 +1154,50 @@ router.put('/legal/:slug', async (req: AuthenticatedRequest, res: Response) => {
     message: `Legal document '${page.title}' saved successfully.`,
     data: page
   });
+});
+
+// --- PANEL VERSION & AUTOMATED UPDATE PIPELINE ---
+// GET /api/v1/admin/version - Get system version and runtime metadata
+router.get('/version', async (req: AuthenticatedRequest, res: Response) => {
+  const { getSystemVersionInfo } = await import('../updateService');
+  const info = await getSystemVersionInfo(false);
+  res.json({ success: true, data: info });
+});
+
+// GET /api/v1/admin/update/check - Force check upstream repository for updates
+router.get('/update/check', async (req: AuthenticatedRequest, res: Response) => {
+  const { getSystemVersionInfo } = await import('../updateService');
+  const info = await getSystemVersionInfo(true);
+  res.json({ success: true, data: info });
+});
+
+// POST /api/v1/admin/update/execute - Start automated update process
+router.post('/update/execute', async (req: AuthenticatedRequest, res: Response) => {
+  const { executePanelUpdate } = await import('../updateService');
+  const userIdentifier = req.user?.displayName || req.user?.email || 'Administrator';
+  const result = await executePanelUpdate(userIdentifier);
+
+  if (!result.success) {
+    return res.status(400).json({ success: false, error: { code: 'UPDATE_IN_PROGRESS', message: result.message } });
+  }
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'PANEL_UPDATE_TRIGGERED',
+    'SYSTEM',
+    `Triggered automated AetherPanel update sequence`
+  );
+
+  res.json({ success: true, message: result.message });
+});
+
+// GET /api/v1/admin/update/status - Poll update process progress & logs
+router.get('/update/status', async (req: AuthenticatedRequest, res: Response) => {
+  const { getUpdateJobStatus } = await import('../updateService');
+  const status = getUpdateJobStatus();
+  res.json({ success: true, data: status });
 });
 
 export default router;

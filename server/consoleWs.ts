@@ -247,4 +247,6 @@ export function closeServerConsoleClients(serverId: string, reason: string = 'Se
   });
 }
 
+export { clearConsoleBuffer } from './provider';
+
 

@@ -10,7 +10,7 @@ import { useTheme } from '../../lib/ThemeContext';
 
 interface DashboardProps {
   onNavigate: (page: string, params?: any) => void;
-  onSelectServer: (serverId: string) => void;
+  onSelectServer?: (serverId: string) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer }) => {
@@ -173,7 +173,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
               return (
                 <div
                   key={server.id}
-                  onClick={() => onSelectServer(server.id)}
+                  onClick={() => {
+                    if (onSelectServer) {
+                      onSelectServer(server.id);
+                    } else {
+                      onNavigate('server-manage', { serverId: server.id });
+                    }
+                  }}
                   className="rounded-2xl border border-zinc-800/80 bg-zinc-900/90 p-5 space-y-4 hover:border-zinc-700 transition-all cursor-pointer group relative"
                 >
                   {/* Top Bar */}

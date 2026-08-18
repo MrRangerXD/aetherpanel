@@ -1,4 +1,5 @@
 {
+  "installationId": "aep_msyg5eju579c2ae019a7193d",
   "users": [
     {
       "id": "usr_admin",
@@ -10,24 +11,32 @@
       "isSuspended": false,
       "emailVerified": true,
       "twoFactorEnabled": false,
-      "credits": 498.005,
-      "createdAt": "2026-08-11T08:44:53.502Z",
-      "updatedAt": "2026-08-11T08:44:53.502Z",
-      "tokenVersion": 1,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "mustChangePassword": false,
+      "credits": 502.8,
+      "installationId": "aep_msyg5eju579c2ae019a7193d",
+      "createdAt": "2026-08-18T10:13:41.694Z",
+      "updatedAt": "2026-08-18T10:27:21.023Z",
+      "tokenVersion": 1
     },
     {
-      "id": "test_owner_console",
-      "email": "console_tester@aetherpanel.internal",
-      "username": "consoletester",
+      "id": "usr_1787049212458_sl4b",
+      "username": "hulalalala",
+      "displayName": "fahhh",
+      "email": "fuckoutofhere@hulalala.com",
       "role": "user",
-      "tokenVersion": 1,
+      "avatarUrl": "https://api.dicebear.com/7.x/identicon/svg?seed=hulalalala",
       "isSuspended": false,
-      "installationId": "aep_msx1n0sr8642414ad27b0be4"
+      "emailVerified": true,
+      "twoFactorEnabled": false,
+      "credits": 10,
+      "createdAt": "2026-08-18T10:33:32.560Z",
+      "updatedAt": "2026-08-18T10:33:32.560Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     }
   ],
   "passwords": {
-    "usr_admin": "$2b$10$MGv4mt/U7Qx2PRf.gsjQ2e2aEocFS7EOBVxV.oNSwldmxbBNmvl9y"
+    "usr_admin": "$2b$10$oOeTwX4tZRDdmChyv1clheE3RvhSjU9vACeo3SSwPjCfIS.vhg4Cu",
+    "usr_1787049212458_sl4b": "$2b$10$9Bica5HsMORrC7D3V.1t2u2ha7pj4iYLYHQTizX7/RhKuQfgQidAS"
   },
   "products": [
     {
@@ -53,29 +62,54 @@
   ],
   "plans": [
     {
+      "id": "plan_mc_free",
+      "productId": "prod_minecraft",
+      "name": "Free Tier",
+      "description": "Free plan for testing, small survival worlds, and plugins.",
+      "priceMonthly": 0,
+      "priceYearly": 0,
+      "ramMB": 1024,
+      "cpuCores": 1,
+      "diskGB": 10,
+      "backupLimit": 1,
+      "databaseLimit": 1,
+      "serverLimit": 1,
+      "networkMbps": 1000,
+      "features": [
+        "1GB DDR5 RAM",
+        "1 vCPU Ryzen 9",
+        "10GB NVMe Storage",
+        "Subdomain Included",
+        "Free Forever"
+      ],
+      "locations": [
+        "local"
+      ],
+      "isActive": true
+    },
+    {
       "id": "plan_mc_starter",
       "productId": "prod_minecraft",
       "name": "Starter Tier",
       "description": "Ideal for small friend groups & vanilla survival worlds.",
-      "priceMonthly": 3.99,
-      "priceYearly": 39.99,
+      "priceMonthly": 19,
+      "priceYearly": 190,
       "ramMB": 2048,
-      "cpuCores": 1,
-      "diskGB": 15,
+      "cpuCores": 1.5,
+      "diskGB": 20,
       "backupLimit": 2,
       "databaseLimit": 1,
       "serverLimit": 1,
       "networkMbps": 1000,
       "features": [
         "2GB DDR5 RAM",
-        "1 vCPU Ryzen 9",
-        "15GB NVMe Storage",
+        "1.5 vCPU Ryzen 9",
+        "20GB NVMe Storage",
         "Subdomain Included",
-        "Automatic Backups (2)"
+        "2 Backups"
       ],
       "locations": [
-        "us-east",
-        "eu-central"
+        "local"
       ],
       "isActive": true
     },
@@ -84,9 +118,9 @@
       "productId": "prod_minecraft",
       "name": "Basic Tier",
       "description": "Great for small community servers & light plugin setups.",
-      "priceMonthly": 7.99,
-      "priceYearly": 79.99,
-      "ramMB": 4096,
+      "priceMonthly": 39,
+      "priceYearly": 390,
+      "ramMB": 3072,
       "cpuCores": 2,
       "diskGB": 30,
       "backupLimit": 3,
@@ -94,17 +128,15 @@
       "serverLimit": 2,
       "networkMbps": 1000,
       "features": [
-        "4GB DDR5 RAM",
+        "3GB DDR5 RAM",
         "2 vCPU Ryzen 9",
         "30GB NVMe Storage",
-        "Custom Port & Subdomain",
-        "Automatic Backups (3)",
-        "1 MySQL Database"
+        "Custom Subdomain",
+        "3 Backups",
+        "2 MySQL DBs"
       ],
       "locations": [
-        "us-east",
-        "eu-central",
-        "ap-southeast"
+        "local"
       ],
       "isActive": true
     },
@@ -113,69 +145,63 @@
       "productId": "prod_minecraft",
       "name": "Pro Tier",
       "description": "Recommended for heavily modded servers, Paper, and Purpur networks.",
-      "priceMonthly": 14.99,
-      "priceYearly": 149.99,
-      "ramMB": 8192,
-      "cpuCores": 4,
-      "diskGB": 60,
+      "priceMonthly": 69,
+      "priceYearly": 690,
+      "ramMB": 4096,
+      "cpuCores": 3,
+      "diskGB": 50,
       "backupLimit": 5,
       "databaseLimit": 3,
-      "serverLimit": 5,
+      "serverLimit": 3,
       "networkMbps": 2500,
       "features": [
-        "8GB DDR5 RAM",
-        "4 vCPU Ryzen 9",
-        "60GB NVMe Storage",
+        "4GB DDR5 RAM",
+        "3 vCPU Ryzen 9",
+        "50GB NVMe Storage",
         "DDoS Protection",
         "5 Backups",
-        "3 Databases",
-        "Priority Support"
+        "3 MySQL DBs"
       ],
       "locations": [
-        "us-east",
-        "eu-central",
-        "ap-southeast"
+        "local"
       ],
       "isPopular": true,
       "isActive": true
     },
     {
-      "id": "plan_mc_ultra",
+      "id": "plan_mc_advanced",
       "productId": "prod_minecraft",
-      "name": "Ultra Network",
+      "name": "Advanced Network",
       "description": "Maximum performance for large networks and Forge/Fabric modpacks.",
-      "priceMonthly": 29.99,
-      "priceYearly": 299.99,
-      "ramMB": 16384,
-      "cpuCores": 8,
-      "diskGB": 120,
+      "priceMonthly": 99,
+      "priceYearly": 990,
+      "ramMB": 6144,
+      "cpuCores": 4,
+      "diskGB": 75,
       "backupLimit": 10,
       "databaseLimit": 5,
-      "serverLimit": 10,
+      "serverLimit": 5,
       "networkMbps": 10000,
       "features": [
-        "16GB DDR5 RAM",
-        "8 vCPU Ryzen 9",
-        "120GB NVMe Storage",
-        "Dedicated IP Option",
+        "6GB DDR5 RAM",
+        "4 vCPU Ryzen 9",
+        "75GB NVMe Storage",
         "10 Backups",
-        "5 Databases",
-        "VIP Enterprise Support"
+        "5 MySQL DBs",
+        "VIP Support"
       ],
       "locations": [
-        "us-east",
-        "eu-central",
-        "ap-southeast"
+        "local"
       ],
       "isActive": true
     },
     {
-      "id": "plan_bot_starter",
+      "id": "plan_bot_free",
       "productId": "prod_bot",
-      "name": "Bot Starter",
-      "description": "Perfect for single-sharded Discord bots.",
-      "priceMonthly": 1.99,
-      "priceYearly": 19.99,
+      "name": "Free Bot Tier",
+      "description": "Free 24/7 process hosting for Discord, Telegram, and Twitch bots.",
+      "priceMonthly": 0,
+      "priceYearly": 0,
       "ramMB": 512,
       "cpuCores": 0.5,
       "diskGB": 5,
@@ -186,13 +212,64 @@
       "features": [
         "512MB RAM",
         "0.5 vCPU",
-        "5GB SSD",
-        "Node.js & Python",
+        "5GB Storage",
+        "Node.js & Python 3",
         "24/7 Process Manager"
       ],
       "locations": [
-        "us-east",
-        "eu-central"
+        "local"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_bot_starter",
+      "productId": "prod_bot",
+      "name": "Bot Starter",
+      "description": "Perfect for single-sharded Discord bots.",
+      "priceMonthly": 9,
+      "priceYearly": 90,
+      "ramMB": 1024,
+      "cpuCores": 0.75,
+      "diskGB": 10,
+      "backupLimit": 1,
+      "databaseLimit": 1,
+      "serverLimit": 1,
+      "networkMbps": 1000,
+      "features": [
+        "1GB RAM",
+        "0.75 vCPU",
+        "10GB Storage",
+        "Node.js & Python",
+        "24/7 Auto-restart"
+      ],
+      "locations": [
+        "local"
+      ],
+      "isActive": true
+    },
+    {
+      "id": "plan_bot_basic",
+      "productId": "prod_bot",
+      "name": "Bot Basic",
+      "description": "Great for multi-function moderation and music bots.",
+      "priceMonthly": 19,
+      "priceYearly": 190,
+      "ramMB": 2048,
+      "cpuCores": 1,
+      "diskGB": 20,
+      "backupLimit": 2,
+      "databaseLimit": 1,
+      "serverLimit": 2,
+      "networkMbps": 1000,
+      "features": [
+        "2GB RAM",
+        "1 vCPU",
+        "20GB Storage",
+        "Node.js, Python, Bun",
+        "2 Backups"
+      ],
+      "locations": [
+        "local"
       ],
       "isActive": true
     },
@@ -200,62 +277,96 @@
       "id": "plan_bot_pro",
       "productId": "prod_bot",
       "name": "Bot Pro",
-      "description": "For high-traffic, multi-server bots and music bots.",
-      "priceMonthly": 4.99,
-      "priceYearly": 49.99,
-      "ramMB": 2048,
-      "cpuCores": 1.5,
-      "diskGB": 15,
+      "description": "For high-traffic, multi-server bots and database-backed bots.",
+      "priceMonthly": 39,
+      "priceYearly": 390,
+      "ramMB": 4096,
+      "cpuCores": 2,
+      "diskGB": 40,
       "backupLimit": 3,
       "databaseLimit": 2,
       "serverLimit": 3,
       "networkMbps": 1000,
       "features": [
-        "2GB RAM",
-        "1.5 vCPU",
-        "15GB SSD",
+        "4GB RAM",
+        "2 vCPU",
+        "40GB Storage",
         "Node.js, Python, Bun",
         "3 Backups",
-        "2 Databases",
-        "Auto-restart on crash"
+        "2 Databases"
       ],
       "locations": [
-        "us-east",
-        "eu-central",
-        "ap-southeast"
+        "local"
       ],
       "isPopular": true,
       "isActive": true
+    },
+    {
+      "id": "plan_bot_advanced",
+      "productId": "prod_bot",
+      "name": "Bot Advanced",
+      "description": "Enterprise tier for large Discord bot networks.",
+      "priceMonthly": 69,
+      "priceYearly": 690,
+      "ramMB": 6144,
+      "cpuCores": 3,
+      "diskGB": 60,
+      "backupLimit": 5,
+      "databaseLimit": 3,
+      "serverLimit": 5,
+      "networkMbps": 2500,
+      "features": [
+        "6GB RAM",
+        "3 vCPU",
+        "60GB Storage",
+        "Node.js, Python, Bun",
+        "5 Backups",
+        "3 Databases"
+      ],
+      "locations": [
+        "local"
+      ],
+      "isActive": true
     }
   ],
-  "servers": [
+  "servers": [],
+  "templates": [],
+  "locations": [
     {
-      "id": "srv_1786438062204_3uu3",
-      "name": "My Aether Server",
-      "userId": "usr_admin",
-      "productId": "prod_minecraft",
-      "planId": "plan_mc_starter",
-      "nodeId": "node_ap_southeast",
-      "status": "running",
-      "primaryIp": "139.180.201.5",
-      "primaryPort": 25565,
-      "location": "Singapore",
-      "software": "Paper",
-      "version": "1.20.4",
-      "limits": {
-        "ramMB": 2048,
-        "cpuCores": 1,
-        "diskGB": 15,
-        "backups": 2,
-        "databases": 1
-      },
-      "createdAt": "2026-08-11T08:47:42.204Z",
-      "updatedAt": "2026-08-11T08:47:42.204Z",
-      "cpuUsage": 17,
-      "ramUsageMB": 716,
-      "diskUsageMB": 250,
-      "uptimeSeconds": 0,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "id": "loc_us_east",
+      "name": "United States (Virginia)",
+      "code": "us-east",
+      "country": "United States",
+      "flagCode": "US",
+      "description": "Ashburn Datacenter, Low latency across US & EU East",
+      "isActive": true
+    },
+    {
+      "id": "loc_eu_central",
+      "name": "Germany (Frankfurt)",
+      "code": "eu-central",
+      "country": "Germany",
+      "flagCode": "DE",
+      "description": "Frankfurt Equinix, Central European routing hub",
+      "isActive": true
+    },
+    {
+      "id": "loc_ap_southeast",
+      "name": "Singapore",
+      "code": "ap-southeast",
+      "country": "Singapore",
+      "flagCode": "SG",
+      "description": "Singapore Regional Hub, APAC region priority routing",
+      "isActive": true
+    },
+    {
+      "id": "loc_in_delhi",
+      "name": "India (Delhi/Mumbai)",
+      "code": "in-south",
+      "country": "India",
+      "flagCode": "IN",
+      "description": "Direct Peering with Airtel/Jio, Sub-15ms regional ping",
+      "isActive": true
     }
   ],
   "nodes": [
@@ -271,7 +382,7 @@
       "locationName": "Primary Control Plane VPS",
       "flagCode": "LOCAL",
       "totalRamMB": 4096,
-      "usedRamMB": 658,
+      "usedRamMB": 787,
       "totalCpuCores": 2,
       "usedCpuCores": 0.1,
       "totalDiskGB": 504,
@@ -292,208 +403,81 @@
       "isLocalNode": true,
       "serverCount": 0,
       "daemonToken": "daemon_token_local_node_secret_82910",
-      "lastHeartbeatAt": "2026-08-17T10:16:17.292Z",
+      "lastHeartbeatAt": "2026-08-18T11:39:27.746Z",
       "isSecure": true,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    }
+  ],
+  "nodeInstallTokens": [
+    {
+      "id": "tok_1787050044043",
+      "nodeId": "node_local",
+      "token": "ntok_c48c012bdd11ee31e2c8dfa89ea318250f2155f0bba7afb8051ea1ac9b9be045",
+      "createdAt": "2026-08-18T10:47:24.043Z",
+      "expiresAt": "2026-08-18T11:47:24.043Z",
+      "isUsed": false
     }
   ],
   "allocations": [
     {
       "id": "alloc_1",
-      "nodeId": "node_us_east",
-      "ip": "104.22.14.88",
+      "nodeId": "node_local",
+      "ip": "127.0.0.1",
       "port": 25565,
-      "serverId": "srv_survival",
-      "isAssigned": true,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "isAssigned": false,
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
       "id": "alloc_2",
-      "nodeId": "node_us_east",
-      "ip": "104.22.14.88",
+      "nodeId": "node_local",
+      "ip": "127.0.0.1",
       "port": 25566,
       "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
       "id": "alloc_3",
-      "nodeId": "node_us_east",
-      "ip": "104.22.14.88",
-      "port": 3000,
-      "serverId": "srv_discord_bot",
-      "isAssigned": true,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_4",
-      "nodeId": "node_eu_central",
-      "ip": "185.120.44.12",
-      "port": 25565,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_5",
-      "nodeId": "node_ap_southeast",
-      "ip": "139.180.201.5",
-      "port": 25565,
-      "isAssigned": true,
-      "serverId": "srv_1786438062204_3uu3",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25565",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25565,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25566",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25566,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25567",
       "nodeId": "node_local",
       "ip": "127.0.0.1",
       "port": 25567,
       "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "alloc_local_25568",
+      "id": "alloc_4",
       "nodeId": "node_local",
       "ip": "127.0.0.1",
-      "port": 25568,
+      "port": 3000,
       "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "alloc_local_25569",
+      "id": "alloc_5",
       "nodeId": "node_local",
       "ip": "127.0.0.1",
-      "port": 25569,
+      "port": 3001,
       "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25570",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25570,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25571",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25571,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25572",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25572,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25573",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25573,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25574",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25574,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "alloc_local_25575",
-      "nodeId": "node_local",
-      "ip": "127.0.0.1",
-      "port": 25575,
-      "isAssigned": false,
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     }
   ],
-  "backups": [
-    {
-      "id": "bk_1",
-      "serverId": "srv_survival",
-      "name": "Pre-World-Reset-Backup.tar.gz",
-      "sizeMB": 1420,
-      "status": "completed",
-      "checksum": "sha256_8a9f31c0e2",
-      "createdAt": "2026-08-10T08:44:53.502Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    }
-  ],
-  "databases": [
-    {
-      "id": "db_1",
-      "serverId": "srv_survival",
-      "name": "s2_luckperms_db",
-      "username": "u_s2_luckperms",
-      "host": "node-us1.aetherpanel.com",
-      "port": 3306,
-      "dbType": "mysql",
-      "createdAt": "2026-08-09T08:44:53.502Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    }
-  ],
-  "schedules": [
-    {
-      "id": "sch_1",
-      "serverId": "srv_survival",
-      "name": "Daily 4 AM World Save & Restart",
-      "cronExpression": "0 4 * * *",
-      "action": "restart",
-      "isEnabled": false,
-      "lastRunAt": "2026-08-10T18:44:53.502Z",
-      "nextRunAt": "2026-08-11T18:44:53.502Z",
-      "lastError": "Server no longer exists",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    }
-  ],
-  "activities": [
-    {
-      "id": "act_1",
-      "serverId": "srv_survival",
-      "userId": "usr_demo",
-      "username": "demouser",
-      "action": "SERVER_START",
-      "details": "Started Minecraft server instance",
-      "createdAt": "2026-08-11T07:44:53.502Z"
-    }
-  ],
+  "backups": [],
+  "databases": [],
+  "schedules": [],
+  "activities": [],
   "orders": [
     {
-      "id": "ord_1786438062204",
+      "id": "ord_1787048210628",
       "userId": "usr_admin",
-      "userEmail": "admin@aetherpanel.com",
-      "planId": "plan_mc_starter",
-      "planName": "Minecraft Hosting - Starter Tier",
+      "userEmail": "admin@aetherpanel.in",
+      "planId": "plan_bot_starter",
+      "planName": "Discord Bot Hosting - Bot Starter",
       "billingCycle": "monthly",
-      "amount": 2,
+      "amount": 7.2,
       "currency": "USD",
       "status": "paid",
       "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-11T08:47:42.204Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:16:50.628Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     }
   ],
   "coupons": [
@@ -503,7 +487,7 @@
       "discountType": "percent",
       "discountValue": 20,
       "usageLimit": 100,
-      "timesUsed": 14,
+      "timesUsed": 1,
       "isActive": true
     },
     {
@@ -512,32 +496,80 @@
       "discountType": "percent",
       "discountValue": 50,
       "usageLimit": 10,
-      "timesUsed": 3,
+      "timesUsed": 0,
       "isActive": true
     }
   ],
-  "tickets": [],
+  "tickets": [
+    {
+      "id": "tkt_1787049279289_hnpf",
+      "userId": "usr_1787049212458_sl4b",
+      "userName": "fahhh",
+      "userEmail": "fuckoutofhere@hulalala.com",
+      "subject": "wadaw",
+      "category": "Node / Hardware Migration",
+      "priority": "urgent",
+      "status": "open",
+      "messages": [
+        {
+          "id": "msg_1787049279289_g1jx",
+          "senderId": "usr_1787049212458_sl4b",
+          "senderName": "fahhh",
+          "senderRole": "user",
+          "message": "adwdawdawd",
+          "createdAt": "2026-08-18T10:34:39.289Z"
+        },
+        {
+          "id": "msg_1787049283977_m82m",
+          "senderId": "usr_1787049212458_sl4b",
+          "senderName": "fahhh",
+          "senderRole": "user",
+          "message": "adawdd",
+          "createdAt": "2026-08-18T10:34:43.977Z"
+        },
+        {
+          "id": "msg_1787049286757_1601",
+          "senderId": "usr_1787049212458_sl4b",
+          "senderName": "fahhh",
+          "senderRole": "user",
+          "message": "awdawdawd",
+          "createdAt": "2026-08-18T10:34:46.757Z"
+        },
+        {
+          "id": "msg_1787049289958_z6eo",
+          "senderId": "usr_1787049212458_sl4b",
+          "senderName": "fahhh",
+          "senderRole": "user",
+          "message": "awdawdawdawd",
+          "createdAt": "2026-08-18T10:34:49.958Z"
+        },
+        {
+          "id": "msg_1787049292746_gja0",
+          "senderId": "usr_1787049212458_sl4b",
+          "senderName": "fahhh",
+          "senderRole": "user",
+          "message": "awdawdawd",
+          "createdAt": "2026-08-18T10:34:52.746Z"
+        }
+      ],
+      "createdAt": "2026-08-18T10:34:39.289Z",
+      "updatedAt": "2026-08-18T10:34:52.746Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    }
+  ],
   "announcements": [
     {
       "id": "ann_1",
-      "title": "AetherPanel v2.4 Platform Upgrade",
-      "content": "We have upgraded all US East and EU Central nodes with AMD Ryzen 9 7950X processors and DDR5 ECC RAM for 35% higher TPS in Minecraft and sub-millisecond bot response times!",
+      "title": "Welcome to AetherPanel",
+      "content": "Your high-performance game and bot hosting control panel is initialized and ready for production provisioning.",
       "type": "update",
       "isPublished": true,
-      "createdAt": "2026-08-09T08:44:53.502Z"
-    },
-    {
-      "id": "ann_2",
-      "title": "Scheduled Node Maintenance - AP South",
-      "content": "Routine firmware updates on AP South (Singapore) node scheduled for Sunday at 02:00 UTC. Expected downtime under 3 minutes.",
-      "type": "maintenance",
-      "isPublished": true,
-      "createdAt": "2026-08-06T08:44:53.502Z"
+      "createdAt": "2026-08-18T10:13:41.696Z"
     }
   ],
   "auditLogs": [
     {
-      "id": "aud_1786780852689_21n7",
+      "id": "aud_1787049317296_ce0x",
       "actorId": "usr_admin",
       "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
@@ -545,104 +577,92 @@
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-15T08:00:52.689Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:35:17.296Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "aud_1786438750133_pi7a",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_START",
-      "targetResource": "srv_1786438062204_3uu3",
-      "details": "Executed start on server My Aether Server",
+      "id": "aud_1787049212563_xt4l",
+      "actorId": "usr_1787049212458_sl4b",
+      "actorEmail": "fuckoutofhere@hulalala.com",
+      "actorRole": "user",
+      "action": "USER_REGISTER",
+      "targetResource": "ACCOUNT",
+      "details": "User registered account",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:59:10.133Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:33:32.563Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "aud_1786438746942_3lhb",
+      "id": "aud_1787048841024_yxb5",
       "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
+      "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
-      "action": "SERVER_POWER_RESTART",
-      "targetResource": "srv_1786438062204_3uu3",
-      "details": "Executed restart on server My Aether Server",
+      "action": "ADMIN_ADJUST_CREDITS",
+      "targetResource": "usr_admin",
+      "details": "Adjusted credits for admin@aetherpanel.in (add: $10) -> Balance: $502.8",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:59:06.942Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:27:21.024Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "aud_1786438385911_aurq",
+      "id": "aud_1787048630135_4h1y",
       "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
+      "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
-      "action": "SERVER_POWER_START",
-      "targetResource": "srv_1786438062204_3uu3",
-      "details": "Executed start on server My Aether Server",
+      "action": "DELETE_SERVER",
+      "targetResource": "srv_1787048210628_21fa",
+      "details": "Deleted server Python Instance",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:53:05.911Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:23:50.135Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "aud_1786438286339_bmwt",
+      "id": "aud_1787048210654_hqno",
       "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:51:26.339Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "aud_1786438228166_mfz5",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_STOP",
-      "targetResource": "srv_1786438062204_3uu3",
-      "details": "Executed stop on server My Aether Server",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:50:28.166Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
-    },
-    {
-      "id": "aud_1786438062206_rsnw",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
+      "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
       "action": "SERVER_PROVISION",
-      "targetResource": "srv_1786438062204_3uu3",
-      "details": "Provisioned server 'My Aether Server' ($2.00)",
+      "targetResource": "srv_1787048210628_21fa",
+      "details": "Provisioned server 'Python Instance' from template 'Python' ($7.20)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:47:42.206Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:16:50.654Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
-      "id": "aud_1786437909580_go7x",
+      "id": "aud_1787048148272_c2ah",
       "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
+      "actorEmail": "admin@aetherpanel.in",
+      "actorRole": "super_admin",
+      "action": "CHANGE_PASSWORD",
+      "targetResource": "SECURITY",
+      "details": "Password changed",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-08-18T10:15:48.272Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
+    },
+    {
+      "id": "aud_1787048130814_oxs9",
+      "actorId": "usr_admin",
+      "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
       "action": "USER_LOGIN",
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:45:09.580Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "createdAt": "2026-08-18T10:15:30.814Z",
+      "installationId": "aep_msyg5eju579c2ae019a7193d"
     },
     {
       "id": "aud_1",
       "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.com",
+      "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
       "action": "SYSTEM_INIT",
       "targetResource": "DATABASE",
-      "details": "AetherPanel database initialized with security policies.",
+      "details": "AetherPanel database initialized with security policies and installation isolation.",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-11T08:44:53.502Z",
-      "installationId": "aep_msvibgm2f5b52008809b122a"
+      "installationId": "aep_msyg5eju579c2ae019a7193d",
+      "createdAt": "2026-08-18T10:13:41.696Z"
     }
   ],
   "settings": {
@@ -684,325 +704,35 @@
         "enabled": true,
         "instructions": "Instant automatic payment via Credit/Debit Card or Wallet."
       }
-    }
+    },
+    "discordSettings": {
+      "enabled": false,
+      "botToken": "",
+      "clientId": "",
+      "clientSecret": "",
+      "redirectUri": "http://localhost:3000/settings",
+      "defaultWebhookUrl": "",
+      "botStatus": "offline",
+      "commandRateLimitPerMin": 10,
+      "defaultNotificationEvents": [
+        "SERVER_STARTED",
+        "SERVER_STOPPED",
+        "SERVER_CRASHED",
+        "SERVER_RESTARTED",
+        "BACKUP_COMPLETED",
+        "BACKUP_FAILED",
+        "RESOURCE_WARNING"
+      ]
+    },
+    "platformName": "AetherPanel"
   },
-  "locations": [
-    {
-      "id": "loc_us_east",
-      "name": "United States (Virginia)",
-      "code": "us-east",
-      "country": "United States",
-      "flagCode": "US",
-      "description": "Ashburn Datacenter, Low latency across US & EU East",
-      "isActive": true
-    },
-    {
-      "id": "loc_eu_central",
-      "name": "Germany (Frankfurt)",
-      "code": "eu-central",
-      "country": "Germany",
-      "flagCode": "DE",
-      "description": "Frankfurt Equinix, Central European routing hub",
-      "isActive": true
-    },
-    {
-      "id": "loc_ap_southeast",
-      "name": "Singapore",
-      "code": "ap-southeast",
-      "country": "Singapore",
-      "flagCode": "SG",
-      "description": "Singapore Regional Hub, APAC region priority routing",
-      "isActive": true
-    },
-    {
-      "id": "loc_in_delhi",
-      "name": "India (Delhi/Mumbai)",
-      "code": "in-south",
-      "country": "India",
-      "flagCode": "IN",
-      "description": "Direct Peering with Airtel/Jio, Sub-15ms regional ping",
-      "isActive": true
-    }
-  ],
-  "nodeInstallTokens": [],
-  "templates": [
-    {
-      "id": "tpl_mc_paper",
-      "name": "Paper Minecraft Server",
-      "description": "High-performance Spigot fork focused on fixing security, gameplay and performance exploits.",
-      "category": "minecraft",
-      "icon": "Gamepad2",
-      "runtime": "minecraft",
-      "versions": [
-        "1.20.4",
-        "1.20.2",
-        "1.19.4",
-        "1.18.2"
-      ],
-      "defaultVersion": "1.20.4",
-      "startupCommand": "java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar server.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "MINECRAFT_VERSION": "1.20.4",
-        "SERVER_PORT": "{PORT}"
-      },
-      "defaultPort": 25565,
-      "recommendedRamMB": 2048,
-      "recommendedCpuCores": 1,
-      "recommendedDiskGB": 15,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 1,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_mc_purpur",
-      "name": "Purpur High Performance",
-      "description": "Drop-in replacement for Paper designed for extreme performance, TPS optimization and customizable gameplay mechanics.",
-      "category": "minecraft",
-      "icon": "Zap",
-      "runtime": "minecraft",
-      "versions": [
-        "1.20.4",
-        "1.20.2",
-        "1.19.4"
-      ],
-      "defaultVersion": "1.20.4",
-      "startupCommand": "java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar purpur.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "PURPUR_VERSION": "1.20.4",
-        "SERVER_PORT": "{PORT}"
-      },
-      "defaultPort": 25565,
-      "recommendedRamMB": 4096,
-      "recommendedCpuCores": 2,
-      "recommendedDiskGB": 30,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 2,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_mc_vanilla",
-      "name": "Official Vanilla Minecraft",
-      "description": "Standard official Mojang server jar without plugins or mod modifications.",
-      "category": "minecraft",
-      "icon": "Box",
-      "runtime": "minecraft",
-      "versions": [
-        "1.20.4",
-        "1.20.1",
-        "1.19.4"
-      ],
-      "defaultVersion": "1.20.4",
-      "startupCommand": "java -Xms512M -Xmx{RAM_MB}M -jar server.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "SERVER_PORT": "{PORT}"
-      },
-      "defaultPort": 25565,
-      "recommendedRamMB": 2048,
-      "recommendedCpuCores": 1,
-      "recommendedDiskGB": 10,
-      "status": "active",
-      "isPopular": false,
-      "sortOrder": 3,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_mc_fabric",
-      "name": "Fabric Modded Framework",
-      "description": "Modular, lightweight modding toolchain for modern Minecraft versions.",
-      "category": "minecraft",
-      "icon": "Cpu",
-      "runtime": "minecraft",
-      "versions": [
-        "1.20.4",
-        "1.20.1",
-        "1.19.4"
-      ],
-      "defaultVersion": "1.20.4",
-      "startupCommand": "java -Xms1024M -Xmx{RAM_MB}M -jar fabric-server-launch.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "FABRIC_VERSION": "0.15.7",
-        "SERVER_PORT": "{PORT}"
-      },
-      "defaultPort": 25565,
-      "recommendedRamMB": 4096,
-      "recommendedCpuCores": 2,
-      "recommendedDiskGB": 20,
-      "status": "active",
-      "isPopular": false,
-      "sortOrder": 4,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_mc_forge",
-      "name": "Forge Modded Server",
-      "description": "Standard modding engine supporting heavy modpacks, Pixelmon, and custom launchers.",
-      "category": "minecraft",
-      "icon": "Hammer",
-      "runtime": "minecraft",
-      "versions": [
-        "1.20.1",
-        "1.19.2",
-        "1.16.5"
-      ],
-      "defaultVersion": "1.20.1",
-      "startupCommand": "java -Xms2048M -Xmx{RAM_MB}M @user_jvm_args.txt @libraries/net/minecraftforge/forge/forge-args.txt nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "FORGE_VERSION": "47.2.0",
-        "SERVER_PORT": "{PORT}"
-      },
-      "defaultPort": 25565,
-      "recommendedRamMB": 6144,
-      "recommendedCpuCores": 4,
-      "recommendedDiskGB": 40,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 5,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_bot_python",
-      "name": "Python Bot Engine",
-      "description": "Preconfigured Python 3.11 environment with pip, virtualenv, and Discord.py/Telethon libraries.",
-      "category": "bot",
-      "icon": "Terminal",
-      "runtime": "python",
-      "versions": [
-        "Python 3.11",
-        "Python 3.10",
-        "Python 3.9"
-      ],
-      "defaultVersion": "Python 3.11",
-      "startupCommand": "python3 main.py",
-      "environmentVars": {
-        "PYTHONUNBUFFERED": "1",
-        "BOT_ENV": "production"
-      },
-      "defaultPort": 8000,
-      "recommendedRamMB": 1024,
-      "recommendedCpuCores": 1,
-      "recommendedDiskGB": 5,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 6,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_bot_nodejs",
-      "name": "Node.js Application / Bot",
-      "description": "High-speed V8 JavaScript runtime supporting ES Modules, TypeScript, and PM2 process watchdog.",
-      "category": "bot",
-      "icon": "Bot",
-      "runtime": "nodejs",
-      "versions": [
-        "Node 20",
-        "Node 18",
-        "Node 16"
-      ],
-      "defaultVersion": "Node 20",
-      "startupCommand": "node index.js",
-      "environmentVars": {
-        "NODE_ENV": "production",
-        "PORT": "{PORT}"
-      },
-      "defaultPort": 3000,
-      "recommendedRamMB": 1024,
-      "recommendedCpuCores": 1,
-      "recommendedDiskGB": 5,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 7,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "tpl_bot_discordjs",
-      "name": "Discord.js v14 Ready Bot",
-      "description": "Optimized Discord bot template preinstalled with discord.js v14 and Slash Commands framework.",
-      "category": "bot",
-      "icon": "MessageSquare",
-      "runtime": "nodejs",
-      "versions": [
-        "Node 20",
-        "Node 18"
-      ],
-      "defaultVersion": "Node 20",
-      "startupCommand": "npm start",
-      "environmentVars": {
-        "DISCORD_TOKEN": "",
-        "CLIENT_ID": "",
-        "NODE_ENV": "production"
-      },
-      "defaultPort": 3000,
-      "recommendedRamMB": 1024,
-      "recommendedCpuCores": 1,
-      "recommendedDiskGB": 5,
-      "status": "active",
-      "isPopular": true,
-      "sortOrder": 8,
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    }
-  ],
-  "ads": [
-    {
-      "id": "ad_aether_pro",
-      "title": "Aether Pro Infrastructure",
-      "description": "Upgrade to dedicated NVMe node clusters with guaranteed 99.99% uptime and DDoS protection.",
-      "imageUrl": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
-      "destinationUrl": "/pricing",
-      "type": "banner",
-      "placement": "dashboard",
-      "priority": 10,
-      "frequencyCapPerSession": 5,
-      "isActive": true,
-      "impressions": 44,
-      "clicks": 5,
-      "createdAt": "2026-08-15T07:21:41.943Z"
-    },
-    {
-      "id": "ad_discord_bot",
-      "title": "Deploy High-Speed Discord Bots",
-      "description": "Run Python 3.11 & Node.js 20 bots with instant 24/7 process uptime starting at $0/mo.",
-      "destinationUrl": "/bot",
-      "type": "card",
-      "placement": "server_list",
-      "priority": 5,
-      "frequencyCapPerSession": 3,
-      "isActive": true,
-      "impressions": 28,
-      "clicks": 3,
-      "createdAt": "2026-08-15T07:21:41.943Z"
-    }
-  ],
-  "adEvents": [
-    {
-      "id": "event_1786778609064_vppci",
-      "adId": "ad_aether_pro",
-      "type": "impression",
-      "timestamp": "2026-08-15T07:23:29.064Z"
-    },
-    {
-      "id": "event_1786868002015_myp7r",
-      "adId": "ad_aether_pro",
-      "type": "impression",
-      "timestamp": "2026-08-16T08:13:22.015Z"
-    }
-  ],
+  "ads": [],
+  "adEvents": [],
   "afkSessions": [],
   "rewardTransactions": [],
+  "discordLinks": {},
+  "serverDiscordLinks": [],
+  "discordAuditLogs": [],
   "afkSettings": {
     "enabled": true,
     "creditsPerInterval": 5,
@@ -1011,265 +741,7 @@
     "weeklyMaxCredits": 500,
     "minAccountAgeDays": 0
   },
-  "marketplaceItems": [
-    {
-      "id": "mkt_mc_paper_120",
-      "slug": "paper-minecraft-1204",
-      "name": "Paper MC 1.20.4 High Performance",
-      "description": "Ultra-optimized Paper Spigot server ready for high player counts, plugins, and custom datapacks.",
-      "longDescription": "Paper is a high-performance Minecraft server software designed to fix security, gameplay and performance exploits while providing high compatibility with Spigot and Bukkit plugins.",
-      "category": "minecraft",
-      "icon": "Gamepad2",
-      "bannerUrl": "https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=600&auto=format&fit=crop&q=80",
-      "author": "AetherPanel Core",
-      "badge": "official",
-      "version": "1.20.4-v2",
-      "changelog": "Updated Paper build to #496 with Java 21 runtime flags.",
-      "compatibility": "Minecraft 1.20.x, Spigot/Paper plugins, All Nodes",
-      "requirements": {
-        "minRamMB": 2048,
-        "minCpuCores": 1,
-        "minDiskGB": 15,
-        "notes": "Recommended 4GB RAM for 15+ simultaneous players."
-      },
-      "installType": "template_deploy",
-      "templateId": "tpl_mc_paper",
-      "startupCommand": "java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar server.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "MINECRAFT_VERSION": "1.20.4",
-        "SERVER_PORT": "{PORT}"
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": true,
-      "securityValidated": true,
-      "securityNotes": "Verified official Paper build source. Safe JVM launch args.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_mc_purpur_extreme",
-      "slug": "purpur-extreme-tps",
-      "name": "Purpur Extreme TPS Optimization Engine",
-      "description": "Drop-in Paper replacement with specialized TPS optimizations and custom gameplay mechanics.",
-      "longDescription": "Purpur is a fork of Paper focused on extreme performance optimizations, customizable entity tick ratios, and enhanced API capabilities.",
-      "category": "minecraft",
-      "icon": "Zap",
-      "bannerUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80",
-      "author": "PurpurMC Community",
-      "badge": "verified",
-      "version": "1.20.4-p2",
-      "changelog": "Added AI tick throttle presets and auto-lag recovery.",
-      "compatibility": "Minecraft 1.20.x, Paper & Bukkit Plugins",
-      "requirements": {
-        "minRamMB": 4096,
-        "minCpuCores": 2,
-        "minDiskGB": 25,
-        "notes": "Optimal for heavy survival servers with custom mobs."
-      },
-      "installType": "template_deploy",
-      "templateId": "tpl_mc_purpur",
-      "startupCommand": "java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar purpur.jar nogui",
-      "environmentVars": {
-        "EULA": "true",
-        "PURPUR_VERSION": "1.20.4",
-        "SERVER_PORT": "{PORT}"
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": true,
-      "securityValidated": true,
-      "securityNotes": "Scanned binary hash verified against PurpurMC repository.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_bot_discord_mod",
-      "slug": "discord-moderation-music-bot",
-      "name": "Discord.js v14 Moderation & Music Suite",
-      "description": "Turnkey Discord bot with slash commands, auto-moderation, level system, and high quality audio player.",
-      "longDescription": "Complete Node.js Discord bot template with modular command handlers, SQLite storage, voice channel audio streaming, and ticket support system.",
-      "category": "bot",
-      "icon": "Bot",
-      "bannerUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-      "author": "AetherPanel Labs",
-      "badge": "official",
-      "version": "2.4.0",
-      "changelog": "Upgraded to discord.js v14.14 with embed builders.",
-      "compatibility": "Node.js 20+, Discord REST API v10",
-      "requirements": {
-        "minRamMB": 1024,
-        "minCpuCores": 1,
-        "minDiskGB": 5,
-        "notes": "Requires Discord Bot Token from Discord Developer Portal."
-      },
-      "installType": "template_deploy",
-      "templateId": "tpl_bot_discordjs",
-      "startupCommand": "npm start",
-      "environmentVars": {
-        "DISCORD_TOKEN": "",
-        "CLIENT_ID": "",
-        "NODE_ENV": "production"
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": true,
-      "securityValidated": true,
-      "securityNotes": "Validated npm lockfile. Secrets stored in process environment variables.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_bot_python_telethon",
-      "slug": "python-telegram-automation-bot",
-      "name": "Python Telethon Automation & Channel Bot",
-      "description": "Python 3.11 bot powered by Telethon & Asyncio for managing Telegram groups and channels.",
-      "longDescription": "High performance Telegram userbot / bot framework with command router, message scheduler, media downloader, and admin dashboard integrations.",
-      "category": "bot",
-      "icon": "Terminal",
-      "author": "PyTelegram Devs",
-      "badge": "verified",
-      "version": "1.8.2",
-      "changelog": "Added async session reconnect watchdog.",
-      "compatibility": "Python 3.10+, Telegram API",
-      "requirements": {
-        "minRamMB": 1024,
-        "minCpuCores": 1,
-        "minDiskGB": 5
-      },
-      "installType": "template_deploy",
-      "templateId": "tpl_bot_python",
-      "startupCommand": "python3 main.py",
-      "environmentVars": {
-        "API_ID": "",
-        "API_HASH": "",
-        "BOT_TOKEN": ""
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": false,
-      "securityValidated": true,
-      "securityNotes": "Clean python source code. No unverified binary imports.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_tpl_express_ws",
-      "slug": "nodejs-express-websocket-template",
-      "name": "Node.js 20 Express & WebSockets App",
-      "description": "Production-ready Node.js full-stack application template with Express, ws WebSockets, and health checks.",
-      "longDescription": "Clean backend architecture with CORS, rate limiting, structured logging, health endpoints, and graceful shutdown handlers.",
-      "category": "template",
-      "icon": "Cpu",
-      "author": "AetherPanel Staff",
-      "badge": "official",
-      "version": "1.5.0",
-      "changelog": "Added ESM module support and custom middleware pipeline.",
-      "compatibility": "Node 18+, Node 20+, All Nodes",
-      "requirements": {
-        "minRamMB": 1024,
-        "minCpuCores": 1,
-        "minDiskGB": 5
-      },
-      "installType": "template_deploy",
-      "templateId": "tpl_bot_nodejs",
-      "startupCommand": "node index.js",
-      "environmentVars": {
-        "NODE_ENV": "production",
-        "PORT": "{PORT}"
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": true,
-      "securityValidated": true,
-      "securityNotes": "Sandboxed Node.js environment with non-root runtime target.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_tool_backup_sync",
-      "slug": "s3-auto-sync-backup-tool",
-      "name": "Server Backup & S3 Cloud Sync Tool",
-      "description": "Automated script utility to archive server worlds/files and upload directly to S3 / Cloud storage.",
-      "longDescription": "Lightweight shell & python utility that compresses server state, calculates SHA256 checksums, and syncs to S3 bucket or remote node storage.",
-      "category": "tool",
-      "icon": "Archive",
-      "author": "AetherPanel DevOps",
-      "badge": "official",
-      "version": "1.2.0",
-      "changelog": "Added multi-part zip compression and progress logging.",
-      "compatibility": "Minecraft, Node, Python, All Server Types",
-      "requirements": {
-        "minRamMB": 512,
-        "minCpuCores": 1,
-        "minDiskGB": 2,
-        "notes": "Requires S3 Access Keys or Local Backup permission."
-      },
-      "installType": "resource_install",
-      "startupCommand": "python3 s3_backup.py",
-      "environmentVars": {
-        "S3_BUCKET": "",
-        "S3_REGION": "",
-        "RETENTION_DAYS": "7"
-      },
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": false,
-      "securityValidated": true,
-      "securityNotes": "Restricted script runtime. No elevated sudo privileges needed.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    },
-    {
-      "id": "mkt_util_rcon_cli",
-      "slug": "rcon-cli-manager",
-      "name": "RCON Command & Automation Manager",
-      "description": "Interactive CLI and web utility for executing batch RCON commands across Minecraft servers.",
-      "longDescription": "Utility tool for server operators to schedule automated announcements, item give commands, or broadcast alerts via RCON protocol.",
-      "category": "utility",
-      "icon": "Terminal",
-      "author": "AetherPanel Utility",
-      "badge": "official",
-      "version": "1.0.1",
-      "changelog": "Initial official release.",
-      "compatibility": "Minecraft Paper / Spigot / Forge / Bedrock RCON",
-      "requirements": {
-        "minRamMB": 256,
-        "minCpuCores": 0.5,
-        "minDiskGB": 1
-      },
-      "installType": "resource_install",
-      "downloadsCount": 0,
-      "rating": 0,
-      "reviewsCount": 0,
-      "reviews": [],
-      "status": "active",
-      "isFeatured": false,
-      "securityValidated": true,
-      "securityNotes": "Encrypted RCON credentials in local memory.",
-      "createdAt": "2026-08-15T07:21:41.845Z",
-      "updatedAt": "2026-08-15T07:21:41.845Z"
-    }
-  ],
+  "marketplaceItems": [],
   "statusComponents": [
     {
       "id": "comp_panel",
@@ -1279,7 +751,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 99.99,
-      "lastCheckedAt": "2026-08-15T07:21:41.845Z",
+      "lastCheckedAt": "2026-08-18T10:13:41.564Z",
       "latencyMs": 12,
       "details": "Serving via high-speed Edge CDN with HTTP/2 and zero latency spikes.",
       "order": 1,
@@ -1293,7 +765,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 99.98,
-      "lastCheckedAt": "2026-08-15T07:21:41.845Z",
+      "lastCheckedAt": "2026-08-18T10:13:41.564Z",
       "latencyMs": 18,
       "details": "WebSocket streaming and API response times under 25ms nominal.",
       "order": 2,
@@ -1307,7 +779,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 100,
-      "lastCheckedAt": "2026-08-15T07:21:41.845Z",
+      "lastCheckedAt": "2026-08-18T10:13:41.564Z",
       "latencyMs": 4,
       "details": "Zero replication lag, read/write I/O performance nominal.",
       "order": 3,
@@ -1321,7 +793,7 @@
       "group": "Storage Subsystems",
       "status": "operational",
       "uptimePercent90Days": 99.95,
-      "lastCheckedAt": "2026-08-15T07:21:41.845Z",
+      "lastCheckedAt": "2026-08-18T10:13:41.564Z",
       "latencyMs": 8,
       "details": "ZFS/Btrfs pools healthy with ample storage reserve.",
       "order": 4,
@@ -1335,7 +807,7 @@
       "group": "External Integrations",
       "status": "operational",
       "uptimePercent90Days": 99.92,
-      "lastCheckedAt": "2026-08-15T07:21:41.845Z",
+      "lastCheckedAt": "2026-08-18T10:13:41.564Z",
       "latencyMs": 35,
       "details": "Gateway connection established with Discord API.",
       "order": 5,
@@ -1358,23 +830,23 @@
           "id": "inc_upd_3",
           "status": "resolved",
           "message": "All transit routes stabilized. Network jitter and packet loss returned to baseline nominal values.",
-          "timestamp": "2026-08-13T19:21:41.846Z"
+          "timestamp": "2026-08-16T22:13:41.564Z"
         },
         {
           "id": "inc_upd_2",
           "status": "monitoring",
           "message": "Traffic successfully rerouted through secondary BGP transits. Monitoring packet loss metrics.",
-          "timestamp": "2026-08-13T17:21:41.846Z"
+          "timestamp": "2026-08-16T20:13:41.564Z"
         },
         {
           "id": "inc_upd_1",
           "status": "investigating",
           "message": "Engineers are investigating elevated latency reports from APAC users.",
-          "timestamp": "2026-08-13T15:21:41.846Z"
+          "timestamp": "2026-08-16T18:13:41.564Z"
         }
       ],
-      "startedAt": "2026-08-13T15:21:41.846Z",
-      "resolvedAt": "2026-08-13T19:21:41.846Z",
+      "startedAt": "2026-08-16T18:13:41.564Z",
+      "resolvedAt": "2026-08-16T22:13:41.564Z",
       "isPublic": true
     }
   ],
@@ -1387,10 +859,10 @@
         "Compute Nodes Cluster",
         "API Gateway & Daemon Stream"
       ],
-      "scheduledStartTime": "2026-08-17T07:21:41.846Z",
-      "scheduledEndTime": "2026-08-17T09:21:41.846Z",
+      "scheduledStartTime": "2026-08-20T10:13:41.564Z",
+      "scheduledEndTime": "2026-08-20T12:13:41.564Z",
       "status": "scheduled",
-      "createdAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z"
     }
   ],
   "alertRules": [
@@ -1405,8 +877,8 @@
       "cooldownMinutes": 15,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-15T07:21:41.846Z",
-      "updatedAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z",
+      "updatedAt": "2026-08-18T10:13:41.564Z"
     },
     {
       "id": "rule_node_high_cpu",
@@ -1419,8 +891,8 @@
       "cooldownMinutes": 30,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-15T07:21:41.846Z",
-      "updatedAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z",
+      "updatedAt": "2026-08-18T10:13:41.564Z"
     },
     {
       "id": "rule_node_high_ram",
@@ -1433,8 +905,8 @@
       "cooldownMinutes": 30,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-15T07:21:41.846Z",
-      "updatedAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z",
+      "updatedAt": "2026-08-18T10:13:41.564Z"
     },
     {
       "id": "rule_server_crash",
@@ -1447,8 +919,8 @@
       "cooldownMinutes": 10,
       "notificationChannel": "discord",
       "isEnabled": true,
-      "createdAt": "2026-08-15T07:21:41.846Z",
-      "updatedAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z",
+      "updatedAt": "2026-08-18T10:13:41.564Z"
     },
     {
       "id": "rule_storage_high",
@@ -1461,8 +933,8 @@
       "cooldownMinutes": 60,
       "notificationChannel": "panel",
       "isEnabled": true,
-      "createdAt": "2026-08-15T07:21:41.846Z",
-      "updatedAt": "2026-08-15T07:21:41.846Z"
+      "createdAt": "2026-08-18T10:13:41.564Z",
+      "updatedAt": "2026-08-18T10:13:41.564Z"
     }
   ],
   "alertIncidents": [],
@@ -1477,7 +949,7 @@
       "summary": "Rules, resource usage terms, service availability, and account governance on AetherPanel.",
       "version": "2.4.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-16T06:46:41.035Z",
+      "lastUpdatedAt": "2026-08-18T10:13:41.564Z",
       "updatedBy": "Aether Legal Compliance",
       "content": "# AetherPanel Terms of Service\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nWelcome to **AetherPanel**. These Terms of Service (\"Terms\", \"Agreement\") govern your access to and usage of the AetherPanel hosting control plane, APIs, virtualized server environments, compute nodes, and related cloud services provided by AetherPanel (\"we\", \"us\", \"our\").\n\nBy registering an account, purchasing or deploying a hosting instance, or using our platform, you agree to be bound by these Terms in full.\n\n---\n\n## 1. Eligibility & Account Responsibilities\n- You must be at least 13 years of age (or the minimum legal age in your jurisdiction) to establish an account.\n- You are strictly responsible for maintaining the confidentiality of your authentication credentials, 2FA recovery keys, and API tokens.\n- Any activity, process, or network traffic originating from your provisioned game or bot instances is legally attributable to your account.\n\n---\n\n## 2. Service Provisioning & Resource Limits\n- **Resource Allocations:** Dedicated memory (RAM), virtual CPU cores (vCPU), NVMe storage, port allocations, and backup quotas are allocated strictly according to your active plan tier.\n- **Fair Use:** Free and shared tier instances must adhere to fair usage policies. Processes that deliberately attempt to evade container limits, starve host memory, or exploit background kernel vulnerabilities are subject to immediate suspension.\n- **Node Relocation & Maintenance:** We reserve the right to migrate instances between hardware hypervisors during scheduled maintenance windows to maintain infrastructure stability and security.\n\n---\n\n## 3. Billing, Invoicing & Refunds\n- **Subscription Billing:** Paid plans are billed on a recurring monthly or yearly cycle according to your chosen payment method.\n- **Credits & Balance:** Account credits earned via AFK rewards, manual vouchers, or promotions are non-transferable and possess no standalone cash redemption value.\n- **Refund Policy:** If you encounter persistent infrastructure downtime (>24 hours non-maintenance outage), you may request a pro-rated account credit refund within 7 days of the billing incident.\n\n---\n\n## 4. User Content & Data Security\n- You retain all ownership rights to world saves, bot scripts, database contents, configuration files, and custom plugins uploaded to your virtual filesystem.\n- We maintain isolated, multi-tenant container barriers (cgroups, namespaces, chroot jail SFTP) to prevent cross-account data access.\n- You are responsible for scheduling periodic backups using the integrated Backup & Snapshot engine before performing major server upgrades or software re-installations.\n\n---\n\n## 5. Termination & Suspension\nWe reserve the right to suspend or terminate service without prior notice if an instance is found in violation of our **Acceptable Use Policy (AUP)**, including but not limited to participating in Denial of Service (DDoS) campaigns, unauthorized cryptocurrency mining, or distributing malicious payloads.\n\n---\n\n## 6. Limitation of Liability\nTO THE MAXIMUM EXTENT PERMITTED BY LAW, AETHERPANEL DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED. UNDER NO CIRCUMSTANCES SHALL AETHERPANEL BE LIABLE FOR INDIRECT, INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES RESULTING FROM DATA LOSS, INTERRUPTED GAMEPLAY, OR UPSTREAM TRANSIT OUTAGES."
     },
@@ -1488,7 +960,7 @@
       "summary": "How AetherPanel collects, protects, isolates, and handles your account and telemetry data.",
       "version": "2.1.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-16T06:46:41.035Z",
+      "lastUpdatedAt": "2026-08-18T10:13:41.564Z",
       "updatedBy": "Aether Data Privacy Office",
       "content": "# AetherPanel Privacy Policy\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nAetherPanel values your privacy and data autonomy. This Privacy Policy details how we collect, process, store, and safeguard your personal information and server data when using our platform.\n\n---\n\n## 1. Information We Collect\nWe collect only the minimum required information necessary to provide reliable hosting services:\n1. **Account Identification:** Email address, username, display name, and hashed credentials (salted using bcrypt).\n2. **Infrastructure Telemetry:** CPU utilization, memory consumption, disk storage metrics, network I/O, uptime timestamps, and node status indicators collected by our local and remote node agents.\n3. **Audit & Security Logs:** IP addresses, login timestamps, API key requests, and administrative actions for security tracking.\n\n---\n\n## 2. Server Filesystem & Code Privacy\n- **Strict Isolation:** Your server files (Minecraft worlds, Discord bot scripts, `.env` configurations, and databases) are stored in sandboxed directories.\n- **No Unsolicited Scanning:** We do not read, inspect, or commercialize the contents of your private server files or application source code, except when strictly necessary to execute automated virus/malware scans or when compelled by law.\n\n---\n\n## 3. Cryptographic Storage & Security Measures\n- Authentication tokens and session cookies are signed using industry-standard HMAC-SHA256 signatures with expiration limits.\n- SSH/SFTP connections are authenticated through standard public key cryptography and secure host key verification.\n- Passwords are never stored in plaintext and cannot be retrieved in unhashed format by administrators.\n\n---\n\n## 4. Third-Party Integrations\n- **Discord Webhooks:** When configured by you, event payloads (start, stop, crash alerts) are securely dispatched to your chosen Discord channel endpoints.\n- **Payment Providers:** Sensitive credit card details are handled directly by PCI-DSS compliant payment gateways (Stripe, UPI providers); AetherPanel does not store raw payment card numbers.\n\n---\n\n## 5. Data Retention & Deletion Rights\n- When you delete a server instance, its associated virtual disk, SFTP permissions, and local backup archives are permanently unlinked and erased from the node filesystem.\n- You may request complete account deletion at any time by contacting our support team or opening a ticket in the Support Center."
     },
@@ -1499,10 +971,9 @@
       "summary": "Prohibited activities, bot guidelines, game server standards, and security obligations.",
       "version": "2.3.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-16T06:46:41.035Z",
+      "lastUpdatedAt": "2026-08-18T10:13:41.564Z",
       "updatedBy": "Aether Security Operations",
       "content": "# AetherPanel Acceptable Use Policy (AUP)\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nThis Acceptable Use Policy outlines mandatory rules and prohibited activities across all AetherPanel compute nodes, virtual instances, and networking infrastructure. Violations will result in immediate suspension, termination, and potential reporting to law enforcement authorities.\n\n---\n\n## 1. Strictly Prohibited Activities\nYou may NOT use AetherPanel infrastructure for:\n- **Network Attacks:** Launching, participating in, or orchestrating Distributed Denial of Service (DDoS), SYN floods, UDP amplification attacks, or port-scanning operations.\n- **Botnets & Command & Control (C2):** Hosting botnet controllers, malware distribution hubs, trojans, ransomware, or keyloggers.\n- **Cryptocurrency Mining:** Running CPU, GPU, or memory-intensive cryptocurrency miners (e.g., XMRig, Monero miners) on shared or standard compute nodes without written enterprise permission.\n- **Phishing & Fraud:** Hosting counterfeit login portals, credential harvesting schemes, or fraudulent billing sites.\n- **Mass Spam & Mail Abuse:** Operating unauthenticated SMTP relays, unsolicited spam bots, or automated mass-messaging scrapers.\n\n---\n\n## 2. Minecraft & Game Server Standards\n- **Minecraft EULA Compliance:** All Minecraft server instances must comply with Mojang Studios' Commercial Usage Guidelines and End User License Agreement (EULA).\n- **Anti-Exploitation:** Running deliberate lag machines or malicious crash-spigot plugins designed to exhaust hypervisor shared resources is prohibited.\n\n---\n\n## 3. Discord & API Bot Standards\n- **Platform Terms:** Bot hosting instances must comply with the Discord Developer Terms of Service and Policy Guidelines.\n- **Token Security:** Users must not embed publicly leaked or hijacked bot tokens.\n- **Resource Discipline:** Bots must implement proper gateway reconnect backoff intervals and rate-limiting handling.\n\n---\n\n## 4. Enforcement & Abuse Reporting\n- Automated watchdog processes continuously monitor for abnormal outbound traffic spikes, high raw packet rates, and unauthorized binary signatures.\n- If abuse is detected, the affected instance will be immediately stopped and quarantined.\n- To report abuse originating from our IP ranges, please contact **abuse@aetherpanel.com** with relevant log excerpts and timestamps."
     }
-  ],
-  "installationId": "aep_msvibgm2f5b52008809b122a"
+  ]
 }

@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye } from 'lucide-react';
-import { useTheme, AccentColor } from '../../lib/ThemeContext';
+import { useTheme, AccentColor, FontFamily } from '../../lib/ThemeContext';
 
 export const AdminAppearance: React.FC = () => {
-  const { accent, setAccent, themeMode, setThemeMode, accentClasses } = useTheme();
+  const { accent, setAccent, theme, setTheme, font, setFont, accentClasses } = useTheme();
 
   const [selectedAccent, setSelectedAccent] = useState<AccentColor>(accent);
-  const [selectedUiFont, setSelectedUiFont] = useState('Inter');
-  const [selectedHeadingFont, setSelectedHeadingFont] = useState('Manrope');
-  const [selectedCodeFont, setSelectedCodeFont] = useState('JetBrains Mono');
+  const [selectedUiFont, setSelectedUiFont] = useState<FontFamily>(font || 'inter');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const accentsList: { id: AccentColor; name: string; gradient: string; hex: string }[] = [
@@ -21,17 +19,17 @@ export const AdminAppearance: React.FC = () => {
 
   const handleSaveTheme = () => {
     setAccent(selectedAccent);
+    setFont(selectedUiFont);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const handleResetDefaults = () => {
     setSelectedAccent('amber');
-    setSelectedUiFont('Inter');
-    setSelectedHeadingFont('Manrope');
-    setSelectedCodeFont('JetBrains Mono');
+    setSelectedUiFont('inter');
     setAccent('amber');
-    setThemeMode('dark');
+    setFont('inter');
+    setTheme('dark');
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
@@ -121,13 +119,13 @@ export const AdminAppearance: React.FC = () => {
               <span>Theme Interface Mode</span>
             </h3>
 
-            <div className="grid grid-cols-3 gap-3">
-              {(['dark', 'light', 'system'] as const).map((mode) => (
+            <div className="grid grid-cols-2 gap-3">
+              {(['dark', 'light'] as const).map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setThemeMode(mode)}
+                  onClick={() => setTheme(mode)}
                   className={`p-3.5 rounded-xl border text-center transition-all ${
-                    themeMode === mode
+                    theme === mode
                       ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 font-bold'
                       : 'bg-zinc-950/50 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
@@ -143,48 +141,23 @@ export const AdminAppearance: React.FC = () => {
             <div className="flex items-center gap-2">
               <Type className="h-4 w-4 text-amber-400" />
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                System Typography Roles
+                System Typography & Fonts
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Primary UI Font</label>
-                <select
-                  value={selectedUiFont}
-                  onChange={(e) => setSelectedUiFont(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="Inter">Inter</option>
-                  <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-                  <option value="DM Sans">DM Sans</option>
-                  <option value="Manrope">Manrope</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Heading Font</label>
-                <select
-                  value={selectedHeadingFont}
-                  onChange={(e) => setSelectedHeadingFont(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="Manrope">Manrope</option>
-                  <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-                  <option value="Inter">Inter</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Code / Console Font</label>
-                <select
-                  value={selectedCodeFont}
-                  onChange={(e) => setSelectedCodeFont(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="JetBrains Mono">JetBrains Mono</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Primary System Font</label>
+              <select
+                value={selectedUiFont}
+                onChange={(e) => setSelectedUiFont(e.target.value as FontFamily)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="inter">Inter / Plus Jakarta Sans (Default)</option>
+                <option value="geist">Geist Sans</option>
+                <option value="jetbrains">JetBrains Mono (Monospace)</option>
+                <option value="system-sans">System Sans-Serif</option>
+                <option value="system-mono">System Monospace</option>
+              </select>
             </div>
           </div>
         </div>
@@ -211,10 +184,10 @@ export const AdminAppearance: React.FC = () => {
               </div>
 
               <div>
-                <h4 className="text-base font-extrabold text-white" style={{ fontFamily: selectedHeadingFont }}>
+                <h4 className="text-base font-extrabold text-white">
                   AetherPanel Cloud Node
                 </h4>
-                <p className="text-xs text-zinc-400 mt-1" style={{ fontFamily: selectedUiFont }}>
+                <p className="text-xs text-zinc-400 mt-1">
                   Manage high-performance Minecraft & Discord Bot instances with instant scaling.
                 </p>
               </div>

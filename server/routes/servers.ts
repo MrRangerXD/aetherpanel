@@ -6,7 +6,8 @@ import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import {
-  startServer, stopServer, restartServer, reinstallServer,
+  startServer, stopServer, restartServer, reinstallServer, killServer,
+  validateServerPreflight,
   getServerConsoleLogs, sendServerCommand, listServerFiles,
   readServerFile, writeServerFile, deleteServerItem, createServerDirectory,
   renameServerItem, compressServerItem, decompressServerItem,
@@ -124,7 +125,7 @@ router.post('/:id/power', authMiddleware, async (req: AuthenticatedRequest, res:
   if (!access) return;
 
   const { server } = access;
-  const { action } = req.body; // 'start', 'stop', 'restart', 'reinstall'
+  const { action } = req.body; // 'start', 'stop', 'restart', 'kill', 'reinstall'
 
   let success = false;
   if (action === 'start') {
@@ -133,6 +134,8 @@ router.post('/:id/power', authMiddleware, async (req: AuthenticatedRequest, res:
     success = await stopServer(server.id);
   } else if (action === 'restart') {
     success = await restartServer(server.id);
+  } else if (action === 'kill') {
+    success = await killServer(server.id);
   } else if (action === 'reinstall') {
     success = await reinstallServer(server.id);
   } else {
@@ -153,7 +156,63 @@ router.post('/:id/power', authMiddleware, async (req: AuthenticatedRequest, res:
     timestamp: new Date().toISOString()
   }, server.userId).catch(() => {});
 
-  res.json({ success: true, message: `Server power action '${action}' initiated.`, data: { serverId: server.id } });
+  res.json({ success, message: `Server power action '${action}' processed.`, data: { serverId: server.id, action } });
+});
+
+// GET /api/v1/servers/:id/preflight - Validate environment & runtime preflight
+router.get('/:id/preflight', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const preflight = await validateServerPreflight(req.params.id);
+  res.json({ success: true, data: preflight });
+});
+
+// PATCH /api/v1/servers/:id - Update server metadata, startup configuration, and environment variables
+router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server, db } = access;
+  const { name, startup, envVars, description } = req.body;
+
+  if (typeof name === 'string' && name.trim()) {
+    server.name = name.trim();
+  }
+
+  if (startup && typeof startup === 'object') {
+    server.startup = {
+      ...(server.startup || {}),
+      ...startup
+    };
+  }
+
+  if (Array.isArray(envVars)) {
+    server.envVars = envVars;
+    // Also synchronize key-values to .env file
+    const envObj: Record<string, string> = {};
+    for (const item of envVars) {
+      if (item && item.key) {
+        envObj[item.key.trim()] = item.value || '';
+      }
+    }
+    writeServerEnv(server.id, envObj);
+  }
+
+  saveDbSync();
+
+  await recordServerActivity(
+    server.id, req.user!.id, req.user!.username,
+    'SETTINGS_UPDATE', 'Updated server configuration & startup flags'
+  );
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'SERVER_UPDATE_SETTINGS', server.id,
+    `Updated settings & startup profile for ${server.name}`
+  );
+
+  res.json({ success: true, message: 'Server settings saved successfully.', data: { server } });
 });
 
 // GET /api/v1/servers/:id/console - Console logs
@@ -481,8 +540,15 @@ router.get('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
+  const { server } = access;
   const envMap = readServerEnv(req.params.id);
-  res.json({ success: true, data: envMap });
+  res.json({
+    success: true,
+    data: {
+      env: envMap,
+      envVars: server.envVars || []
+    }
+  });
 });
 
 // PUT /api/v1/servers/:id/env
@@ -490,15 +556,38 @@ router.put('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const envMap = req.body.env || {};
+  const { server } = access;
+  const { env, envVars } = req.body;
+
+  let envMap: Record<string, string> = env || {};
+
+  if (Array.isArray(envVars)) {
+    server.envVars = envVars;
+    envMap = {};
+    for (const item of envVars) {
+      if (item && item.key) {
+        envMap[item.key.trim()] = item.value || '';
+      }
+    }
+  } else if (env && typeof env === 'object') {
+    // Also build envVars array from map if array not given
+    server.envVars = Object.entries(env).map(([k, v]) => ({
+      key: k,
+      value: String(v),
+      isSecret: /token|secret|key|password|auth/i.test(k),
+      isEnabled: true
+    }));
+  }
+
   writeServerEnv(req.params.id, envMap);
+  saveDbSync();
 
   await recordServerActivity(
     req.params.id, req.user!.id, req.user!.username,
     'ENV_UPDATE', 'Updated environment variables (.env)'
   );
 
-  res.json({ success: true, message: 'Environment variables saved successfully.' });
+  res.json({ success: true, message: 'Environment variables saved successfully.', data: { env: envMap, envVars: server.envVars } });
 });
 
 // GET /api/v1/servers/:id/activity - Server activity history
@@ -903,11 +992,10 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
   // Remove from DB
   db.servers = db.servers.filter(s => s.id !== server.id);
   // Free allocations
-  const alloc = db.allocations.find(a => a.serverId === server.id);
-  if (alloc) {
-    alloc.serverId = undefined;
-    alloc.isAssigned = false;
-  }
+  db.allocations.filter(a => a.serverId === server.id).forEach(a => {
+    a.serverId = undefined;
+    a.isAssigned = false;
+  });
   // Remove backups & dbs
   db.backups = db.backups.filter(b => b.serverId !== server.id);
   db.databases = db.databases.filter(d => d.serverId !== server.id);

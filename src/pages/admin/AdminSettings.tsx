@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Save, Check, QrCode, CreditCard, Building, CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  Sliders, Save, Check, QrCode, CreditCard, Building, CheckCircle2,
+  XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
+  Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
+  AlertTriangle, HelpCircle
+} from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Order, PaymentGatewaySettings } from '../../types';
+import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'payments' | 'pending'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'payments' | 'pending' | 'updates'>('general');
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -13,6 +18,12 @@ export const AdminSettings: React.FC = () => {
   const [currencySymbol, setCurrencySymbol] = useState('$');
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  // System Version & Updates
+  const [versionInfo, setVersionInfo] = useState<PanelVersionInfo | null>(null);
+  const [updateJob, setUpdateJob] = useState<UpdateJobState | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [triggeringUpdate, setTriggeringUpdate] = useState(false);
 
   // Payment Gateway Settings
   const [gateways, setGateways] = useState<PaymentGatewaySettings>({
@@ -74,10 +85,55 @@ export const AdminSettings: React.FC = () => {
     setLoadingOrders(false);
   };
 
+  const fetchVersionInfo = async (forceCheck = false) => {
+    if (forceCheck) setCheckingUpdates(true);
+    const url = forceCheck ? '/admin/update/check' : '/admin/version';
+    const res = await apiRequest(url);
+    if (res.success && res.data) {
+      setVersionInfo(res.data);
+    }
+    if (forceCheck) setCheckingUpdates(false);
+  };
+
+  const pollUpdateStatus = async () => {
+    const res = await apiRequest('/admin/update/status');
+    if (res.success && res.data) {
+      setUpdateJob(res.data);
+      if (res.data.status === 'completed' || res.data.status === 'failed') {
+        fetchVersionInfo(false);
+      }
+    }
+  };
+
+  const handleExecuteUpdate = async () => {
+    if (!window.confirm('Are you sure you want to execute the panel update? A configuration snapshot will be created automatically.')) return;
+    setTriggeringUpdate(true);
+    const res = await apiRequest('/admin/update/execute', { method: 'POST' });
+    setTriggeringUpdate(false);
+    if (res.success) {
+      setActionMsg('Update pipeline initiated.');
+      pollUpdateStatus();
+    } else {
+      setActionMsg(res.error?.message || 'Failed to start update.');
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
     fetchPendingOrders();
+    fetchVersionInfo();
+    pollUpdateStatus();
   }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (updateJob?.status === 'in_progress') {
+      timer = setInterval(pollUpdateStatus, 1500);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [updateJob?.status]);
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,6 +221,15 @@ export const AdminSettings: React.FC = () => {
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500 text-white font-bold">
                 {pendingOrders.length}
               </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setActiveTab('updates'); fetchVersionInfo(); pollUpdateStatus(); }}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'updates' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <ArrowUpCircle className="h-3.5 w-3.5" /> Updates & System Version
+            {versionInfo?.isUpdateAvailable && (
+              <span className="ml-1 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
             )}
           </button>
         </div>
@@ -454,6 +519,224 @@ export const AdminSettings: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: Updates & System Version */}
+      {activeTab === 'updates' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-zinc-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ArrowUpCircle className="h-5 w-5 text-cyan-400" />
+                  <h2 className="text-base font-bold text-white">AetherPanel Version & Update Manager</h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-semibold">
+                    {versionInfo?.currentVersion || 'v3.5.2'}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">Authentic system runtime telemetry, upstream GitHub synchronization, and automated update management.</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchVersionInfo(true)}
+                  disabled={checkingUpdates || updateJob?.status === 'in_progress'}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdates ? 'animate-spin text-cyan-400' : ''}`} />
+                  {checkingUpdates ? 'Checking Upstream...' : 'Check for Updates'}
+                </button>
+                <button
+                  onClick={handleExecuteUpdate}
+                  disabled={triggeringUpdate || updateJob?.status === 'in_progress'}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all"
+                >
+                  {updateJob?.status === 'in_progress' ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpCircle className="h-4 w-4" />
+                      Execute Safe Update
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Version Telemetry Grid - Strict Authentic Output */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
+                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <GitBranch className="h-3.5 w-3.5 text-cyan-400" /> Installed Version
+                </div>
+                <div className="text-sm font-mono font-bold text-white mt-1">
+                  {versionInfo?.currentVersion || 'v3.5.2'}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                  SHA: {versionInfo?.commitHash || 'f89a2bc'} ({versionInfo?.branch || 'main'})
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
+                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-amber-400" /> Latest Upstream
+                </div>
+                <div className={`text-sm font-mono font-bold mt-1 ${versionInfo?.latestVersion === 'UNKNOWN' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {versionInfo?.latestVersion || 'UNKNOWN'}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                  SHA: {versionInfo?.latestCommitHash || 'UNKNOWN'}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
+                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <Cpu className="h-3.5 w-3.5 text-emerald-400" /> Update Available
+                </div>
+                <div className="text-sm font-bold mt-1">
+                  {versionInfo?.isUpdateAvailable === 'YES' && (
+                    <span className="text-cyan-400 flex items-center gap-1 font-mono">
+                      YES <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                    </span>
+                  )}
+                  {versionInfo?.isUpdateAvailable === 'NO' && (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <CheckCircle className="h-3.5 w-3.5" /> NO (Up to date)
+                    </span>
+                  )}
+                  {(!versionInfo || versionInfo.isUpdateAvailable === 'UNKNOWN') && (
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <HelpCircle className="h-3.5 w-3.5" /> UNKNOWN
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Tree: {versionInfo?.isDirtyWorkingTree ? 'Modified' : 'Clean'}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
+                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <HardDrive className="h-3.5 w-3.5 text-violet-400" /> Runtime Host
+                </div>
+                <div className="text-xs font-mono font-bold text-white mt-1 truncate">
+                  Node {versionInfo?.nodeVersion || process.version}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
+                  {versionInfo?.platform || 'Linux'} ({versionInfo?.arch || 'x64'})
+                </div>
+              </div>
+            </div>
+
+            {/* Upstream Connectivity Status & Release Notes */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-2xl bg-zinc-950 border border-zinc-800/80 text-xs text-zinc-400 gap-2">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${versionInfo?.upstreamReachable ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span>
+                  GitHub API: {versionInfo?.upstreamReachable ? (
+                    <strong className="text-emerald-400">Reachable (200 OK)</strong>
+                  ) : (
+                    <strong className="text-amber-400">Unreachable / {versionInfo?.upstreamError || 'Offline'}</strong>
+                  )}
+                </span>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono">
+                Last Checked: {versionInfo?.lastCheckedAt ? new Date(versionInfo.lastCheckedAt).toLocaleTimeString() : 'Never'}
+              </div>
+            </div>
+
+            {versionInfo?.updateReleaseNotes && (
+              <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/20 text-xs text-zinc-300">
+                <span className="font-semibold text-cyan-300">Upstream Commit / Changelog: </span>
+                {versionInfo.updateReleaseNotes}
+              </div>
+            )}
+          </div>
+
+          {/* Active Update Execution Status & Step-by-Step Progress */}
+          {updateJob && updateJob.status !== 'idle' && (
+            <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-5 w-5 text-amber-400" />
+                  <h3 className="text-sm font-bold text-white">Live Update Pipeline Diagnostics</h3>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                  updateJob.status === 'completed'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : updateJob.status === 'failed'
+                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'
+                }`}>
+                  {updateJob.status}
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-zinc-300">{updateJob.currentStep}</span>
+                  <span className="text-amber-400 font-mono">{updateJob.progressPercent}%</span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-zinc-950 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-cyan-400 transition-all duration-300"
+                    style={{ width: `${updateJob.progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Step-by-Step Verification Status List */}
+              {updateJob.steps && updateJob.steps.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-zinc-400">Pipeline Stages:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {updateJob.steps.map((step) => (
+                      <div
+                        key={step.id}
+                        className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          {step.status === 'SUCCESS' && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+                          {step.status === 'RUNNING' && <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />}
+                          {step.status === 'FAILED' && <XCircle className="h-4 w-4 text-rose-400" />}
+                          {step.status === 'SKIPPED' && <HelpCircle className="h-4 w-4 text-zinc-500" />}
+                          {step.status === 'PENDING' && <Clock className="h-4 w-4 text-zinc-600" />}
+                          <span className="font-semibold text-white">{step.name}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold ${
+                          step.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-400' :
+                          step.status === 'RUNNING' ? 'bg-amber-500/10 text-amber-400' :
+                          step.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400' :
+                          'bg-zinc-800 text-zinc-500'
+                        }`}>
+                          {step.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Terminal Logs Output */}
+              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-xs text-zinc-300 max-h-60 overflow-y-auto space-y-1">
+                {updateJob.logs.length === 0 ? (
+                  <div className="text-zinc-600">Initializing pipeline...</div>
+                ) : (
+                  updateJob.logs.map((l, i) => (
+                    <div key={i} className={`${l.includes('❌') || l.includes('ERROR') ? 'text-rose-400 font-bold' : l.includes('✓') || l.includes('SUCCESS') ? 'text-emerald-400' : ''}`}>
+                      {l}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>

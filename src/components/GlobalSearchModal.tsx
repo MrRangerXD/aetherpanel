@@ -17,7 +17,7 @@ interface SearchItem {
   id: string;
   title: string;
   subtitle: string;
-  category: 'server' | 'navigation' | 'node' | 'plan' | 'ticket' | 'marketplace' | 'admin';
+  category: 'server' | 'navigation' | 'node' | 'plan' | 'ticket' | 'admin';
   icon: any;
   action: () => void;
 }
@@ -65,14 +65,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         category: 'navigation',
         icon: Layers,
         action: () => onNavigate('servers')
-      },
-      {
-        id: 'nav_marketplace',
-        title: 'Plugin & Bot Marketplace',
-        subtitle: 'Browse 1-click plugins, Discord bots & Minecraft templates',
-        category: 'marketplace',
-        icon: Flame,
-        action: () => onNavigate('marketplace')
       },
       {
         id: 'nav_billing',
@@ -239,7 +231,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search servers, nodes, plans, marketplace, tickets, or commands... (Ctrl+K)"
+            placeholder="Search servers, nodes, plans, tickets, or commands... (Ctrl+K)"
             value={query}
             onChange={e => {
               setQuery(e.target.value);
@@ -282,7 +274,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     <div className={`p-2 rounded-lg ${
                       item.category === 'server' ? 'bg-cyan-500/10 text-cyan-400' :
                       item.category === 'admin' ? 'bg-rose-500/10 text-rose-400' :
-                      item.category === 'marketplace' ? 'bg-amber-500/10 text-amber-400' :
                       'bg-zinc-800 text-zinc-400'
                     }`}>
                       <Icon className="h-4 w-4" />

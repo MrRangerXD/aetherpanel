@@ -14,9 +14,7 @@ import adminRoutes from './server/routes/admin';
 import nodeApiRoutes, { startHeartbeatMonitor } from './server/routes/nodeApi';
 import adsRoutes from './server/routes/ads';
 import afkRoutes from './server/routes/afk';
-import templateRoutes from './server/routes/templates';
 import discordRoutes from './server/routes/discord';
-import marketplaceRoutes from './server/routes/marketplace';
 import statusRoutes from './server/routes/status';
 import monitoringRoutes from './server/routes/monitoring';
 import apiKeysRoutes from './server/routes/apiKeys';
@@ -25,6 +23,7 @@ import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
 import { startSftpDaemon } from './server/sftpServer';
+import { reconcileServerStatesOnBoot } from './server/provider';
 
 dotenv.config();
 
@@ -65,9 +64,7 @@ async function startServer() {
   app.use('/api/v1/node', nodeApiRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/afk', afkRoutes);
-  app.use('/api/v1/templates', templateRoutes);
   app.use('/api/v1/discord', discordRoutes);
-  app.use('/api/v1/marketplace', marketplaceRoutes);
   app.use('/api/v1/status', statusRoutes);
   app.use('/api/v1/monitoring', monitoringRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
@@ -136,6 +133,12 @@ async function startServer() {
       startSftpDaemon();
     } catch (e) {
       console.warn('[AetherPanel] SFTP daemon init notice:', e);
+    }
+
+    try {
+      reconcileServerStatesOnBoot();
+    } catch (e) {
+      console.warn('[AetherPanel] Lifecycle boot reconciliation init notice:', e);
     }
   });
 

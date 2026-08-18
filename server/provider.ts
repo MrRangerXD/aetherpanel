@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import AdmZip from 'adm-zip';
 import { getDb, saveDbSync } from './db';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerActivity } from '../src/types';
@@ -138,98 +138,61 @@ export function initializeServerFiles(serverId: string, productCategory: string,
       fs.mkdirSync(pluginsDir, { recursive: true });
     }
   } else if (productCategory === 'bot') {
-    if (software.toLowerCase().includes('python')) {
-      const botPy = path.join(dir, 'bot.py');
-      if (!fs.existsSync(botPy)) {
-        fs.writeFileSync(botPy, [
-          'import os',
-          'import sys',
-          'import time',
-          'from dotenv import load_dotenv',
-          '',
-          'load_dotenv()',
-          'token = os.getenv("DISCORD_TOKEN", "YOUR_BOT_TOKEN_HERE")',
-          'prefix = os.getenv("PREFIX", "!")',
-          '',
-          'print(f"[AetherBot/INFO]: Initializing Python Discord Bot with prefix \'{prefix}\'...")',
-          'print(f"[AetherBot/INFO]: Token loaded: {token[:6]}*** (Length: {len(token)})")',
-          'print(f"[AetherBot/INFO]: Bot process running in continuous heartbeat loop on Python {sys.version.split()[0]}.")',
-          '',
-          'while True:',
-          '    time.sleep(60)',
-          '    print(f"[AetherBot/HEARTBEAT]: Gateway active, ping latency: 12ms")',
-          ''
-        ].join('\n'));
-      }
-
-      const reqPath = path.join(dir, 'requirements.txt');
-      if (!fs.existsSync(reqPath)) {
-        fs.writeFileSync(reqPath, 'discord.py>=2.3.2\npython-dotenv>=1.0.0\n');
-      }
-    } else {
-      // Node.js Bot
-      const indexJs = path.join(dir, 'index.js');
-      if (!fs.existsSync(indexJs)) {
-        fs.writeFileSync(indexJs, [
-          'require("dotenv").config();',
-          '',
-          'const token = process.env.DISCORD_TOKEN || "YOUR_BOT_TOKEN_HERE";',
-          'const prefix = process.env.PREFIX || "!";',
-          '',
-          'console.log(`[AetherBot/INFO]: Starting Node.js Bot runtime (PID: ${process.pid})...`);',
-          'console.log(`[AetherBot/INFO]: Discord Token loaded: ${token.substring(0, 6)}***`);',
-          'console.log(`[AetherBot/INFO]: Command prefix registered: "${prefix}"`);',
-          'console.log(`[AetherBot/READY]: Bot gateway connected. Listening for events.`);',
-          '',
-          'setInterval(() => {',
-          '  console.log(`[AetherBot/HEARTBEAT]: Shard 0 healthy. Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)}MB`);',
-          '}, 60000);',
-          '',
-          'process.on("SIGTERM", () => {',
-          '  console.log("[AetherBot/SHUTDOWN]: Received SIGTERM, disconnecting cleanly...");',
-          '  process.exit(0);',
-          '});'
-        ].join('\n'));
-      }
-
-      const pkgPath = path.join(dir, 'package.json');
-      if (!fs.existsSync(pkgPath)) {
-        fs.writeFileSync(pkgPath, JSON.stringify({
-          name: 'aether-discord-bot',
-          version: '1.0.0',
-          description: 'Hosted on AetherPanel',
-          main: 'index.js',
-          scripts: {
-            start: 'node index.js'
-          },
-          dependencies: {
-            'dotenv': '^16.4.5'
-          }
-        }, null, 2));
-      }
-    }
-
-    const envPath = path.join(dir, '.env');
-    if (!fs.existsSync(envPath)) {
-      fs.writeFileSync(envPath, 'DISCORD_TOKEN=your_bot_token_here\nPREFIX=!\nENVIRONMENT=production\nPORT=3000\n');
-    }
+    // Empty bot server root: user uploads or creates application files
+    // Ensure directory exists without generating fake application files
   }
 }
 
+export type InstallStatus = 'PIP_NOT_FOUND' | 'DEPENDENCY_INSTALL_FAILED' | 'DEPENDENCY_INSTALL_SUCCESS' | 'NO_REQUIREMENTS_FILE' | 'NO_PACKAGE_FILE' | 'STARTUP_FAILED';
+
 // Bot Dependency Installation - Safe spawn without shell: true
-export async function installServerDependencies(serverId: string): Promise<{ success: boolean; output: string }> {
+export async function installServerDependencies(serverId: string): Promise<{ success: boolean; status: InstallStatus; output: string }> {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
   if (!server) throw new Error('Server not found');
 
   const dir = getServerDir(serverId);
-  const isPython = server.software.toLowerCase().includes('python');
+  const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
+  const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
 
   appendConsoleLog(serverId, `[AetherInstaller/INFO]: Starting dependency installation...`);
 
+  if (isPython) {
+    const reqPath = path.join(dir, 'requirements.txt');
+    if (!fs.existsSync(reqPath)) {
+      const msg = `[Installer/ERROR]: 'requirements.txt' not found in server root directory. Upload a requirements.txt file with your Python dependencies.`;
+      appendConsoleLog(serverId, msg);
+      return { success: false, status: 'NO_REQUIREMENTS_FILE', output: msg };
+    }
+
+    const pythonExec = server.startup?.pythonExecutable || 'python3';
+    // Check if pip is available for that interpreter
+    const pipCheck = spawnSync(pythonExec, ['-m', 'pip', '--version'], { shell: false });
+    if (pipCheck.status !== 0 || pipCheck.error) {
+      const errorMsg = `[Installer/ERROR]: PIP_NOT_FOUND - Pip module is not available for interpreter '${pythonExec}'. System reported: ${pipCheck.stderr ? pipCheck.stderr.toString().trim() : 'No module named pip'}`;
+      appendConsoleLog(serverId, errorMsg);
+      return { success: false, status: 'PIP_NOT_FOUND', output: errorMsg };
+    }
+  } else if (!isBun) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (!fs.existsSync(pkgPath)) {
+      const msg = `[Installer/INFO]: 'package.json' not found in server root. Skipping npm install.`;
+      appendConsoleLog(serverId, msg);
+      return { success: false, status: 'NO_PACKAGE_FILE', output: msg };
+    }
+  }
+
   return new Promise((resolve) => {
-    const cmd = isPython ? 'pip3' : 'npm';
-    const args = isPython ? ['install', '-r', 'requirements.txt'] : ['install'];
+    let cmd = 'npm';
+    let args = ['install'];
+
+    if (isPython) {
+      cmd = server.startup?.pythonExecutable || 'python3';
+      args = ['-m', 'pip', 'install', '-r', 'requirements.txt'];
+    } else if (isBun) {
+      cmd = 'bun';
+      args = ['install'];
+    }
 
     let output = '';
     const child = spawn(cmd, args, { cwd: dir, env: process.env, shell: false });
@@ -248,16 +211,16 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
 
     child.on('error', (err) => {
       appendConsoleLog(serverId, `[Installer/ERROR]: Failed to run ${cmd}: ${err.message}`);
-      resolve({ success: false, output: output + '\n' + err.message });
+      resolve({ success: false, status: 'DEPENDENCY_INSTALL_FAILED', output: output + '\n' + err.message });
     });
 
     child.on('close', (code) => {
       if (code === 0) {
         appendConsoleLog(serverId, `[Installer/SUCCESS]: Dependencies installed successfully (Exit Code 0).`);
-        resolve({ success: true, output });
+        resolve({ success: true, status: 'DEPENDENCY_INSTALL_SUCCESS', output });
       } else {
-        appendConsoleLog(serverId, `[Installer/WARN]: Process finished with exit code: ${code}`);
-        resolve({ success: code === 0, output });
+        appendConsoleLog(serverId, `[Installer/WARN]: Dependency installation process finished with exit code: ${code}`);
+        resolve({ success: false, status: 'DEPENDENCY_INSTALL_FAILED', output });
       }
     });
   });
@@ -267,6 +230,13 @@ import { checkJavaRuntime, getRecommendedJavaVersion } from './minecraftService'
 
 // Remote command queue for servers running on remote nodes
 const remoteCommandQueues: Map<string, string[]> = new Map();
+
+// Track intentional stops/kills to prevent treating normal shutdowns as crashes
+const intendedStops: Set<string> = new Set();
+// Stable uptime timers map to reset crash counters after stable operation
+const uptimeTimers: Map<string, NodeJS.Timeout> = new Map();
+// Auto restart timers map
+const autoRestartTimers: Map<string, NodeJS.Timeout> = new Map();
 
 export function pullRemoteServerCommands(serverId: string): string[] {
   const queue = remoteCommandQueues.get(serverId) || [];
@@ -280,11 +250,141 @@ export function queueRemoteServerCommand(serverId: string, command: string) {
   remoteCommandQueues.set(serverId, q);
 }
 
+// Preflight Resource & Validation Checks
+export interface PreflightCheckResult {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+}
+
+export async function validateServerPreflight(serverId: string): Promise<PreflightCheckResult> {
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === serverId);
+  if (!server) {
+    return { ok: false, code: 'SERVER_NOT_FOUND', reason: 'Server definition not found in database.' };
+  }
+
+  // 1. Check Node Status
+  const node = db.nodes.find(n => n.id === server.nodeId);
+  if (node) {
+    if (node.isMaintenanceMode || node.status === 'maintenance') {
+      return { ok: false, code: 'NODE_MAINTENANCE', reason: `Assigned node '${node.name}' is currently in maintenance mode.` };
+    }
+    if (node.status === 'offline' && !node.isLocalNode && node.id !== 'node_local') {
+      return { ok: false, code: 'NODE_OFFLINE', reason: `Assigned node '${node.name}' is offline. Cannot initialize container.` };
+    }
+  }
+
+  // 2. Check Allocation / Port Conflict
+  const activeProcessesList = Array.from(activeProcesses.entries());
+  for (const [otherServerId] of activeProcessesList) {
+    if (otherServerId !== serverId) {
+      const otherServer = db.servers.find(s => s.id === otherServerId);
+      if (otherServer && otherServer.primaryPort === server.primaryPort && otherServer.nodeId === server.nodeId) {
+        return { ok: false, code: 'PORT_CONFLICT', reason: `Primary port ${server.primaryPort} is currently bound by another active server (${otherServer.name}).` };
+      }
+    }
+  }
+
+  // 3. Check Software Runtime & Artifacts
+  const prod = db.products.find(p => p.id === server.productId);
+  const isBotSoftware = /bot|python|node|discord|telegram|js/i.test(server.software) || /bot|python|node/i.test(server.productId || '');
+  const category = prod?.category || (isBotSoftware ? 'bot' : 'minecraft');
+  const dir = getServerDir(serverId);
+
+  if (category === 'minecraft') {
+    const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
+    const javaCheck = checkJavaRuntime(reqJava);
+    if (!javaCheck.available) {
+      return { ok: false, code: 'JAVA_NOT_FOUND', reason: `Java Runtime check failed: ${javaCheck.message}` };
+    }
+
+    const jarName = server.startup?.serverJar || 'server.jar';
+    const serverJarPath = path.join(dir, jarName);
+    if (!fs.existsSync(serverJarPath) || fs.statSync(serverJarPath).size < 1024) {
+      return { ok: false, code: 'SERVER_JAR_MISSING', reason: `Server JAR artifact '${jarName}' is missing or corrupted in server root directory.` };
+    }
+  } else {
+    // Bot Runtime
+    const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
+    const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+
+    let entryFile = server.startup?.entryFile;
+    if (!entryFile) {
+      if (isPython) entryFile = 'bot.py';
+      else if (isBun) entryFile = 'index.ts';
+      else entryFile = 'index.js';
+    }
+
+    if (isPython) {
+      if (!fs.existsSync(path.join(dir, entryFile))) {
+        if (fs.existsSync(path.join(dir, 'main.py'))) entryFile = 'main.py';
+        else if (fs.existsSync(path.join(dir, 'app.py'))) entryFile = 'app.py';
+      }
+    } else if (isBun) {
+      if (!fs.existsSync(path.join(dir, entryFile))) {
+        if (fs.existsSync(path.join(dir, 'main.ts'))) entryFile = 'main.ts';
+        else if (fs.existsSync(path.join(dir, 'app.ts'))) entryFile = 'app.ts';
+        else if (fs.existsSync(path.join(dir, 'index.js'))) entryFile = 'index.js';
+      }
+    } else {
+      if (!fs.existsSync(path.join(dir, entryFile))) {
+        if (fs.existsSync(path.join(dir, 'main.js'))) entryFile = 'main.js';
+        else if (fs.existsSync(path.join(dir, 'bot.js'))) entryFile = 'bot.js';
+        else if (fs.existsSync(path.join(dir, 'app.js'))) entryFile = 'app.js';
+        else if (fs.existsSync(path.join(dir, 'server.js'))) entryFile = 'server.js';
+      }
+    }
+
+    const scriptPath = path.join(dir, entryFile);
+    if (!fs.existsSync(scriptPath)) {
+      return { ok: false, code: 'NO_ENTRY_FILE', reason: 'No entry file detected. Upload an application entry file or configure one explicitly.' };
+    }
+  }
+
+  return { ok: true };
+}
+
+// Read merged environment variables (.env file + server.envVars array + system params)
+export function readServerMergedEnv(serverId: string, server: Server): Record<string, string> {
+  const fileEnv = readServerEnv(serverId);
+  const dbEnv: Record<string, string> = {};
+
+  if (Array.isArray(server.envVars)) {
+    for (const v of server.envVars) {
+      if (v.isEnabled !== false && v.key) {
+        dbEnv[v.key.trim()] = v.value || '';
+      }
+    }
+  }
+
+  const cleanEnv: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    ...fileEnv,
+    ...dbEnv,
+    SERVER_ID: serverId,
+    SERVER_NAME: server.name,
+    SERVER_PORT: String(server.primaryPort),
+    SERVER_IP: server.primaryIp || '0.0.0.0',
+    SERVER_MEMORY_MB: String(server.limits.ramMB),
+    SERVER_CPU_CORES: String(server.limits.cpuCores)
+  };
+
+  return cleanEnv;
+}
+
 // Server Control Actions
 export async function startServer(serverId: string): Promise<boolean> {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
   if (!server) return false;
+
+  // Clear any existing pending auto-restart timer
+  const existingRestartTimer = autoRestartTimers.get(serverId);
+  if (existingRestartTimer) {
+    clearTimeout(existingRestartTimer);
+    autoRestartTimers.delete(serverId);
+  }
 
   if (activeProcesses.has(serverId)) {
     appendConsoleLog(serverId, `[AetherDaemon/WARN]: Server process is already running.`);
@@ -294,6 +394,18 @@ export async function startServer(serverId: string): Promise<boolean> {
   server.status = 'starting';
   saveDbSync();
   emitServerStatus(serverId, 'starting');
+
+  // Preflight validation
+  const preflight = await validateServerPreflight(serverId);
+  if (!preflight.ok) {
+    appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Preflight validation failed: ${preflight.reason} (${preflight.code})`);
+    server.status = 'error';
+    if (!server.startup) server.startup = {};
+    server.startup.lastCrashReason = `Preflight error: ${preflight.reason}`;
+    saveDbSync();
+    emitServerStatus(serverId, 'error', { error: preflight.reason, code: preflight.code });
+    return false;
+  }
 
   // Clear previous log buffer for a fresh session if starting
   consoleBuffers[serverId] = [];
@@ -305,26 +417,63 @@ export async function startServer(serverId: string): Promise<boolean> {
   const category = prod?.category || (isBotSoftware ? 'bot' : 'minecraft');
   const dir = getServerDir(serverId);
 
-  initializeServerFiles(serverId, category, server.software);
+  const cleanEnv = readServerMergedEnv(serverId, server);
 
-  const customEnv = readServerEnv(serverId);
-  const cleanEnv: Record<string, string> = {
-    ...process.env as Record<string, string>,
-    ...customEnv,
-    SERVER_ID: serverId,
-    SERVER_PORT: String(server.primaryPort),
-    SERVER_IP: server.primaryIp || '0.0.0.0'
-  };
+  // Check if server is on a remote node
+  const node = db.nodes.find(n => n.id === server.nodeId);
+  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+
+  if (isRemote) {
+    appendConsoleLog(serverId, `[AetherDaemon/INFO]: Dispatching startup command to remote node '${node?.name || server.nodeId}' daemon...`);
+    queueRemoteServerCommand(serverId, 'START');
+    server.status = 'starting';
+    saveDbSync();
+    emitServerStatus(serverId, 'starting');
+    return true;
+  }
 
   if (category === 'bot') {
-    const isPython = server.software.toLowerCase().includes('python');
-    const executable = isPython ? 'python3' : 'node';
-    
-    let scriptFile = isPython ? 'bot.py' : 'index.js';
+    const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
+    const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+
+    let executable = 'node';
+    if (isPython) executable = server.startup?.pythonExecutable || 'python3';
+    else if (isBun) executable = 'bun';
+
+    let scriptFile = server.startup?.entryFile;
+    if (!scriptFile) {
+      if (isPython) scriptFile = 'bot.py';
+      else if (isBun) scriptFile = 'index.ts';
+      else scriptFile = 'index.js';
+    }
+
     if (isPython) {
       if (!fs.existsSync(path.join(dir, scriptFile))) {
         if (fs.existsSync(path.join(dir, 'main.py'))) scriptFile = 'main.py';
         else if (fs.existsSync(path.join(dir, 'app.py'))) scriptFile = 'app.py';
+      }
+
+      // Automatically check and install requirements.txt if present
+      if (fs.existsSync(path.join(dir, 'requirements.txt'))) {
+        appendConsoleLog(serverId, `[AetherDaemon/INFO]: Detected 'requirements.txt' in Python server root. Running dependency preflight check...`);
+        const depRes = await installServerDependencies(serverId);
+        if (depRes.status === 'PIP_NOT_FOUND') {
+          appendConsoleLog(serverId, `[AetherDaemon/WARN]: PIP_NOT_FOUND - Pip module unavailable for interpreter '${executable}'. Proceeding to start application without installing packages.`);
+        } else if (depRes.status === 'DEPENDENCY_INSTALL_FAILED') {
+          appendConsoleLog(serverId, `[AetherDaemon/ERROR]: DEPENDENCY_INSTALL_FAILED - Failed installing requirements.txt. Aborting startup.`);
+          server.status = 'error';
+          if (!server.startup) server.startup = {};
+          server.startup.lastCrashReason = 'DEPENDENCY_INSTALL_FAILED';
+          saveDbSync();
+          emitServerStatus(serverId, 'error', { error: 'DEPENDENCY_INSTALL_FAILED' });
+          return false;
+        }
+      }
+    } else if (isBun) {
+      if (!fs.existsSync(path.join(dir, scriptFile))) {
+        if (fs.existsSync(path.join(dir, 'main.ts'))) scriptFile = 'main.ts';
+        else if (fs.existsSync(path.join(dir, 'app.ts'))) scriptFile = 'app.ts';
+        else if (fs.existsSync(path.join(dir, 'index.js'))) scriptFile = 'index.js';
       }
     } else {
       if (!fs.existsSync(path.join(dir, scriptFile))) {
@@ -337,29 +486,48 @@ export async function startServer(serverId: string): Promise<boolean> {
 
     const scriptPath = path.join(dir, scriptFile);
     if (!fs.existsSync(scriptPath)) {
-      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Bot entrypoint script '${scriptFile}' not found in server directory.`);
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: No entry file detected. Upload an application entry file or configure one explicitly.`);
       server.status = 'error';
       saveDbSync();
-      emitServerStatus(serverId, 'error', { error: `Entrypoint script '${scriptFile}' missing` });
+      emitServerStatus(serverId, 'error', { error: `No entry file detected (${scriptFile})` });
       return false;
     }
 
     const args: string[] = [];
-    if (!isPython) {
+    if (isPython) {
+      args.push('-u');
+      cleanEnv.PYTHONUNBUFFERED = '1';
+    } else if (isBun) {
+      args.push('run');
+    } else {
       // Apply memory limits to Node.js v8 engine
       args.push(`--max-old-space-size=${server.limits.ramMB}`);
+      if (server.startup?.nodeOptions) {
+        const extraOpts = server.startup.nodeOptions.split(/\s+/).filter(Boolean);
+        args.push(...extraOpts);
+      }
     }
+
+    if (server.startup?.customFlags) {
+      const customArgs = server.startup.customFlags.split(/\s+/).filter(Boolean);
+      args.push(...customArgs);
+    }
+
     args.push(scriptFile);
 
-    if (isPython) {
-      cleanEnv.PYTHONUNBUFFERED = '1';
-    }
+    const compiledCmd = `${executable} ${args.join(' ')}`;
+    if (!server.startup) server.startup = {};
+    server.startup.compiledCommand = compiledCmd;
+    server.startup.entryFile = scriptFile;
 
     try {
+      intendedStops.delete(serverId);
+
       const child = spawn(executable, args, {
         cwd: dir,
         env: cleanEnv,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false
       });
 
       const entry: ActiveProcessEntry = {
@@ -370,7 +538,11 @@ export async function startServer(serverId: string): Promise<boolean> {
       };
       activeProcesses.set(serverId, entry);
 
-      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned (PID: ${child.pid}) running ${executable} ${scriptFile}`);
+      if (!server.startup) server.startup = {};
+      server.startup.pid = child.pid;
+      server.startup.lastStartedAt = new Date().toISOString();
+
+      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned (PID: ${child.pid}) running ${executable} ${args.join(' ')}`);
 
       child.stdout?.on('data', (chunk) => {
         appendConsoleLog(serverId, chunk.toString());
@@ -391,13 +563,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       });
 
       child.on('exit', (code, signal) => {
-        appendConsoleLog(serverId, `[AetherDaemon/INFO]: Process exited (Code: ${code}, Signal: ${signal})`);
-        server.status = 'stopped';
-        server.cpuUsage = 0;
-        server.ramUsageMB = 0;
-        activeProcesses.delete(serverId);
-        saveDbSync();
-        emitServerStatus(serverId, 'stopped', { exitCode: code, signal });
+        handleProcessExit(serverId, code, signal);
       });
 
       server.status = 'running';
@@ -406,6 +572,9 @@ export async function startServer(serverId: string): Promise<boolean> {
       server.uptimeSeconds = 0;
       saveDbSync();
       emitServerStatus(serverId, 'running', { pid: child.pid });
+
+      // Stable Uptime Tracker: Reset crash counter after 5 minutes of stable uptime
+      setupStableUptimeReset(serverId);
 
       dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
         message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
@@ -421,8 +590,7 @@ export async function startServer(serverId: string): Promise<boolean> {
     }
   } else {
     // Minecraft Server Runtime Runner
-    // 1. Verify Java Runtime Compatibility
-    const reqJava = getRecommendedJavaVersion(server.version);
+    const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
     const javaCheck = checkJavaRuntime(reqJava);
     if (!javaCheck.available) {
       appendConsoleLog(serverId, `[Server thread/ERROR]: Java Runtime is not available on host. ${javaCheck.message}`);
@@ -432,18 +600,18 @@ export async function startServer(serverId: string): Promise<boolean> {
       return false;
     }
 
-    // 2. Verify server.jar exists
-    const serverJarPath = path.join(dir, 'server.jar');
+    const jarName = server.startup?.serverJar || 'server.jar';
+    const serverJarPath = path.join(dir, jarName);
     if (!fs.existsSync(serverJarPath) || fs.statSync(serverJarPath).size < 1024) {
-      appendConsoleLog(serverId, `[Server thread/ERROR]: 'server.jar' artifact is missing or invalid in server root.`);
+      appendConsoleLog(serverId, `[Server thread/ERROR]: '${jarName}' artifact is missing or invalid in server root.`);
       appendConsoleLog(serverId, `[Server thread/INFO]: Please use the Reinstall function to download the official server JAR.`);
       server.status = 'error';
       saveDbSync();
-      emitServerStatus(serverId, 'error', { error: 'server.jar missing' });
+      emitServerStatus(serverId, 'error', { error: `${jarName} missing` });
       return false;
     }
 
-    // 3. Sync assigned primary port into server.properties
+    // Sync assigned primary port into server.properties
     const propPath = path.join(dir, 'server.properties');
     if (fs.existsSync(propPath)) {
       let propContent = fs.readFileSync(propPath, 'utf8');
@@ -451,18 +619,45 @@ export async function startServer(serverId: string): Promise<boolean> {
       fs.writeFileSync(propPath, propContent, 'utf8');
     }
 
+    const xmsMB = server.startup?.xmsMB || 128;
+    const xmxMB = server.startup?.xmxMB || server.limits.ramMB;
+
     appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);
-    appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: 128M initial, ${server.limits.ramMB}M max`);
+    appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: ${xmsMB}M initial, ${xmxMB}M max`);
     appendConsoleLog(serverId, `[Server thread/INFO]: Binding socket on ${server.primaryIp || '0.0.0.0'}:${server.primaryPort}`);
 
     try {
+      intendedStops.delete(serverId);
+
       const executable = javaCheck.path || 'java';
-      const args = ['-Xms128M', `-Xmx${server.limits.ramMB}M`, '-jar', 'server.jar', 'nogui'];
+      const args: string[] = [`-Xms${xmsMB}M`, `-Xmx${xmxMB}M`];
+
+      // Custom JVM Flags
+      if (server.startup?.jvmFlags) {
+        const extraFlags = server.startup.jvmFlags.split(/\s+/).filter(Boolean);
+        args.push(...extraFlags);
+      }
+
+      args.push('-jar', jarName);
+
+      if (server.startup?.nogui !== false) {
+        args.push('nogui');
+      }
+
+      if (server.startup?.customFlags) {
+        const extraCustom = server.startup.customFlags.split(/\s+/).filter(Boolean);
+        args.push(...extraCustom);
+      }
+
+      const compiledCmd = `${executable} ${args.join(' ')}`;
+      if (!server.startup) server.startup = {};
+      server.startup.compiledCommand = compiledCmd;
 
       const child = spawn(executable, args, {
         cwd: dir,
         env: cleanEnv,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false
       });
 
       const entry: ActiveProcessEntry = {
@@ -472,6 +667,10 @@ export async function startServer(serverId: string): Promise<boolean> {
         pid: child.pid
       };
       activeProcesses.set(serverId, entry);
+
+      if (!server.startup) server.startup = {};
+      server.startup.pid = child.pid;
+      server.startup.lastStartedAt = new Date().toISOString();
 
       child.stdout?.on('data', (chunk) => {
         appendConsoleLog(serverId, chunk.toString());
@@ -492,13 +691,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       });
 
       child.on('exit', (code, signal) => {
-        appendConsoleLog(serverId, `[Server thread/INFO]: Server stopped (Exit code ${code}, Signal: ${signal})`);
-        server.status = 'stopped';
-        server.cpuUsage = 0;
-        server.ramUsageMB = 0;
-        activeProcesses.delete(serverId);
-        saveDbSync();
-        emitServerStatus(serverId, 'stopped', { exitCode: code, signal });
+        handleProcessExit(serverId, code, signal);
       });
 
       server.status = 'running';
@@ -507,6 +700,9 @@ export async function startServer(serverId: string): Promise<boolean> {
       server.uptimeSeconds = 0;
       saveDbSync();
       emitServerStatus(serverId, 'running', { pid: child.pid });
+
+      // Stable Uptime Tracker: Reset crash counter after 5 minutes of stable uptime
+      setupStableUptimeReset(serverId);
 
       dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
         message: `Minecraft Server '${server.name}' started successfully and is listening on ${server.primaryIp}:${server.primaryPort}.`
@@ -523,10 +719,117 @@ export async function startServer(serverId: string): Promise<boolean> {
   }
 }
 
+// Stable Uptime Tracker: Reset crash count after continuous stable execution
+function setupStableUptimeReset(serverId: string) {
+  const existing = uptimeTimers.get(serverId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    try {
+      const db = await getDb();
+      const server = db.servers.find(s => s.id === serverId);
+      if (server && server.status === 'running' && server.startup) {
+        if ((server.startup.crashCount || 0) > 0) {
+          appendConsoleLog(serverId, `[AetherDaemon/INFO]: Server has operated stably for 5 minutes. Resetting crash counter to 0.`);
+          server.startup.crashCount = 0;
+          saveDbSync();
+        }
+      }
+    } catch {}
+  }, 300000); // 5 minutes
+
+  uptimeTimers.set(serverId, timer);
+}
+
+// Process Exit & Crash Handler with Auto-Restart Policies
+async function handleProcessExit(serverId: string, code: number | null, signal: string | null) {
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === serverId);
+  if (!server) return;
+
+  activeProcesses.delete(serverId);
+  const uptimeTimer = uptimeTimers.get(serverId);
+  if (uptimeTimer) {
+    clearTimeout(uptimeTimer);
+    uptimeTimers.delete(serverId);
+  }
+
+  if (!server.startup) server.startup = {};
+  server.startup.pid = undefined;
+  server.startup.lastStoppedAt = new Date().toISOString();
+  server.cpuUsage = 0;
+  server.ramUsageMB = 0;
+
+  const isIntended = intendedStops.has(serverId);
+  intendedStops.delete(serverId);
+
+  if (isIntended || (code === 0 && !signal)) {
+    // Normal graceful stop
+    appendConsoleLog(serverId, `[AetherDaemon/INFO]: Process terminated cleanly (Exit Code: ${code ?? 0}, Signal: ${signal ?? 'NONE'}).`);
+    server.status = 'stopped';
+    saveDbSync();
+    emitServerStatus(serverId, 'stopped', { exitCode: code, signal });
+    return;
+  }
+
+  // Process Crashed / Terminated Abnormally
+  appendConsoleLog(serverId, `[AetherDaemon/CRASH]: Process terminated unexpectedly with Exit Code ${code} (Signal: ${signal || 'NONE'}).`);
+
+  server.startup.lastCrashAt = new Date().toISOString();
+  server.startup.lastCrashReason = `Exit code ${code}${signal ? `, Signal ${signal}` : ''}`;
+  server.startup.crashCount = (server.startup.crashCount || 0) + 1;
+
+  const restartPolicy = server.startup.autoRestartPolicy || (server.startup.restartOnCrash !== false ? 'on_crash' : 'never');
+  const shouldRestart = restartPolicy === 'always' || (restartPolicy === 'on_crash' && code !== 0);
+  const maxRestarts = server.startup.maxCrashRestarts ?? 5;
+  const delaySec = server.startup.crashRestartDelaySeconds ?? 5;
+
+  if (shouldRestart && server.startup.crashCount <= maxRestarts) {
+    appendConsoleLog(serverId, `[AetherDaemon/CRASH]: Auto-restart policy '${restartPolicy}' triggered. Attempt ${server.startup.crashCount}/${maxRestarts} in ${delaySec}s...`);
+    server.status = 'crashed';
+    saveDbSync();
+    emitServerStatus(serverId, 'crashed', { exitCode: code, signal, willRestart: true, retryIn: delaySec });
+
+    const restartTimer = setTimeout(async () => {
+      appendConsoleLog(serverId, `[AetherDaemon/RECOVERY]: Executing auto-restart attempt #${server.startup?.crashCount}...`);
+      await startServer(serverId);
+    }, delaySec * 1000);
+
+    autoRestartTimers.set(serverId, restartTimer);
+  } else {
+    if (server.startup.crashCount > maxRestarts) {
+      appendConsoleLog(serverId, `[AetherDaemon/CRASH]: Maximum auto-restart limit (${maxRestarts}) reached. Auto-recovery suspended.`);
+    }
+    server.status = 'crashed';
+    saveDbSync();
+    emitServerStatus(serverId, 'crashed', { exitCode: code, signal, willRestart: false });
+  }
+}
+
 export async function stopServer(serverId: string): Promise<boolean> {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
   if (!server) return false;
+
+  // Clear any scheduled auto-restart
+  const pendingRestart = autoRestartTimers.get(serverId);
+  if (pendingRestart) {
+    clearTimeout(pendingRestart);
+    autoRestartTimers.delete(serverId);
+  }
+
+  intendedStops.add(serverId);
+
+  // Check if remote node server
+  const node = db.nodes.find(n => n.id === server.nodeId);
+  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  if (isRemote) {
+    queueRemoteServerCommand(serverId, 'STOP');
+    server.status = 'stopping';
+    saveDbSync();
+    emitServerStatus(serverId, 'stopping');
+    return true;
+  }
 
   const entry = activeProcesses.get(serverId);
   if (!entry) {
@@ -534,6 +837,7 @@ export async function stopServer(serverId: string): Promise<boolean> {
     server.cpuUsage = 0;
     server.ramUsageMB = 0;
     server.uptimeSeconds = 0;
+    if (server.startup) server.startup.pid = undefined;
     saveDbSync();
     emitServerStatus(serverId, 'stopped');
     return true;
@@ -551,28 +855,88 @@ export async function stopServer(serverId: string): Promise<boolean> {
         entry.child.stdin.write('stop\n');
       }
       entry.child.kill('SIGTERM');
+
+      // Escalate to SIGKILL if still alive after 3.5s
       setTimeout(() => {
         if (activeProcesses.has(serverId)) {
-          entry.child?.kill('SIGKILL');
+          appendConsoleLog(serverId, `[AetherDaemon/WARN]: Process did not exit cleanly within timeout. Escalating to SIGKILL...`);
+          try {
+            entry.child?.kill('SIGKILL');
+          } catch {}
+          activeProcesses.delete(serverId);
         }
-      }, 3000);
+      }, 3500);
     } catch {}
   }
 
   activeProcesses.delete(serverId);
 
-  appendConsoleLog(serverId, `[AetherDaemon/INFO]: Server process container stopped cleanly.`);
-
   server.status = 'stopped';
   server.cpuUsage = 0;
   server.ramUsageMB = 0;
   server.uptimeSeconds = 0;
+  if (!server.startup) server.startup = {};
+  server.startup.pid = undefined;
+  server.startup.lastStoppedAt = new Date().toISOString();
   saveDbSync();
   emitServerStatus(serverId, 'stopped');
 
   dispatchDiscordNotification(serverId, 'SERVER_STOPPED', {
     message: `Server '${server.name}' has been stopped.`
   }).catch(() => {});
+
+  return true;
+}
+
+export async function killServer(serverId: string): Promise<boolean> {
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === serverId);
+  if (!server) return false;
+
+  // Clear any scheduled auto-restart
+  const pendingRestart = autoRestartTimers.get(serverId);
+  if (pendingRestart) {
+    clearTimeout(pendingRestart);
+    autoRestartTimers.delete(serverId);
+  }
+
+  intendedStops.add(serverId);
+
+  // Check if remote node server
+  const node = db.nodes.find(n => n.id === server.nodeId);
+  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  if (isRemote) {
+    queueRemoteServerCommand(serverId, 'KILL');
+    server.status = 'stopped';
+    server.cpuUsage = 0;
+    server.ramUsageMB = 0;
+    saveDbSync();
+    emitServerStatus(serverId, 'stopped');
+    return true;
+  }
+
+  appendConsoleLog(serverId, `[AetherDaemon/WARN]: Immediate SIGKILL force-termination initiated by administrator.`);
+
+  const entry = activeProcesses.get(serverId);
+  if (entry && entry.child) {
+    try {
+      entry.child.kill('SIGKILL');
+    } catch {}
+  }
+
+  activeProcesses.delete(serverId);
+
+  server.status = 'stopped';
+  server.cpuUsage = 0;
+  server.ramUsageMB = 0;
+  server.uptimeSeconds = 0;
+  if (!server.startup) server.startup = {};
+  server.startup.pid = undefined;
+  server.startup.lastStoppedAt = new Date().toISOString();
+  saveDbSync();
+  emitServerStatus(serverId, 'stopped');
+
+  appendConsoleLog(serverId, `[AetherDaemon/INFO]: Server process container killed and resources freed.`);
 
   return true;
 }
@@ -591,6 +955,76 @@ export async function restartServer(serverId: string): Promise<boolean> {
     await startServer(serverId);
   }, 1000);
   return true;
+}
+
+// Panel Boot State Reconciliation & Auto-Start on Boot
+export async function reconcileServerStatesOnBoot(): Promise<void> {
+  console.log('[AETHERPANEL LIFECYCLE] Reconciling server states and executing boot recovery...');
+  try {
+    const db = await getDb();
+    let modified = false;
+
+    for (const server of db.servers) {
+      const node = db.nodes.find(n => n.id === server.nodeId);
+      const isLocal = !node || node.isLocalNode || node.id === 'node_local';
+
+      if (isLocal) {
+        // If status is marked running in DB but we just booted fresh without active process
+        if (server.status === 'running' || server.status === 'starting') {
+          let isActuallyAlive = false;
+          if (server.startup?.pid) {
+            try {
+              process.kill(server.startup.pid, 0); // Check if PID exists
+              isActuallyAlive = true;
+            } catch {
+              isActuallyAlive = false;
+            }
+          }
+
+          if (!isActuallyAlive) {
+            server.status = 'stopped';
+            server.cpuUsage = 0;
+            server.ramUsageMB = 0;
+            if (server.startup) server.startup.pid = undefined;
+            modified = true;
+          }
+        }
+
+        // Check auto-start on boot
+        if (server.startup?.autoStartOnBoot && server.status === 'stopped') {
+          console.log(`[BOOT RECOVERY] Auto-starting server '${server.name}' (${server.id})...`);
+          startServer(server.id).catch(err => {
+            console.error(`[BOOT RECOVERY] Failed to auto-start server ${server.id}:`, err);
+          });
+        }
+      }
+    }
+
+    if (modified) {
+      saveDbSync();
+    }
+  } catch (err) {
+    console.error('[AETHERPANEL LIFECYCLE] Boot reconciliation error:', err);
+  }
+}
+
+// Auto-Start on Remote Node Reconnection
+export async function handleNodeReconnect(nodeId: string): Promise<void> {
+  try {
+    const db = await getDb();
+    const nodeServers = db.servers.filter(s => s.nodeId === nodeId);
+
+    for (const server of nodeServers) {
+      if (server.startup?.autoStartOnNodeReconnect && server.status === 'stopped') {
+        console.log(`[NODE RECONNECT] Triggering auto-start for server '${server.name}' on reconnected node '${nodeId}'...`);
+        startServer(server.id).catch(err => {
+          console.error(`[NODE RECONNECT] Error starting server ${server.id}:`, err);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[NODE RECONNECT] Error handling node reconnect:', err);
+  }
 }
 
 export async function reinstallServer(serverId: string): Promise<boolean> {
@@ -739,7 +1173,7 @@ export function readServerFile(serverId: string, relPath: string): string {
   return fs.readFileSync(targetPath, 'utf-8');
 }
 
-export function writeServerFile(serverId: string, relPath: string, content: string): void {
+export function writeServerFile(serverId: string, relPath: string, content: string): boolean {
   const baseDir = getServerDir(serverId);
   const targetPath = path.join(baseDir, relPath);
 
@@ -753,6 +1187,7 @@ export function writeServerFile(serverId: string, relPath: string, content: stri
   }
 
   fs.writeFileSync(targetPath, content, 'utf-8');
+  return true;
 }
 
 export function deleteServerItem(serverId: string, relPath: string): void {

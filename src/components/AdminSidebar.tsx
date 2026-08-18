@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ShieldAlert, Users, Server, Package, HardDrive, ShoppingBag,
   Tag, Megaphone, LifeBuoy, FileText, Sliders, ArrowLeft, LogOut,
-  Sparkles, Coins, Layers, Archive, MessageSquare, Store, Activity, Scale
+  Sparkles, Coins, Layers, Archive, MessageSquare, Activity, Scale
 } from 'lucide-react';
 
 import { useAuth } from '../lib/AuthContext';
@@ -59,22 +59,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
           >
             <Package className="h-4 w-4" />
             <span>Products & Plans</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('admin-templates')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-templates' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <Layers className="h-4 w-4" />
-            <span>Server Templates</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('admin-marketplace')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-marketplace' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <Store className="h-4 w-4" />
-            <span>Marketplace</span>
           </button>
 
           <button

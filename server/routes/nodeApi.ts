@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { getInstallationId } from '../installation';
-import { appendConsoleLog, emitServerStatus, pullRemoteServerCommands } from '../provider';
+import { appendConsoleLog, emitServerStatus, pullRemoteServerCommands, handleNodeReconnect } from '../provider';
 
 const router = Router();
 
@@ -131,12 +131,17 @@ router.post('/heartbeat', async (req: Request, res: Response) => {
     });
   }
 
+  const wasOffline = node.status === 'offline';
   node.lastHeartbeatAt = new Date().toISOString();
   if (node.status !== 'maintenance') {
     node.status = 'online';
   }
 
   saveDbSync();
+
+  if (wasOffline) {
+    handleNodeReconnect(node.id).catch(() => {});
+  }
 
   return res.json({
     success: true,

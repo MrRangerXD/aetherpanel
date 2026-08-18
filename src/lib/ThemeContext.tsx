@@ -2,12 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type AccentColor = 'violet' | 'cyan' | 'emerald' | 'amber' | 'rose';
 export type ThemeMode = 'dark' | 'light';
+export type FontFamily = 'inter' | 'geist' | 'jetbrains' | 'system-sans' | 'system-mono';
 
 interface ThemeContextType {
   theme: ThemeMode;
   accent: AccentColor;
+  font: FontFamily;
   setTheme: (mode: ThemeMode) => void;
   setAccent: (accent: AccentColor) => void;
+  setFont: (font: FontFamily) => void;
   customCursorEnabled: boolean;
   setCustomCursorEnabled: (enabled: boolean) => void;
   animationsEnabled: boolean;
@@ -33,6 +36,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [accent, setAccentState] = useState<AccentColor>(() => {
     return (localStorage.getItem('aether_accent') as AccentColor) || 'amber';
+  });
+
+  const [font, setFontState] = useState<FontFamily>(() => {
+    return (localStorage.getItem('aether_font') as FontFamily) || 'inter';
   });
 
   const [customCursorEnabled, setCustomCursorState] = useState<boolean>(() => {
@@ -64,6 +71,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [accent]);
 
   useEffect(() => {
+    localStorage.setItem('aether_font', font);
+    let fontFamilyStr = '"Plus Jakarta Sans", sans-serif';
+    if (font === 'geist') fontFamilyStr = '"Geist", "Inter", sans-serif';
+    else if (font === 'jetbrains') fontFamilyStr = '"JetBrains Mono", monospace';
+    else if (font === 'system-sans') fontFamilyStr = 'system-ui, -apple-system, sans-serif';
+    else if (font === 'system-mono') fontFamilyStr = 'ui-monospace, SFMono-Regular, monospace';
+
+    document.body.style.fontFamily = fontFamilyStr;
+  }, [font]);
+
+  useEffect(() => {
     localStorage.setItem('aether_custom_cursor', String(customCursorEnabled));
   }, [customCursorEnabled]);
 
@@ -77,6 +95,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const setTheme = (mode: ThemeMode) => setThemeState(mode);
   const setAccent = (acc: AccentColor) => setAccentState(acc);
+  const setFont = (f: FontFamily) => setFontState(f);
   const setCustomCursorEnabled = (enabled: boolean) => setCustomCursorState(enabled);
   const setAnimationsEnabled = (enabled: boolean) => setAnimationsState(enabled);
   const setAdsEnabled = (enabled: boolean) => setAdsState(enabled);
@@ -136,8 +155,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ThemeContext.Provider value={{
       theme,
       accent,
+      font,
       setTheme,
       setAccent,
+      setFont,
       customCursorEnabled,
       setCustomCursorEnabled,
       animationsEnabled,

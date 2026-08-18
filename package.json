@@ -1,13 +1,13 @@
 {
-  "name": "react-example",
+  "name": "aetherpanel",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.5.2",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
-    "test": "tsx tests/phase3_phase4_verification.ts",
+    "test": "tsx tests/production_runtime_verification.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },

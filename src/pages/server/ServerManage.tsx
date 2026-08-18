@@ -9,7 +9,7 @@ import {
   Globe, Wifi, Sliders
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem } from '../../types';
+import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem, ServerStartupConfig, ServerEnvVar } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
@@ -114,10 +114,31 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   // Activity state
   const [activities, setActivities] = useState<ServerActivity[]>([]);
 
-  // Settings & Reinstall & Delete state
+  // Settings & Startup Config & Lifecycle state
   const [serverNameEdit, setServerNameEdit] = useState('');
   const [startupFlags, setStartupFlags] = useState('');
   const [javaVersion, setJavaVersion] = useState('Java 21');
+  const [startupConfig, setStartupConfig] = useState<ServerStartupConfig>({
+    javaVersion: 'Java 21',
+    jvmFlags: '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200',
+    xmsMB: 128,
+    xmxMB: 1024,
+    serverJar: 'server.jar',
+    nogui: true,
+    customFlags: '',
+    entryFile: 'index.js',
+    nodeOptions: '',
+    pythonExecutable: 'python3',
+    pythonUnbuffered: true,
+    autoStartOnBoot: false,
+    autoStartOnNodeReconnect: false,
+    restartOnCrash: true,
+    autoRestartPolicy: 'on_crash',
+    maxCrashRestarts: 5,
+    crashRestartDelaySeconds: 5
+  });
+  const [preflightResult, setPreflightResult] = useState<{ ok: boolean; code?: string; reason?: string } | null>(null);
+  const [isCheckingPreflight, setIsCheckingPreflight] = useState(false);
   const [botRuntime, setBotRuntime] = useState('Node.js');
   const [botVersion, setBotVersion] = useState('Node 20 LTS');
   const [botEntryPoint, setBotEntryPoint] = useState('index.js');
@@ -214,6 +235,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Run Preflight Check
+  const runPreflightCheck = async () => {
+    setIsCheckingPreflight(true);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/preflight`);
+      if (res.success && res.data) {
+        setPreflightResult(res.data);
+      }
+    } catch {}
+    setIsCheckingPreflight(false);
+  };
+
   // Fetch Server Data
   const fetchServerDetails = async () => {
     const res = await apiRequest(`/servers/${serverId}`);
@@ -221,7 +254,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       const s = res.data.server || res.data;
       setServer(s);
       setServerNameEdit(s.name);
-      setStartupFlags('-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200');
+      if (s.startup) {
+        setStartupConfig(prev => ({
+          ...prev,
+          ...s.startup,
+          xmxMB: s.startup.xmxMB || s.limits?.ramMB || prev.xmxMB
+        }));
+        setStartupFlags(s.startup.jvmFlags || s.startup.customFlags || '');
+        if (s.startup.javaVersion) setJavaVersion(s.startup.javaVersion);
+      } else {
+        setStartupFlags('-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200');
+      }
     }
   };
 
@@ -356,35 +399,52 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const fetchEnvVars = async () => {
     const res = await apiRequest(`/servers/${serverId}/env`);
     if (res.success && res.data) {
-      const entries = Object.entries(res.data).map(([key, value]) => ({ key, value: String(value) }));
-      if (entries.length === 0) {
-        setEnvVars([
-          { key: 'DISCORD_TOKEN', value: 'MTI3NDI4OTI4NjgxOTIwMTI4.G3kL9a.mock_discord_bot_token_sample' },
-          { key: 'CLIENT_ID', value: '127428928681920128' },
-          { key: 'PREFIX', value: '!' },
-          { key: 'NODE_ENV', value: 'production' }
-        ]);
-      } else {
+      const respData = res.data;
+      if (Array.isArray(respData.envVars) && respData.envVars.length > 0) {
+        setEnvVars(respData.envVars);
+      } else if (respData.env && Object.keys(respData.env).length > 0) {
+        const entries = Object.entries(respData.env).map(([key, value]) => ({
+          key,
+          value: String(value),
+          isSecret: /token|secret|key|password|auth/i.test(key),
+          isEnabled: true
+        }));
         setEnvVars(entries);
+      } else if (typeof respData === 'object' && !respData.env && Object.keys(respData).length > 0) {
+        const entries = Object.entries(respData).map(([key, value]) => ({
+          key,
+          value: String(value),
+          isSecret: /token|secret|key|password|auth/i.test(key),
+          isEnabled: true
+        }));
+        setEnvVars(entries);
+      } else {
+        setEnvVars([
+          { key: 'PORT', value: '3000', isSecret: false, isEnabled: true },
+          { key: 'NODE_ENV', value: 'production', isSecret: false, isEnabled: true },
+          { key: 'DISCORD_TOKEN', value: '', isSecret: true, isEnabled: true }
+        ]);
       }
     }
   };
 
   const handleSaveEnvVars = async () => {
+    const cleanList = envVars.filter(item => item.key && item.key.trim().length > 0);
     const envObj: Record<string, string> = {};
-    envVars.forEach(item => {
-      if (item.key.trim()) {
-        envObj[item.key.trim()] = item.value;
+    cleanList.forEach(item => {
+      if (item.isEnabled !== false) {
+        envObj[item.key.trim()] = item.value || '';
       }
     });
 
     await apiRequest(`/servers/${serverId}/env`, {
       method: 'PUT',
-      body: JSON.stringify({ env: envObj })
+      body: JSON.stringify({ env: envObj, envVars: cleanList })
     });
 
     setEnvSavedMessage(true);
     setTimeout(() => setEnvSavedMessage(false), 3000);
+    fetchServerDetails();
   };
 
   // Fetch Backups
@@ -503,10 +563,13 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Power Actions
   const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
-    await apiRequest(`/servers/${serverId}/power`, {
+    const res = await apiRequest(`/servers/${serverId}/power`, {
       method: 'POST',
-      body: JSON.stringify({ action: action === 'kill' ? 'stop' : action })
+      body: JSON.stringify({ action })
     });
+    if (action === 'start' && res.success === false) {
+      runPreflightCheck();
+    }
     fetchServerDetails();
     fetchConsoleLogs();
   };
@@ -761,19 +824,28 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     fetchSchedules();
   };
 
-  // Save Settings
+  // Save Settings & Startup Config
   const handleSaveSettings = async () => {
-    await apiRequest(`/servers/${serverId}`, {
+    const mergedStartup: ServerStartupConfig = {
+      ...startupConfig,
+      javaVersion,
+      jvmFlags: isMinecraft ? startupFlags : undefined,
+      customFlags: !isMinecraft ? startupFlags : startupConfig.customFlags
+    };
+
+    const res = await apiRequest(`/servers/${serverId}`, {
       method: 'PATCH',
       body: JSON.stringify({
         name: serverNameEdit,
-        software: server?.software,
-        version: javaVersion
+        startup: mergedStartup
       })
     });
-    setSettingsSaved(true);
-    setTimeout(() => setSettingsSaved(false), 3000);
-    fetchServerDetails();
+
+    if (res.success) {
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+      fetchServerDetails();
+    }
   };
 
   // Reinstall Server
@@ -837,8 +909,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const fullIp = `${server.primaryIp}:${server.primaryPort}`;
   const isRunning = server.status === 'running';
   const isMinecraft = server.productId === 'prod_minecraft' || server.software.toLowerCase().includes('paper') || server.software.toLowerCase().includes('spigot') || server.software.toLowerCase().includes('forge') || server.software.toLowerCase().includes('minecraft');
-  const isPython = server.software.toLowerCase().includes('python');
-  const isBot = server.productId === 'prod_bot' || server.software.toLowerCase().includes('node') || isPython;
+  const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
+  const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+  const isNode = !isMinecraft && !isPython && !isBun;
+  const isBot = server.productId === 'prod_bot' || server.software.toLowerCase().includes('node') || isPython || isBun || isNode;
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
@@ -1830,77 +1904,164 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB 4: ENVIRONMENT VARIABLES (.ENV) */}
       {activeTab === 'env' && (
         <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
+          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-base font-bold text-white">Bot Environment Variables (.env)</h3>
-              <p className="text-xs text-zinc-400">Configure secret keys, bot tokens, database URIs, and command prefixes.</p>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Key className="h-4 w-4 text-violet-400" /> Environment Variables & Secrets (.env)
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1">
+                Configure runtime environment flags, secret tokens, database credentials, and port bindings.
+              </p>
             </div>
-            <button
-              onClick={handleSaveEnvVars}
-              className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md"
-            >
-              <Save className="h-4 w-4" /> Save Variables
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={handleSaveEnvVars}
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-violet-600/20"
+              >
+                <Save className="h-4 w-4" /> Save Variables
+              </button>
+            </div>
           </div>
 
           {envSavedMessage && (
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-semibold flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Saved environment variables to .env file!
+              <CheckCircle2 className="h-4 w-4" /> Saved environment variables to server instance & .env file!
             </div>
           )}
 
+          {/* Quick Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-1">Quick Add:</span>
+            <button
+              onClick={() => {
+                if (!envVars.some(v => v.key === 'DISCORD_TOKEN')) {
+                  setEnvVars([...envVars, { key: 'DISCORD_TOKEN', value: '', isSecret: true, isEnabled: true, description: 'Bot authentication token' }]);
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
+            >
+              + DISCORD_TOKEN
+            </button>
+            <button
+              onClick={() => {
+                if (!envVars.some(v => v.key === 'CLIENT_ID')) {
+                  setEnvVars([...envVars, { key: 'CLIENT_ID', value: '', isSecret: false, isEnabled: true, description: 'Discord Application ID' }]);
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
+            >
+              + CLIENT_ID
+            </button>
+            <button
+              onClick={() => {
+                if (!envVars.some(v => v.key === 'PREFIX')) {
+                  setEnvVars([...envVars, { key: 'PREFIX', value: '!', isSecret: false, isEnabled: true, description: 'Bot command prefix' }]);
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
+            >
+              + PREFIX
+            </button>
+            <button
+              onClick={() => {
+                if (!envVars.some(v => v.key === 'NODE_ENV')) {
+                  setEnvVars([...envVars, { key: 'NODE_ENV', value: 'production', isSecret: false, isEnabled: true, description: 'Runtime environment mode' }]);
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 text-[11px] text-zinc-300 hover:text-white font-mono transition-colors"
+            >
+              + NODE_ENV
+            </button>
+          </div>
+
           <div className="space-y-3">
             {envVars.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={item.key}
-                  onChange={(e) => {
-                    const copy = [...envVars];
-                    copy[idx].key = e.target.value;
-                    setEnvVars(copy);
-                  }}
-                  placeholder="KEY (e.g. DISCORD_TOKEN)"
-                  className="w-1/3 rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-violet-300"
-                />
+              <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 transition-colors">
+                <div className="flex items-center gap-2 sm:w-1/3">
+                  <input
+                    type="checkbox"
+                    checked={item.isEnabled !== false}
+                    onChange={(e) => {
+                      const copy = [...envVars];
+                      copy[idx].isEnabled = e.target.checked;
+                      setEnvVars(copy);
+                    }}
+                    title="Enable / Disable variable"
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-violet-500 focus:ring-violet-500 shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={item.key}
+                    onChange={(e) => {
+                      const copy = [...envVars];
+                      copy[idx].key = e.target.value;
+                      setEnvVars(copy);
+                    }}
+                    placeholder="KEY_NAME"
+                    className="w-full rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                  />
+                </div>
 
                 <div className="relative flex-1">
                   <input
-                    type={showEnvValues[idx] ? 'text' : 'password'}
+                    type={showEnvValues[idx] || (!item.isSecret && !/token|secret|key|password|auth/i.test(item.key)) ? 'text' : 'password'}
                     value={item.value}
                     onChange={(e) => {
                       const copy = [...envVars];
                       copy[idx].value = e.target.value;
                       setEnvVars(copy);
                     }}
-                    placeholder="VALUE"
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 pl-3.5 pr-10 py-2 text-xs font-mono text-emerald-400"
+                    placeholder="Value..."
+                    className="w-full rounded-lg bg-zinc-900 border border-zinc-800 pl-3 pr-10 py-1.5 text-xs font-mono text-emerald-400 focus:border-emerald-500 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowEnvValues(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                    className="absolute right-3 top-2.5 text-zinc-500 hover:text-white"
+                    className="absolute right-2.5 top-2 text-zinc-500 hover:text-white"
+                    title={showEnvValues[idx] ? 'Hide value' : 'Reveal value'}
                   >
-                    {showEnvValues[idx] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showEnvValues[idx] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
-                  className="p-2 text-zinc-500 hover:text-rose-400"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const copy = [...envVars];
+                      copy[idx].isSecret = !copy[idx].isSecret;
+                      setEnvVars(copy);
+                    }}
+                    className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${
+                      item.isSecret || /token|secret|key|password|auth/i.test(item.key)
+                        ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                    }`}
+                    title="Mark as sensitive secret"
+                  >
+                    {item.isSecret || /token|secret|key|password|auth/i.test(item.key) ? 'SECRET' : 'PLAIN'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
+                    className="p-1.5 text-zinc-500 hover:text-rose-400 transition-colors"
+                    title="Delete variable"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             ))}
 
-            <button
-              onClick={() => setEnvVars([...envVars, { key: '', value: '' }])}
-              className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Variable
-            </button>
+            <div className="pt-2">
+              <button
+                onClick={() => setEnvVars([...envVars, { key: '', value: '', isSecret: false, isEnabled: true }])}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Variable
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2346,14 +2507,28 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB 8: STARTUP & SETTINGS */}
       {activeTab === 'settings' && (
         <div className="space-y-6">
+          {/* Section 1: Server Configuration & General Settings */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-6">
-            <h3 className="text-base font-bold text-white border-b border-zinc-800 pb-3">
-              Server Configuration & General Settings
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <SettingsIcon className="h-4 w-4 text-violet-400" /> Server Configuration & Runtime Profile
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Tune startup parameters, memory heap bounds, runtime versions, and failure recovery.
+                </p>
+              </div>
+              <button
+                onClick={handleSaveSettings}
+                className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 shrink-0 flex items-center gap-1.5"
+              >
+                <Save className="h-4 w-4" /> Save Configuration
+              </button>
+            </div>
 
             {settingsSaved && (
               <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-semibold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" /> Server name and startup settings updated!
+                <CheckCircle2 className="h-4 w-4" /> Server startup profile, memory flags, and recovery rules updated!
               </div>
             )}
 
@@ -2366,7 +2541,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   type="text"
                   value={serverNameEdit}
                   onChange={(e) => setServerNameEdit(e.target.value)}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 />
               </div>
 
@@ -2377,10 +2552,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 <select
                   value={javaVersion}
                   onChange={(e) => setJavaVersion(e.target.value)}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 >
                   {isMinecraft ? (
                     <>
+                      <option value="Java 25">Java 25 (Recommended for Paper 26.1+)</option>
                       <option value="Java 21">Java 21 (Recommended for 1.20+)</option>
                       <option value="Java 17">Java 17 (LTS for 1.18 - 1.19)</option>
                       <option value="Java 11">Java 11 (Legacy 1.16 - 1.17)</option>
@@ -2395,6 +2571,359 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                     </>
                   )}
                 </select>
+              </div>
+            </div>
+
+            {/* Preflight & Process Diagnostics Panel */}
+            <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800/80 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">Runtime Preflight & Process Diagnostics</span>
+                </div>
+                <button
+                  onClick={runPreflightCheck}
+                  disabled={isCheckingPreflight}
+                  className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[11px] font-semibold text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isCheckingPreflight ? 'animate-spin' : ''}`} />
+                  <span>{isCheckingPreflight ? 'Checking...' : 'Run Preflight Check'}</span>
+                </button>
+              </div>
+
+              {preflightResult && (
+                <div className={`p-3 rounded-lg text-xs font-mono flex items-start gap-2.5 ${
+                  preflightResult.ok
+                    ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                }`}>
+                  {preflightResult.ok ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /> : <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />}
+                  <div>
+                    <div className="font-bold">{preflightResult.ok ? 'PREFLIGHT PASSED' : `PREFLIGHT FAILED [${preflightResult.code}]`}</div>
+                    <div className="text-[11px] opacity-90">{preflightResult.ok ? 'All runtime binaries, allocations, ports, and permissions are verified and ready.' : preflightResult.reason}</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">Process PID</div>
+                  <div className="font-mono font-bold text-white mt-1">{server?.startup?.pid || 'None (Inactive)'}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">Crash Restarts</div>
+                  <div className="font-mono font-bold text-amber-400 mt-1">{server?.startup?.crashCount || 0} / {startupConfig.maxCrashRestarts || 5}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">Last Started</div>
+                  <div className="font-mono text-zinc-300 text-[11px] mt-1 truncate">{server?.startup?.lastStartedAt ? new Date(server.startup.lastStartedAt).toLocaleTimeString() : 'N/A'}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">Last Stopped</div>
+                  <div className="font-mono text-zinc-300 text-[11px] mt-1 truncate">{server?.startup?.lastStoppedAt ? new Date(server.startup.lastStoppedAt).toLocaleTimeString() : 'N/A'}</div>
+                </div>
+              </div>
+
+              {server?.startup?.lastCrashReason && (
+                <div className="p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/20 text-[11px] text-rose-300 flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span><strong>Last Crash ({server.startup.lastCrashAt ? new Date(server.startup.lastCrashAt).toLocaleTimeString() : 'Recent'}):</strong> {server.startup.lastCrashReason}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Startup Command Dynamic Generator & Preview */}
+            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                  <TerminalIcon className="h-3.5 w-3.5 text-violet-400" /> Compiled Startup Execution Command
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400 font-medium uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-cyan-400">
+                  {isMinecraft ? 'Minecraft Java VM' : isPython ? 'Python Runtime' : isBun ? 'Bun Engine' : 'Node.js Runtime'}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 font-mono text-xs text-emerald-400 break-all select-all">
+                {isMinecraft
+                  ? `java -Xms${startupConfig.xmsMB || 128}M -Xmx${startupConfig.xmxMB || server?.limits?.ramMB || 1024}M ${startupFlags} -jar ${startupConfig.serverJar || 'server.jar'} ${startupConfig.nogui !== false ? 'nogui' : ''}`
+                  : isPython
+                  ? `${startupConfig.pythonExecutable || 'python3'} ${startupConfig.pythonUnbuffered !== false ? '-u' : ''} ${startupFlags} ${startupConfig.entryFile || 'main.py'}`
+                  : isBun
+                  ? `bun run ${startupFlags} ${startupConfig.entryFile || 'index.ts'}`
+                  : `node --max-old-space-size=${server?.limits?.ramMB || 512} ${startupConfig.nodeOptions || ''} ${startupFlags} ${startupConfig.entryFile || 'index.js'}`
+                }
+              </div>
+            </div>
+
+            {/* Runtime-Specific Configuration Parameters */}
+            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
+              <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-zinc-800/60 pb-2">
+                <Sliders className="h-3.5 w-3.5 text-amber-400" />
+                {isMinecraft ? 'Minecraft Java & Heap Allocation' : isPython ? 'Python Interpreter & Entry Settings' : isBun ? 'Bun Runtime Settings' : 'Node.js V8 Engine & Entry Settings'}
+              </h4>
+
+              {/* 1. MINECRAFT CONFIGURATION */}
+              {isMinecraft && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Initial Heap Allocation (-Xms MB)
+                      </label>
+                      <input
+                        type="number"
+                        min={64}
+                        step={64}
+                        value={startupConfig.xmsMB || 128}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, xmsMB: parseInt(e.target.value, 10) || 128 })}
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Max Heap Allocation (-Xmx MB)
+                      </label>
+                      <input
+                        type="number"
+                        min={256}
+                        step={128}
+                        max={server?.limits?.ramMB || 8192}
+                        value={startupConfig.xmxMB || server?.limits?.ramMB || 1024}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, xmxMB: parseInt(e.target.value, 10) || 1024 })}
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Server JAR File Name
+                      </label>
+                      <input
+                        type="text"
+                        value={startupConfig.serverJar || 'server.jar'}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, serverJar: e.target.value })}
+                        placeholder="server.jar"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Custom JVM Optimization Flags
+                    </label>
+                    <textarea
+                      value={startupFlags}
+                      onChange={(e) => setStartupFlags(e.target.value)}
+                      placeholder="-XX:+UseG1GC -XX:+ParallelRefProcEnabled"
+                      rows={2}
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 2. PYTHON CONFIGURATION */}
+              {isPython && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Application Entry File (.py)
+                      </label>
+                      <input
+                        type="text"
+                        value={startupConfig.entryFile || 'main.py'}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
+                        placeholder="main.py or bot.py"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Python Interpreter Binary
+                      </label>
+                      <input
+                        type="text"
+                        value={startupConfig.pythonExecutable || 'python3'}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, pythonExecutable: e.target.value })}
+                        placeholder="python3"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Custom Command Arguments & Flags
+                    </label>
+                    <input
+                      type="text"
+                      value={startupFlags}
+                      onChange={(e) => setStartupFlags(e.target.value)}
+                      placeholder="-u"
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3. BUN CONFIGURATION */}
+              {isBun && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                      Application Entry File (.ts or .js)
+                    </label>
+                    <input
+                      type="text"
+                      value={startupConfig.entryFile || 'index.ts'}
+                      onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
+                      placeholder="index.ts or main.ts"
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Custom Bun Command Flags
+                    </label>
+                    <input
+                      type="text"
+                      value={startupFlags}
+                      onChange={(e) => setStartupFlags(e.target.value)}
+                      placeholder="--watch"
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 4. NODE.JS CONFIGURATION */}
+              {isNode && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Application Entry File (.js)
+                      </label>
+                      <input
+                        type="text"
+                        value={startupConfig.entryFile || 'index.js'}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, entryFile: e.target.value })}
+                        placeholder="index.js or app.js"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Node Engine Options & V8 Flags
+                      </label>
+                      <input
+                        type="text"
+                        value={startupConfig.nodeOptions || ''}
+                        onChange={(e) => setStartupConfig({ ...startupConfig, nodeOptions: e.target.value })}
+                        placeholder="--max-old-space-size=1024"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Custom Command Arguments & Flags
+                    </label>
+                    <input
+                      type="text"
+                      value={startupFlags}
+                      onChange={(e) => setStartupFlags(e.target.value)}
+                      placeholder="--experimental-modules"
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-violet-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Lifecycle, Auto-Start & Crash Recovery */}
+            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
+              <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-zinc-800/60 pb-2">
+                <Shield className="h-3.5 w-3.5 text-blue-400" /> Automation & Crash Recovery Policies
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Auto-Start on Panel Boot</div>
+                    <div className="text-[11px] text-zinc-400">Start container automatically when AetherPanel daemon starts.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={startupConfig.autoStartOnBoot === true}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, autoStartOnBoot: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-800 border-zinc-700 text-violet-500 focus:ring-violet-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Auto-Start on Node Reconnect</div>
+                    <div className="text-[11px] text-zinc-400">Restart server when its host node daemon reconnects.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={startupConfig.autoStartOnNodeReconnect === true}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, autoStartOnNodeReconnect: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-800 border-zinc-700 text-violet-500 focus:ring-violet-500"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                    Auto-Restart Policy
+                  </label>
+                  <select
+                    value={startupConfig.autoRestartPolicy || 'on_crash'}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, autoRestartPolicy: e.target.value as any })}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white"
+                  >
+                    <option value="on_crash">Restart on Crash (Exit != 0)</option>
+                    <option value="always">Always Restart (Any Exit)</option>
+                    <option value="never">Never Auto-Restart</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                    Max Crash Restarts (15 min window)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={startupConfig.maxCrashRestarts || 5}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, maxCrashRestarts: parseInt(e.target.value, 10) || 5 })}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs font-mono text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                    Restart Delay (Seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={startupConfig.crashRestartDelaySeconds || 5}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, crashRestartDelaySeconds: parseInt(e.target.value, 10) || 5 })}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs font-mono text-white"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2431,24 +2960,12 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Startup JVM / Container Command Flags
-              </label>
-              <textarea
-                value={startupFlags}
-                onChange={(e) => setStartupFlags(e.target.value)}
-                rows={3}
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 p-3 text-xs font-mono text-violet-300"
-              />
-            </div>
-
             <div className="pt-2 flex justify-end">
               <button
                 onClick={handleSaveSettings}
-                className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md"
+                className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md flex items-center gap-1.5"
               >
-                Save Configuration
+                <Save className="h-4 w-4" /> Save Configuration
               </button>
             </div>
           </div>

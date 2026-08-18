@@ -58,7 +58,7 @@ export interface Plan {
   isActive: boolean;
 }
 
-export type ServerStatus = 'running' | 'stopped' | 'starting' | 'stopping' | 'installing' | 'error' | 'suspended';
+export type ServerStatus = 'running' | 'stopped' | 'starting' | 'stopping' | 'installing' | 'error' | 'suspended' | 'crashed';
 
 export type ServerDeploymentState = 
   | 'QUEUED' 
@@ -106,6 +106,7 @@ export interface ServerResourceLimits {
 export interface ServerStartupConfig {
   // General & Lifecycle
   startupCommand?: string;
+  compiledCommand?: string;
   customFlags?: string;
   autoStartOnBoot?: boolean;
   autoStartOnNodeReconnect?: boolean;
@@ -456,6 +457,7 @@ export interface BackupSettings {
 }
 
 export interface SystemSettings {
+  platformName?: string;
   brandName: string;
   brandTagline: string;
   supportEmail: string;
@@ -857,6 +859,50 @@ export interface InstallationPublicInfo {
   installedAt: string;
   version: string;
   systemName?: string;
+}
+
+export type UpdateAvailability = 'YES' | 'NO' | 'UNKNOWN';
+export type StepStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
+
+export interface UpdateStepState {
+  id: string;
+  name: string;
+  status: StepStatus;
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface PanelVersionInfo {
+  currentVersion: string;
+  channel: 'stable' | 'beta' | 'dev';
+  commitHash: string;
+  commitDate: string;
+  branch: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  uptimeSeconds: number;
+  latestVersion: string; // 'UNKNOWN' or real version
+  latestCommitHash: string; // 'UNKNOWN' or real commit hash
+  isUpdateAvailable: UpdateAvailability; // 'YES' | 'NO' | 'UNKNOWN'
+  upstreamReachable: boolean;
+  upstreamError?: string;
+  updateReleaseNotes: string;
+  lastCheckedAt: string;
+  isDirtyWorkingTree: boolean;
+  panelServiceStatus: 'HEALTHY' | 'DEGRADED' | 'STARTING';
+}
+
+export interface UpdateJobState {
+  status: 'idle' | 'in_progress' | 'completed' | 'failed';
+  currentStep: string;
+  progressPercent: number;
+  steps: UpdateStepState[];
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string;
+  logs: string[];
 }
 
 

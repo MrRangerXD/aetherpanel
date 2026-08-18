@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   LayoutDashboard, Server, PlusCircle, CreditCard, LifeBuoy,
-  Activity, Settings, LogOut, ShieldCheck, ChevronDown, Cpu, Sparkles, Coins, Store
+  Activity, Settings, LogOut, ShieldCheck, ChevronDown, Cpu, Sparkles, Coins
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useTheme } from '../lib/ThemeContext';
@@ -73,19 +73,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <LayoutDashboard className={`h-4 w-4 ${currentPage === 'dashboard' ? accentClasses.text : ''}`} />
             <span>Dashboard</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('marketplace')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'marketplace' ? 'bg-zinc-800/80 text-white font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <div className="flex items-center gap-3">
-              <Store className={`h-4 w-4 ${currentPage === 'marketplace' ? accentClasses.text : 'text-amber-400'}`} />
-              <span>Marketplace</span>
-            </div>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              NEW
-            </span>
           </button>
 
           <button

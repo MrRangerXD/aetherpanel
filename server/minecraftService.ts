@@ -85,89 +85,157 @@ function fetchJson<T>(url: string): Promise<T> {
   });
 }
 
-// Java Compatibility Resolver
-export function getRecommendedJavaVersion(minecraftVersion: string): number {
-  const clean = (minecraftVersion || '').replace(/[^0-9.]/g, '');
-  const parts = clean.split('.').map(p => parseInt(p, 10));
-  const major = parts[0] || 1;
-  const minor = parts[1] || 20;
-  const patch = parts[2] || 0;
+// Version-aware / numeric comparator function (sorts DESCENDING: highest/newest version first)
+export function compareMinecraftVersions(v1: string, v2: string): number {
+  if (v1 === v2) return 0;
 
-  if (major > 1 || minor > 20 || (minor === 20 && patch >= 5)) {
-    return 21; // Minecraft 1.20.5+ requires Java 21
+  // Clean strings of non-version characters (e.g., 'v1.21.11' -> '1.21.11')
+  const clean1 = v1.replace(/^v/i, '').trim();
+  const clean2 = v2.replace(/^v/i, '').trim();
+
+  // Split into chunks by dot or hyphen
+  const chunks1 = clean1.split(/[-.]/).map(c => (/^\d+$/.test(c) ? parseInt(c, 10) : c));
+  const chunks2 = clean2.split(/[-.]/).map(c => (/^\d+$/.test(c) ? parseInt(c, 10) : c));
+
+  const maxLen = Math.max(chunks1.length, chunks2.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const val1 = chunks1[i] !== undefined ? chunks1[i] : -1;
+    const val2 = chunks2[i] !== undefined ? chunks2[i] : -1;
+
+    if (typeof val1 === 'number' && typeof val2 === 'number') {
+      if (val1 !== val2) {
+        return val2 - val1; // Descending order (larger number comes first)
+      }
+    } else {
+      const str1 = String(val1);
+      const str2 = String(val2);
+      if (str1 !== str2) {
+        return str2.localeCompare(str1);
+      }
+    }
   }
-  if (minor >= 17) {
-    return 17; // Minecraft 1.17 - 1.20.4 requires Java 17
-  }
-  if (minor === 16) {
-    return 11; // Minecraft 1.16 can use Java 11 or 8
-  }
-  return 8; // Minecraft 1.8 - 1.15 requires Java 8
+
+  return 0;
 }
 
-// Fetch Paper versions from official PaperMC API
+// Java Compatibility Resolver
+export function getRecommendedJavaVersion(minecraftVersion: string): number {
+  if (!minecraftVersion || minecraftVersion === 'UNKNOWN') return 21;
+
+  const clean = minecraftVersion.replace(/^v/i, '').trim();
+  const parts = clean.split(/[-.]/).map(p => parseInt(p, 10));
+  const major = isNaN(parts[0]) ? 1 : parts[0];
+  const minor = parts[1] !== undefined && !isNaN(parts[1]) ? parts[1] : 0;
+  const patch = parts[2] !== undefined && !isNaN(parts[2]) ? parts[2] : 0;
+
+  // Paper 26.1+ / MC 26.x requires Java 25
+  if (major >= 26) {
+    return 25;
+  }
+  // Minecraft 1.20.5 through 1.21.x requires Java 21
+  if (major > 1 || minor > 20 || (minor === 20 && patch >= 5)) {
+    return 21;
+  }
+  // Minecraft 1.17 through 1.20.4 requires Java 17
+  if (minor >= 17) {
+    return 17;
+  }
+  // Minecraft 1.16 requires Java 11
+  if (minor === 16) {
+    return 11;
+  }
+  // Legacy (1.8.8 - 1.15.2) requires Java 8
+  return 8;
+}
+
+// Fetch Paper versions from official PaperMC Fill v3 API
 async function fetchPaperVersions(): Promise<{ versions: string[]; latest: string }> {
   try {
-    const res = await fetchJson<{ versions: string[] }>('https://api.papermc.io/v2/projects/paper');
-    if (res && Array.isArray(res.versions) && res.versions.length > 0) {
-      const reversed = [...res.versions].reverse();
-      return {
-        versions: reversed,
-        latest: reversed[0]
-      };
+    const res = await fetchJson<{
+      project?: { id: string; name: string };
+      versions?: Record<string, string[]>;
+    }>('https://fill.papermc.io/v3/projects/paper');
+
+    if (res && res.versions && typeof res.versions === 'object') {
+      const raw = Object.values(res.versions).flat();
+      // Filter out pre-releases, snapshots, release candidates (containing rc, pre, dev, snapshot, alpha, beta)
+      const stable = Array.from(new Set(raw.filter(v => !/-(rc|pre|dev|snapshot|alpha|beta)/i.test(v))));
+      if (stable.length > 0) {
+        stable.sort(compareMinecraftVersions);
+        return {
+          versions: stable,
+          latest: stable[0]
+        };
+      }
     }
   } catch (e) {
-    // Upstream fallback
+    // Upstream failure
   }
   return {
-    versions: FALLBACK_VERSIONS.paper,
-    latest: FALLBACK_VERSIONS.paper[0]
+    versions: [],
+    latest: 'UNKNOWN'
   };
 }
 
 // Fetch Purpur versions from PurpurMC API
 async function fetchPurpurVersions(): Promise<{ versions: string[]; latest: string }> {
   try {
-    const res = await fetchJson<{ versions: string[] }>('https://api.purpurmc.org/v2/purpur');
+    const res = await fetchJson<{
+      project?: string;
+      versions?: string[];
+      metadata?: { current?: string };
+    }>('https://api.purpurmc.org/v2/purpur');
+
     if (res && Array.isArray(res.versions) && res.versions.length > 0) {
-      const reversed = [...res.versions].reverse();
-      return {
-        versions: reversed,
-        latest: reversed[0]
-      };
+      const stable = Array.from(new Set(res.versions.filter(v => !/-(rc|pre|dev|snapshot|alpha|beta)/i.test(v))));
+      if (stable.length > 0) {
+        stable.sort(compareMinecraftVersions);
+        return {
+          versions: stable,
+          latest: stable[0]
+        };
+      }
     }
   } catch (e) {
-    // Upstream fallback
+    // Upstream failure
   }
   return {
-    versions: FALLBACK_VERSIONS.purpur,
-    latest: FALLBACK_VERSIONS.purpur[0]
+    versions: [],
+    latest: 'UNKNOWN'
   };
 }
 
 // Fetch Vanilla versions from official Mojang version manifest
 async function fetchVanillaVersions(): Promise<{ versions: string[]; latest: string }> {
   try {
-    const res = await fetchJson<{ latest: { release: string }; versions: Array<{ id: string; type: string }> }>(
-      'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
-    );
+    const res = await fetchJson<{
+      latest?: { release?: string };
+      versions?: Array<{ id: string; type: string }>;
+    }>('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
+
     if (res && Array.isArray(res.versions)) {
-      const releases = res.versions
-        .filter(v => v.type === 'release')
-        .map(v => v.id);
+      const releases = Array.from(
+        new Set(
+          res.versions
+            .filter(v => v.type === 'release' && !/-(rc|pre|dev|snapshot|alpha|beta)/i.test(v.id))
+            .map(v => v.id)
+        )
+      );
       if (releases.length > 0) {
+        releases.sort(compareMinecraftVersions);
         return {
-          versions: releases.slice(0, 30),
-          latest: res.latest?.release || releases[0]
+          versions: releases.slice(0, 50), // Return newest 50 stable releases
+          latest: releases[0]
         };
       }
     }
   } catch (e) {
-    // Fallback
+    // Upstream failure
   }
   return {
-    versions: FALLBACK_VERSIONS.vanilla,
-    latest: FALLBACK_VERSIONS.vanilla[0]
+    versions: [],
+    latest: 'UNKNOWN'
   };
 }
 
@@ -178,20 +246,27 @@ async function fetchFabricVersions(): Promise<{ versions: string[]; latest: stri
       'https://meta.fabricmc.net/v2/versions/game'
     );
     if (Array.isArray(res)) {
-      const stable = res.filter(v => v.stable).map(v => v.version);
+      const stable = Array.from(
+        new Set(
+          res
+            .filter(v => v.stable && !/-(rc|pre|dev|snapshot|alpha|beta)/i.test(v.version))
+            .map(v => v.version)
+        )
+      );
       if (stable.length > 0) {
+        stable.sort(compareMinecraftVersions);
         return {
-          versions: stable.slice(0, 30),
+          versions: stable.slice(0, 50),
           latest: stable[0]
         };
       }
     }
   } catch (e) {
-    // Fallback
+    // Upstream failure
   }
   return {
-    versions: FALLBACK_VERSIONS.fabric,
-    latest: FALLBACK_VERSIONS.fabric[0]
+    versions: [],
+    latest: 'UNKNOWN'
   };
 }
 
@@ -200,8 +275,13 @@ export async function getMinecraftVersions(software: string = 'paper'): Promise<
   const norm = (software || 'paper').toLowerCase().trim();
   const now = Date.now();
 
-  // Check memory cache
-  if (now - versionCache.timestamp < CACHE_TTL_MS && versionCache.data[norm]) {
+  // Check memory cache - only use cache if it was a successful (non-UNKNOWN) fetch
+  if (
+    now - versionCache.timestamp < CACHE_TTL_MS &&
+    versionCache.data[norm] &&
+    versionCache.data[norm].latest !== 'UNKNOWN' &&
+    versionCache.data[norm].versions.length > 0
+  ) {
     const cached = versionCache.data[norm];
     return {
       software: norm,
@@ -222,16 +302,19 @@ export async function getMinecraftVersions(software: string = 'paper'): Promise<
   } else if (norm.includes('fabric')) {
     result = await fetchFabricVersions();
   } else {
-    const fallbackList = FALLBACK_VERSIONS[norm] || FALLBACK_VERSIONS.paper;
+    // For other softs like forge/spigot, we default to vanilla releases or return UNKNOWN on network fail
+    const vanillaRes = await fetchVanillaVersions();
     result = {
-      versions: fallbackList,
-      latest: fallbackList[0]
+      versions: vanillaRes.versions,
+      latest: vanillaRes.latest
     };
   }
 
-  // Update Cache
-  versionCache.data[norm] = result;
-  versionCache.timestamp = now;
+  // Update Cache if successful, else do not cache bad values long
+  if (result.latest !== 'UNKNOWN' && result.versions.length > 0) {
+    versionCache.data[norm] = result;
+    versionCache.timestamp = now;
+  }
 
   return {
     software: norm,
@@ -306,8 +389,16 @@ export function downloadFile(url: string, destPath: string): Promise<boolean> {
 import { execSync } from 'child_process';
 
 // Java Runtime Checker
-export function checkJavaRuntime(requiredJava?: number): { available: boolean; installedVersion?: number; path?: string; message: string } {
+export function checkJavaRuntime(requiredJava?: number | string): { available: boolean; installedVersion?: number; path?: string; message: string } {
   try {
+    let reqNum: number | undefined;
+    if (typeof requiredJava === 'string') {
+      const parsed = parseInt(requiredJava.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(parsed)) reqNum = parsed;
+    } else if (typeof requiredJava === 'number') {
+      reqNum = requiredJava;
+    }
+
     let javaPath = '';
     try {
       javaPath = execSync('which java 2>/dev/null', { env: process.env, encoding: 'utf8' }).trim();
@@ -323,12 +414,12 @@ export function checkJavaRuntime(requiredJava?: number): { available: boolean; i
     const match = versionOutput.match(/(?:openjdk|java) version "(?:1\.)?(\d+)/i);
     const installedVersion = match ? parseInt(match[1], 10) : undefined;
 
-    if (requiredJava && installedVersion && installedVersion < requiredJava) {
+    if (reqNum && installedVersion && installedVersion < reqNum) {
       return {
         available: true,
         installedVersion,
         path: javaPath,
-        message: `Java ${installedVersion} is installed, but Java ${requiredJava}+ is recommended for this Minecraft version.`
+        message: `Java ${installedVersion} is installed, but Java ${reqNum}+ is recommended for this Minecraft version.`
       };
     }
 
@@ -360,15 +451,24 @@ export async function downloadMinecraftServerJar(
 
   try {
     if (norm.includes('paper')) {
-      // 1. Get latest build for version from PaperMC API
+      // 1. Get builds for version from PaperMC Fill v3 API
       const buildsData = await fetchJson<{ builds: number[] }>(
-        `https://api.papermc.io/v2/projects/paper/versions/${version}/builds`
+        `https://fill.papermc.io/v3/projects/paper/versions/${version}`
       );
       if (!buildsData || !buildsData.builds || buildsData.builds.length === 0) {
         throw new Error(`No builds found for Paper version ${version}`);
       }
-      const latestBuild = buildsData.builds[buildsData.builds.length - 1];
-      const downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild}/downloads/paper-${version}-${latestBuild}.jar`;
+      const latestBuild = Math.max(...buildsData.builds);
+
+      // 2. Query build detail to get safe object CDN URL
+      const buildDetail = await fetchJson<{ downloads?: { 'server:default'?: { url?: string } } }>(
+        `https://fill.papermc.io/v3/projects/paper/versions/${version}/builds/${latestBuild}`
+      );
+      const downloadUrl = buildDetail?.downloads?.['server:default']?.url;
+      if (!downloadUrl) {
+        throw new Error(`No download URL available for Paper build #${latestBuild}`);
+      }
+
       appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading Paper build #${latestBuild} from PaperMC CDN...`);
       await downloadFile(downloadUrl, targetJar);
       appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: Paper ${version} build #${latestBuild} downloaded successfully.`);

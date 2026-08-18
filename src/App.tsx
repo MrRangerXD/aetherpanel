@@ -30,7 +30,6 @@ import { Register } from './pages/auth/Register';
 
 // Customer Pages
 import { Dashboard } from './pages/customer/Dashboard';
-import { Marketplace } from './pages/customer/Marketplace';
 import { ServerDeployWizard } from './pages/customer/ServerDeployWizard';
 import { ServerManage } from './pages/server/ServerManage';
 import { ServersList } from './pages/customer/ServersList';
@@ -55,10 +54,8 @@ import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminAds } from './pages/admin/AdminAds';
 import { AdminRewards } from './pages/admin/AdminRewards';
 import { AdminAppearance } from './pages/admin/AdminAppearance';
-import { AdminTemplates } from './pages/admin/AdminTemplates';
 import { AdminBackups } from './pages/admin/AdminBackups';
 import { AdminDiscord } from './pages/admin/AdminDiscord';
-import { AdminMarketplace } from './pages/admin/AdminMarketplace';
 import { AdminMonitoring } from './pages/admin/AdminMonitoring';
 import { AdminLegal } from './pages/admin/AdminLegal';
 
@@ -236,12 +233,10 @@ function AppContent() {
           {currentPage === 'dashboard' && (
             <div className="space-y-6">
               <AdBanner placement="dashboard" />
-              <Dashboard onNavigate={handleNavigate} />
-            </div>
-          )}
-          {currentPage === 'marketplace' && (
-            <div className="space-y-6">
-              <Marketplace onNavigate={handleNavigate} />
+              <Dashboard
+                onNavigate={handleNavigate}
+                onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+              />
             </div>
           )}
           {currentPage === 'servers' && (
@@ -274,7 +269,6 @@ function AppContent() {
           {currentPage === 'admin-users' && <AdminUsers />}
           {currentPage === 'admin-servers' && <AdminServers />}
           {currentPage === 'admin-products' && <AdminProducts />}
-          {currentPage === 'admin-templates' && <AdminTemplates />}
           {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
           {currentPage === 'admin-nodes' && <AdminNodes />}
           {currentPage === 'admin-monitoring' && <AdminMonitoring />}
@@ -289,7 +283,6 @@ function AppContent() {
           {currentPage === 'admin-ads' && <AdminAds />}
           {currentPage === 'admin-rewards' && <AdminRewards />}
           {currentPage === 'admin-discord' && <AdminDiscord />}
-          {currentPage === 'admin-marketplace' && <AdminMarketplace />}
           {currentPage === 'admin-appearance' && <AdminAppearance />}
           </div>
 

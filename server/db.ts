@@ -269,242 +269,7 @@ const defaultTemplates: ServerTemplate[] = [
   }
 ];
 
-const defaultMarketplaceItems: MarketplaceItem[] = [
-  {
-    id: 'mkt_mc_paper_120',
-    slug: 'paper-minecraft-1204',
-    name: 'Paper MC 1.20.4 High Performance',
-    description: 'Ultra-optimized Paper Spigot server ready for high player counts, plugins, and custom datapacks.',
-    longDescription: 'Paper is a high-performance Minecraft server software designed to fix security, gameplay and performance exploits while providing high compatibility with Spigot and Bukkit plugins.',
-    category: 'minecraft',
-    icon: 'Gamepad2',
-    bannerUrl: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=600&auto=format&fit=crop&q=80',
-    author: 'AetherPanel Core',
-    badge: 'official',
-    version: '1.20.4-v2',
-    changelog: 'Updated Paper build to #496 with Java 21 runtime flags.',
-    compatibility: 'Minecraft 1.20.x, Spigot/Paper plugins, All Nodes',
-    requirements: {
-      minRamMB: 2048,
-      minCpuCores: 1,
-      minDiskGB: 15,
-      notes: 'Recommended 4GB RAM for 15+ simultaneous players.'
-    },
-    installType: 'template_deploy',
-    templateId: 'tpl_mc_paper',
-    startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar server.jar nogui',
-    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '1.20.4', SERVER_PORT: '{PORT}' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: true,
-    securityValidated: true,
-    securityNotes: 'Verified official Paper build source. Safe JVM launch args.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_mc_purpur_extreme',
-    slug: 'purpur-extreme-tps',
-    name: 'Purpur Extreme TPS Optimization Engine',
-    description: 'Drop-in Paper replacement with specialized TPS optimizations and custom gameplay mechanics.',
-    longDescription: 'Purpur is a fork of Paper focused on extreme performance optimizations, customizable entity tick ratios, and enhanced API capabilities.',
-    category: 'minecraft',
-    icon: 'Zap',
-    bannerUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-    author: 'PurpurMC Community',
-    badge: 'verified',
-    version: '1.20.4-p2',
-    changelog: 'Added AI tick throttle presets and auto-lag recovery.',
-    compatibility: 'Minecraft 1.20.x, Paper & Bukkit Plugins',
-    requirements: {
-      minRamMB: 4096,
-      minCpuCores: 2,
-      minDiskGB: 25,
-      notes: 'Optimal for heavy survival servers with custom mobs.'
-    },
-    installType: 'template_deploy',
-    templateId: 'tpl_mc_purpur',
-    startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar purpur.jar nogui',
-    environmentVars: { EULA: 'true', PURPUR_VERSION: '1.20.4', SERVER_PORT: '{PORT}' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: true,
-    securityValidated: true,
-    securityNotes: 'Scanned binary hash verified against PurpurMC repository.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_bot_discord_mod',
-    slug: 'discord-moderation-music-bot',
-    name: 'Discord.js v14 Moderation & Music Suite',
-    description: 'Turnkey Discord bot with slash commands, auto-moderation, level system, and high quality audio player.',
-    longDescription: 'Complete Node.js Discord bot template with modular command handlers, SQLite storage, voice channel audio streaming, and ticket support system.',
-    category: 'bot',
-    icon: 'Bot',
-    bannerUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-    author: 'AetherPanel Labs',
-    badge: 'official',
-    version: '2.4.0',
-    changelog: 'Upgraded to discord.js v14.14 with embed builders.',
-    compatibility: 'Node.js 20+, Discord REST API v10',
-    requirements: {
-      minRamMB: 1024,
-      minCpuCores: 1,
-      minDiskGB: 5,
-      notes: 'Requires Discord Bot Token from Discord Developer Portal.'
-    },
-    installType: 'template_deploy',
-    templateId: 'tpl_bot_discordjs',
-    startupCommand: 'npm start',
-    environmentVars: { DISCORD_TOKEN: '', CLIENT_ID: '', NODE_ENV: 'production' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: true,
-    securityValidated: true,
-    securityNotes: 'Validated npm lockfile. Secrets stored in process environment variables.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_bot_python_telethon',
-    slug: 'python-telegram-automation-bot',
-    name: 'Python Telethon Automation & Channel Bot',
-    description: 'Python 3.11 bot powered by Telethon & Asyncio for managing Telegram groups and channels.',
-    longDescription: 'High performance Telegram userbot / bot framework with command router, message scheduler, media downloader, and admin dashboard integrations.',
-    category: 'bot',
-    icon: 'Terminal',
-    author: 'PyTelegram Devs',
-    badge: 'verified',
-    version: '1.8.2',
-    changelog: 'Added async session reconnect watchdog.',
-    compatibility: 'Python 3.10+, Telegram API',
-    requirements: {
-      minRamMB: 1024,
-      minCpuCores: 1,
-      minDiskGB: 5
-    },
-    installType: 'template_deploy',
-    templateId: 'tpl_bot_python',
-    startupCommand: 'python3 main.py',
-    environmentVars: { API_ID: '', API_HASH: '', BOT_TOKEN: '' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: false,
-    securityValidated: true,
-    securityNotes: 'Clean python source code. No unverified binary imports.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_tpl_express_ws',
-    slug: 'nodejs-express-websocket-template',
-    name: 'Node.js 20 Express & WebSockets App',
-    description: 'Production-ready Node.js full-stack application template with Express, ws WebSockets, and health checks.',
-    longDescription: 'Clean backend architecture with CORS, rate limiting, structured logging, health endpoints, and graceful shutdown handlers.',
-    category: 'template',
-    icon: 'Cpu',
-    author: 'AetherPanel Staff',
-    badge: 'official',
-    version: '1.5.0',
-    changelog: 'Added ESM module support and custom middleware pipeline.',
-    compatibility: 'Node 18+, Node 20+, All Nodes',
-    requirements: {
-      minRamMB: 1024,
-      minCpuCores: 1,
-      minDiskGB: 5
-    },
-    installType: 'template_deploy',
-    templateId: 'tpl_bot_nodejs',
-    startupCommand: 'node index.js',
-    environmentVars: { NODE_ENV: 'production', PORT: '{PORT}' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: true,
-    securityValidated: true,
-    securityNotes: 'Sandboxed Node.js environment with non-root runtime target.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_tool_backup_sync',
-    slug: 's3-auto-sync-backup-tool',
-    name: 'Server Backup & S3 Cloud Sync Tool',
-    description: 'Automated script utility to archive server worlds/files and upload directly to S3 / Cloud storage.',
-    longDescription: 'Lightweight shell & python utility that compresses server state, calculates SHA256 checksums, and syncs to S3 bucket or remote node storage.',
-    category: 'tool',
-    icon: 'Archive',
-    author: 'AetherPanel DevOps',
-    badge: 'official',
-    version: '1.2.0',
-    changelog: 'Added multi-part zip compression and progress logging.',
-    compatibility: 'Minecraft, Node, Python, All Server Types',
-    requirements: {
-      minRamMB: 512,
-      minCpuCores: 1,
-      minDiskGB: 2,
-      notes: 'Requires S3 Access Keys or Local Backup permission.'
-    },
-    installType: 'resource_install',
-    startupCommand: 'python3 s3_backup.py',
-    environmentVars: { S3_BUCKET: '', S3_REGION: '', RETENTION_DAYS: '7' },
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: false,
-    securityValidated: true,
-    securityNotes: 'Restricted script runtime. No elevated sudo privileges needed.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'mkt_util_rcon_cli',
-    slug: 'rcon-cli-manager',
-    name: 'RCON Command & Automation Manager',
-    description: 'Interactive CLI and web utility for executing batch RCON commands across Minecraft servers.',
-    longDescription: 'Utility tool for server operators to schedule automated announcements, item give commands, or broadcast alerts via RCON protocol.',
-    category: 'utility',
-    icon: 'Terminal',
-    author: 'AetherPanel Utility',
-    badge: 'official',
-    version: '1.0.1',
-    changelog: 'Initial official release.',
-    compatibility: 'Minecraft Paper / Spigot / Forge / Bedrock RCON',
-    requirements: {
-      minRamMB: 256,
-      minCpuCores: 0.5,
-      minDiskGB: 1
-    },
-    installType: 'resource_install',
-    downloadsCount: 0,
-    rating: 0,
-    reviewsCount: 0,
-    reviews: [],
-    status: 'active',
-    isFeatured: false,
-    securityValidated: true,
-    securityNotes: 'Encrypted RCON credentials in local memory.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
+
 
 export const defaultStatusComponents: StatusComponent[] = [
   {
@@ -905,6 +670,7 @@ export async function getDb(): Promise<DatabaseSchema> {
       }
       if (!dbCache!.settings) {
         dbCache!.settings = {
+          platformName: 'AetherPanel',
           brandName: 'AetherPanel',
           brandTagline: 'Next-Generation Cloud Platform',
           supportEmail: 'support@aetherpanel.com',
@@ -918,6 +684,9 @@ export async function getDb(): Promise<DatabaseSchema> {
           defaultTheme: 'dark',
           accentColor: '#8b5cf6'
         };
+      }
+      if (!dbCache!.settings.platformName) {
+        dbCache!.settings.platformName = dbCache!.settings.brandName || 'AetherPanel';
       }
       if (!dbCache!.settings.paymentGateways) {
         dbCache!.settings.paymentGateways = {
@@ -1045,42 +814,28 @@ export async function getDb(): Promise<DatabaseSchema> {
         if (!n.lastHeartbeatAt) n.lastHeartbeatAt = new Date().toISOString();
       });
 
-      if (!dbCache!.marketplaceItems || dbCache!.marketplaceItems.length === 0) {
-        dbCache!.marketplaceItems = defaultMarketplaceItems;
-      }
-      if (!dbCache!.statusComponents || dbCache!.statusComponents.length === 0) {
-        dbCache!.statusComponents = defaultStatusComponents;
-      }
-      if (!dbCache!.incidents) {
-        dbCache!.incidents = defaultIncidents;
-      }
-      if (!dbCache!.scheduledMaintenances) {
-        dbCache!.scheduledMaintenances = defaultScheduledMaintenances;
-      }
-      if (!dbCache!.alertRules || dbCache!.alertRules.length === 0) {
-        dbCache!.alertRules = defaultAlertRules;
-      }
-      if (!dbCache!.alertIncidents) {
-        dbCache!.alertIncidents = [];
-      }
-      if (!dbCache!.telemetryHistory) {
-        dbCache!.telemetryHistory = {};
-      }
-      if (!dbCache!.apiKeys) {
-        dbCache!.apiKeys = [];
-      }
-      if (!dbCache!.webhooks) {
-        dbCache!.webhooks = [];
-      }
-      if (!dbCache!.legalPages || dbCache!.legalPages.length === 0) {
-        dbCache!.legalPages = defaultLegalPages;
+      // Templates and Marketplace are completely removed
+      dbCache!.templates = [];
+      dbCache!.marketplaceItems = [];
+
+      // Strict Data Isolation Check across VPS environments
+      const currentInstId = getInstallationId();
+
+      // If dbCache installationId exists and is different from current VPS installationId, purge stale cross-VPS database and files
+      if (dbCache!.installationId && dbCache!.installationId !== currentInstId) {
+        console.warn(`[AetherPanel Isolation]: Detected DB state from another installation (${dbCache!.installationId}). Purging stale cross-VPS database and files for new installation (${currentInstId}).`);
+        const serversDir = path.join(DATA_DIR, 'servers');
+        if (fs.existsSync(serversDir)) {
+          fs.rmSync(serversDir, { recursive: true, force: true });
+          fs.mkdirSync(serversDir, { recursive: true });
+        }
+        dbCache = await generateInitialDb();
+        saveDbSync();
+        createDbSnapshot();
+        return dbCache;
       }
 
-      // Ensure installationId is attached to all resources in this installation
-      const currentInstId = getInstallationId();
-      if (!dbCache!.installationId) {
-        dbCache!.installationId = currentInstId;
-      }
+      dbCache!.installationId = currentInstId;
 
       dbCache!.users.forEach(u => {
         if (!u.installationId) u.installationId = currentInstId;
@@ -1089,7 +844,7 @@ export async function getDb(): Promise<DatabaseSchema> {
         if (!n.installationId) n.installationId = currentInstId;
       });
       dbCache!.servers.forEach(s => {
-        if (!s.installationId) s.installationId = currentInstId;
+        s.installationId = currentInstId;
       });
       dbCache!.allocations.forEach(a => {
         if (!a.installationId) a.installationId = currentInstId;
@@ -1508,6 +1263,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
   ];
 
   const settings: SystemSettings = {
+    platformName: 'AetherPanel',
     brandName: 'AetherPanel',
     brandTagline: 'Next-Generation Cloud Platform for Minecraft & Bot Infrastructure',
     supportEmail: 'support@aetherpanel.com',
@@ -1577,7 +1333,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     products,
     plans,
     servers: [],
-    templates: defaultTemplates,
+    templates: [],
     locations: defaultLocations,
     nodes,
     nodeInstallTokens: [],
@@ -1607,7 +1363,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       weeklyMaxCredits: 500,
       minAccountAgeDays: 0
     },
-    marketplaceItems: defaultMarketplaceItems,
+    marketplaceItems: [],
     statusComponents: defaultStatusComponents,
     incidents: defaultIncidents,
     scheduledMaintenances: defaultScheduledMaintenances,
