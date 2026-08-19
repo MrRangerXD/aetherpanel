@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { getDb, saveDbSync } from './db';
 import { User, UserRole, AuditLog } from '../src/types';
 
@@ -48,7 +49,7 @@ export async function verifyToken(token: string): Promise<User | null> {
 const apiRateLimits = new Map<string, { count: number, resetAt: number }>();
 const MAX_REQUESTS_PER_MINUTE = 60;
 
-function checkRateLimit(apiKeyId: string): boolean {
+export function checkRateLimit(apiKeyId: string): boolean {
   const now = Date.now();
   const record = apiRateLimits.get(apiKeyId);
   
@@ -76,7 +77,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   if (!token && req.headers['x-api-key']) {
     token = req.headers['x-api-key'] as string;
     isApiKey = true;
-  } else if (token && token.startsWith('aeth_live_')) {
+  } else if (token && (token.startsWith('aeth_live_') || token.startsWith('aeth_sec_') || token.startsWith('aeth_'))) {
     isApiKey = true;
   }
 
@@ -85,7 +86,6 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   }
 
   if (isApiKey) {
-    const crypto = require('crypto');
     const keyHash = crypto.createHash('sha256').update(token).digest('hex');
     const db = await getDb();
     
@@ -158,6 +158,29 @@ export function requireRole(allowedRoles: UserRole[]) {
     }
 
     next();
+  };
+}
+
+export function requireApiKeyScope(requiredScope: string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const apiKey = (req as any).apiKey;
+    if (!apiKey) return next();
+
+    const scopes: string[] = apiKey.scopes || [];
+    const singularScope = requiredScope.replace('servers:', 'server:').replace('files:', 'file:').replace('backups:', 'backup:');
+    const pluralScope = requiredScope.replace('server:', 'servers:').replace('file:', 'files:').replace('backup:', 'backups:');
+
+    if (scopes.includes('*') || scopes.includes('admin') || scopes.includes(requiredScope) || scopes.includes(singularScope) || scopes.includes(pluralScope)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN_SCOPE',
+        message: `API key lacks required scope '${requiredScope}'.`
+      }
+    });
   };
 }
 

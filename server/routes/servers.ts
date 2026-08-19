@@ -5,7 +5,7 @@ import multer from 'multer';
 import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { parseEnvContent, mergeEnvVariables, serializeEnvLines, EnvLine } from '../utils/envHelper';
-import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
+import { authMiddleware, requireApiKeyScope, AuthenticatedRequest, createAuditLog } from '../auth';
 import {
   startServer, stopServer, restartServer, reinstallServer, killServer,
   validateServerPreflight,
@@ -79,14 +79,14 @@ async function checkServerAccess(req: AuthenticatedRequest, res: Response, serve
 }
 
 // GET /api/v1/servers - List user's servers
-router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authMiddleware, requireApiKeyScope('servers:read'), async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const userServers = db.servers.filter(s => s.userId === req.user!.id);
   res.json({ success: true, data: userServers });
 });
 
 // GET /api/v1/servers/:id - Server details
-router.get('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -121,7 +121,7 @@ router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: R
 });
 
 // POST /api/v1/servers/:id/power - Power actions
-router.post('/:id/power', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/power', authMiddleware, requireApiKeyScope('servers:control'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -240,7 +240,7 @@ router.post('/:id/command', authMiddleware, async (req: AuthenticatedRequest, re
 });
 
 // GET /api/v1/servers/:id/files - List files
-router.get('/:id/files', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id/files', authMiddleware, requireApiKeyScope('files:read'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -254,7 +254,7 @@ router.get('/:id/files', authMiddleware, async (req: AuthenticatedRequest, res: 
 });
 
 // GET /api/v1/servers/:id/files/content - Read file
-router.get('/:id/files/content', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id/files/content', authMiddleware, requireApiKeyScope('files:read'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -270,7 +270,7 @@ router.get('/:id/files/content', authMiddleware, async (req: AuthenticatedReques
 });
 
 // POST /api/v1/servers/:id/files/content - Write file
-router.post('/:id/files/content', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/files/content', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -286,7 +286,7 @@ router.post('/:id/files/content', authMiddleware, async (req: AuthenticatedReque
 });
 
 // DELETE /api/v1/servers/:id/files - Delete file or folder
-router.delete('/:id/files', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id/files', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 

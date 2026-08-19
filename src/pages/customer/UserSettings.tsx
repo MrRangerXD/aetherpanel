@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   User, Key, Shield, Check, Copy, RefreshCw, Save, Sparkles,
   MousePointer, Palette, MessageSquare, Link, Unlink, ExternalLink,
-  Plus, Trash2, Globe, Send, AlertCircle, Radio, Terminal
+  Plus, Trash2, Globe, Send, AlertCircle, Radio, Terminal, ShieldCheck,
+  CheckCircle2, Lock
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
@@ -15,12 +16,21 @@ export const UserSettings: React.FC = () => {
     accent, setAccent,
     customCursorEnabled, setCustomCursorEnabled,
     animationsEnabled, setAnimationsEnabled,
-    adsEnabled, setAdsEnabled
+    adsEnabled, setAdsEnabled,
+    activeThemeId, setActiveThemeId,
+    activeFontId, setActiveFontId
   } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Password Update
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMsg, setPasswordMsg] = useState<{ success: boolean; text: string } | null>(null);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   // Discord State
   const [discordAccount, setDiscordAccount] = useState<DiscordAccount | null>(null);
@@ -33,6 +43,7 @@ export const UserSettings: React.FC = () => {
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyExpiry, setNewKeyExpiry] = useState('30');
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['server:read', 'server:write', 'server:control']);
   const [generatingKey, setGeneratingKey] = useState(false);
   const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
@@ -104,7 +115,8 @@ export const UserSettings: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           name: newKeyName.trim(),
-          expiresInDays: Number(newKeyExpiry)
+          expiresInDays: Number(newKeyExpiry),
+          scopes: selectedScopes
         })
       });
       if (res.success && res.data) {
@@ -120,9 +132,20 @@ export const UserSettings: React.FC = () => {
   };
 
   const handleDeleteApiKey = async (id: string) => {
-    if (!confirm('Are you sure you want to revoke this API key? Applications using it will immediately lose access.')) return;
+    if (!confirm('Are you sure you want to revoke and delete this API key? Applications using it will immediately lose access.')) return;
     try {
       const res = await apiRequest(`/api-keys/${id}`, { method: 'DELETE' });
+      if (res.success) {
+        fetchApiKeys();
+      }
+    } catch (err: any) {
+      alert(`Failed to delete key: ${err.message}`);
+    }
+  };
+
+  const handleRevokeApiKey = async (id: string) => {
+    try {
+      const res = await apiRequest(`/api-keys/${id}/revoke`, { method: 'POST' });
       if (res.success) {
         fetchApiKeys();
       }
@@ -150,20 +173,9 @@ export const UserSettings: React.FC = () => {
         fetchWebhooks();
       }
     } catch (err: any) {
-      alert(`Webhook creation failed: ${err.message}`);
+      alert(`Webhook registration failed: ${err.message}`);
     } finally {
       setCreatingWebhook(false);
-    }
-  };
-
-  const handleToggleWebhook = async (id: string) => {
-    try {
-      const res = await apiRequest(`/api-keys/webhooks/${id}/toggle`, { method: 'PATCH' });
-      if (res.success) {
-        fetchWebhooks();
-      }
-    } catch (err: any) {
-      alert(`Failed to toggle webhook: ${err.message}`);
     }
   };
 
@@ -171,19 +183,17 @@ export const UserSettings: React.FC = () => {
     setTestingId(id);
     setTestResult(null);
     try {
-      const res = await apiRequest<any>(`/api-keys/webhooks/${id}/test`, {
-        method: 'POST'
-      });
+      const res = await apiRequest(`/api-keys/webhooks/${id}/test`, { method: 'POST' });
       setTestResult({
         id,
-        msg: res.message || (res.success ? 'Delivered successfully!' : 'Delivery failed'),
+        msg: res.message || 'Webhook ping executed.',
         success: res.success
       });
       fetchWebhooks();
     } catch (err: any) {
       setTestResult({
         id,
-        msg: `Test failed: ${err.message}`,
+        msg: `Test ping error: ${err.message}`,
         success: false
       });
     } finally {
@@ -192,7 +202,7 @@ export const UserSettings: React.FC = () => {
   };
 
   const handleDeleteWebhook = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this webhook endpoint?')) return;
+    if (!confirm('Are you sure you want to remove this webhook subscription?')) return;
     try {
       const res = await apiRequest(`/api-keys/webhooks/${id}`, { method: 'DELETE' });
       if (res.success) {
@@ -208,6 +218,35 @@ export const UserSettings: React.FC = () => {
       setConnectingDiscord(true);
       setDiscordNotice(null);
 
+      // Check if real Discord OAuth URL is configured
+      const urlRes = await apiRequest('/auth/discord/url');
+      if (urlRes.success && urlRes.data?.url) {
+        const width = 500;
+        const height = 750;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+
+        const popup = window.open(
+          urlRes.data.url,
+          'DiscordAuthPopup',
+          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+        );
+
+        if (popup) {
+          const handleMsg = (event: MessageEvent) => {
+            if (event.data?.type === 'DISCORD_AUTH_SUCCESS') {
+              window.removeEventListener('message', handleMsg);
+              fetchDiscordStatus();
+              refreshUser();
+              setDiscordNotice('Discord account authorized and connected successfully!');
+            }
+          };
+          window.addEventListener('message', handleMsg);
+          return;
+        }
+      }
+
+      // Fallback direct linking
       const res = await apiRequest<DiscordAccount>('/discord/user/connect', {
         method: 'POST',
         body: JSON.stringify({
@@ -235,6 +274,7 @@ export const UserSettings: React.FC = () => {
       await apiRequest('/discord/user/disconnect', { method: 'DELETE' });
       setDiscordAccount(null);
       setDiscordNotice('Discord account unlinked.');
+      refreshUser();
     } catch (err: any) {
       setDiscordNotice(`Disconnection failed: ${err.message}`);
     } finally {
@@ -251,6 +291,37 @@ export const UserSettings: React.FC = () => {
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
     await refreshUser();
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (newPassword.length < 6) {
+      setPasswordMsg({ success: false, text: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ success: false, text: 'New passwords do not match.' });
+      return;
+    }
+
+    setUpdatingPassword(true);
+    const res = await apiRequest('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    setUpdatingPassword(false);
+
+    if (res.success) {
+      setPasswordMsg({ success: true, text: 'Password successfully updated!' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      setPasswordMsg({ success: false, text: res.error?.message || 'Failed to update password.' });
+    }
   };
 
   const handleCopy = (text: string) => {
@@ -277,7 +348,7 @@ export const UserSettings: React.FC = () => {
       {/* Profile Form */}
       <form onSubmit={handleSaveProfile} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <User className="h-4 w-4 text-violet-400" /> Personal Profile
+          <User className="h-4 w-4 text-amber-400" /> Personal Profile
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -287,7 +358,7 @@ export const UserSettings: React.FC = () => {
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
           </div>
 
@@ -297,7 +368,7 @@ export const UserSettings: React.FC = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
           </div>
         </div>
@@ -305,9 +376,71 @@ export const UserSettings: React.FC = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-2"
+            className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2"
           >
             <Save className="h-4 w-4" /> Save Profile
+          </button>
+        </div>
+      </form>
+
+      {/* Change Password Form */}
+      <form onSubmit={handleChangePassword} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <Lock className="h-4 w-4 text-amber-400" /> Security & Password
+        </h3>
+
+        {passwordMsg && (
+          <div className={`p-3.5 rounded-xl text-xs font-semibold ${
+            passwordMsg.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+          }`}>
+            {passwordMsg.text}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">New Password</label>
+            <input
+              type="password"
+              required
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Min 6 characters"
+              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat new password"
+              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={updatingPassword}
+            className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-2 disabled:opacity-50"
+          >
+            <Key className="h-4 w-4" /> {updatingPassword ? 'Updating...' : 'Update Password'}
           </button>
         </div>
       </form>
@@ -379,38 +512,38 @@ export const UserSettings: React.FC = () => {
         )}
       </div>
 
-      {/* PHASE 8: REAL REST API KEYS */}
+      {/* REST API KEYS */}
       <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Key className="h-4 w-4 text-cyan-400" /> REST API Keys
+              <Key className="h-4 w-4 text-amber-400" /> REST API Keys
             </h3>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Authenticate programmatic API calls to the AetherPanel Control Plane via <code className="text-cyan-400 font-mono">Authorization: Bearer aeth_live_...</code>
+              Authenticate programmatic API calls to the AetherPanel Control Plane via <code className="text-amber-400 font-mono">Authorization: Bearer aeth_sec_...</code>
             </p>
           </div>
         </div>
 
         {/* Revealed Key Alert */}
         {revealedKey && (
-          <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-500/40 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
+          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
               <Sparkles className="h-4 w-4" /> New API Key Generated: {revealedKey.name}
             </div>
-            <p className="text-[11px] text-cyan-200/80">
-              Make sure to copy your API key now. You will not be able to see it again!
+            <p className="text-[11px] text-amber-200/80">
+              Make sure to copy your API key now. For your security, this secret token will not be displayed again!
             </p>
             <div className="flex items-center gap-2 mt-2">
               <input
                 type="text"
                 readOnly
                 value={revealedKey.key}
-                className="flex-1 rounded-xl bg-zinc-950 border border-cyan-500/40 px-3.5 py-2 text-xs font-mono text-cyan-300 selection:bg-cyan-500 selection:text-black"
+                className="flex-1 rounded-xl bg-zinc-950 border border-amber-500/40 px-3.5 py-2 text-xs font-mono text-amber-300 selection:bg-amber-500 selection:text-black"
               />
               <button
                 onClick={() => handleCopy(revealedKey.key)}
-                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition"
               >
                 {copiedKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copiedKey ? 'Copied!' : 'Copy Key'}</span>
@@ -420,25 +553,25 @@ export const UserSettings: React.FC = () => {
         )}
 
         {/* Generate Key Form */}
-        <form onSubmit={handleCreateApiKey} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Key Description / Purpose</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. CI/CD Deployment Script, WHMCS Billing, CLI Tool"
-              value={newKeyName}
-              onChange={e => setNewKeyName(e.target.value)}
-              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Expiration Period</label>
-            <div className="flex gap-2">
+        <form onSubmit={handleCreateApiKey} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Key Description / Purpose</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. CI/CD Deployment Script, WHMCS Billing, CLI Tool"
+                value={newKeyName}
+                onChange={e => setNewKeyName(e.target.value)}
+                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Expiration Period</label>
               <select
                 value={newKeyExpiry}
                 onChange={e => setNewKeyExpiry(e.target.value)}
-                className="flex-1 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white"
+                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
               >
                 <option value="7">7 Days</option>
                 <option value="30">30 Days</option>
@@ -446,14 +579,49 @@ export const UserSettings: React.FC = () => {
                 <option value="365">1 Year</option>
                 <option value="0">Never Expires</option>
               </select>
-              <button
-                type="submit"
-                disabled={generatingKey}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1.5 shrink-0"
-              >
-                <Plus className="h-3.5 w-3.5" /> Generate
-              </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">Scope Permissions</label>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {[
+                { id: 'server:read', label: 'Read Servers' },
+                { id: 'server:write', label: 'Write / Edit Servers' },
+                { id: 'server:control', label: 'Power Controls (Start/Stop)' },
+                { id: 'files:read', label: 'File Manager Read' },
+                { id: 'files:write', label: 'File Manager Write' },
+                { id: 'backups:manage', label: 'Backups' }
+              ].map(scope => {
+                const isSelected = selectedScopes.includes(scope.id);
+                return (
+                  <button
+                    key={scope.id}
+                    type="button"
+                    onClick={() => setSelectedScopes(prev =>
+                      isSelected ? prev.filter(s => s !== scope.id) : [...prev, scope.id]
+                    )}
+                    className={`px-3 py-1 rounded-xl text-[11px] font-medium border transition-all ${
+                      isSelected
+                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {scope.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={generatingKey}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-xs font-bold text-zinc-950 flex items-center gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" /> Generate Key
+            </button>
           </div>
         </form>
 
@@ -471,11 +639,16 @@ export const UserSettings: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-white">{k.name}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-cyan-400">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-amber-400">
                       {k.keyPrefix}
                     </span>
+                    <span className={`text-[9px] font-mono uppercase px-1.5 py-0.2 rounded ${
+                      k.status === 'revoked' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    }`}>
+                      {k.status || 'active'}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                     <span>Created: {new Date(k.createdAt).toLocaleDateString()}</span>
                     <span>•</span>
                     <span>Expires: {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : 'Never'}</span>
@@ -487,19 +660,29 @@ export const UserSettings: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDeleteApiKey(k.id)}
-                  className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1 transition"
-                >
-                  <Trash2 className="h-3 w-3" /> Revoke
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {k.status !== 'revoked' && (
+                    <button
+                      onClick={() => handleRevokeApiKey(k.id)}
+                      className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition"
+                    >
+                      Revoke
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteApiKey(k.id)}
+                    className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1 transition"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete
+                  </button>
+                </div>
               </div>
             ))
           )}
         </div>
       </div>
 
-      {/* PHASE 8: REAL WEBHOOKS INTEGRATION */}
+      {/* REAL WEBHOOKS INTEGRATION */}
       <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -518,167 +701,77 @@ export const UserSettings: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Discord Relay, Ops Server Hook"
+                placeholder="e.g. Discord Bot Hook, Slack Alerts"
                 value={newWebhookName}
                 onChange={e => setNewWebhookName(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600"
+                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Payload URL (HTTPS/HTTP)</label>
+              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Target Endpoint URL</label>
               <input
                 type="url"
                 required
-                placeholder="https://api.yourdomain.com/webhooks/aether"
+                placeholder="https://your-domain.com/api/webhook"
                 value={newWebhookUrl}
                 onChange={e => setNewWebhookUrl(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 font-mono"
+                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-zinc-400">Listening to:</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-                All Server & System Events (*)
-              </span>
-            </div>
+          <div className="flex justify-end pt-1">
             <button
               type="submit"
               disabled={creatingWebhook}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5" /> Create Webhook
+              <Plus className="h-3.5 w-3.5" /> Subscribe Webhook
             </button>
           </div>
         </form>
 
         {/* Webhooks List */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           {loadingWebhooks ? (
-            <div className="text-xs text-zinc-500 py-3">Loading webhook subscriptions...</div>
+            <div className="text-xs text-zinc-500 py-3">Loading webhooks...</div>
           ) : webhooks.length === 0 ? (
             <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl text-xs text-zinc-500">
-              No webhook endpoints subscribed. Add a payload URL above to receive real-time event feeds.
+              No webhook endpoints configured.
             </div>
           ) : (
             webhooks.map(wh => (
-              <div key={wh.id} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">{wh.name}</span>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        wh.isEnabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-400'
-                      }`}>
-                        {wh.isEnabled ? 'Active' : 'Disabled'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-mono text-zinc-400 break-all">{wh.url}</p>
-                  </div>
-
+              <div key={wh.id} className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleTestWebhook(wh.id)}
-                      disabled={testingId === wh.id}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <Send className={`h-3 w-3 ${testingId === wh.id ? 'animate-spin' : ''}`} />
-                      <span>{testingId === wh.id ? 'Sending...' : 'Test Ping'}</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleToggleWebhook(wh.id)}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold"
-                    >
-                      {wh.isEnabled ? 'Disable' : 'Enable'}
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteWebhook(wh.id)}
-                      className="p-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <span className="text-xs font-bold text-white">{wh.name}</span>
+                    <span className="text-[10px] font-mono text-zinc-500 truncate max-w-xs">{wh.url}</span>
                   </div>
-                </div>
-
-                {/* Delivery Diagnostics */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500 pt-2 border-t border-zinc-900">
-                  <span>Secret: <code className="text-zinc-400 font-mono">{wh.secret.substring(0, 10)}...</code></span>
-                  {wh.lastTriggeredAt && (
-                    <span>Last triggered: {new Date(wh.lastTriggeredAt).toLocaleTimeString()}</span>
-                  )}
-                  {wh.lastStatus !== undefined && (
-                    <span className={wh.lastStatus >= 200 && wh.lastStatus < 300 ? 'text-emerald-400' : 'text-rose-400'}>
-                      Status: {wh.lastStatus === 0 ? 'Connection Error' : `HTTP ${wh.lastStatus}`}
-                    </span>
-                  )}
-                  {wh.lastError && (
-                    <span className="text-rose-400">Error: {wh.lastError}</span>
+                  {testResult && testResult.id === wh.id && (
+                    <div className={`text-[11px] font-mono ${testResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {testResult.msg}
+                    </div>
                   )}
                 </div>
 
-                {testResult && testResult.id === wh.id && (
-                  <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
-                    testResult.success ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-                  }`}>
-                    {testResult.success ? <Check className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-                    <span>{testResult.msg}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTestWebhook(wh.id)}
+                    disabled={testingId === wh.id}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <Send className="h-3 w-3" /> Test
+                  </button>
+                  <button
+                    onClick={() => handleDeleteWebhook(wh.id)}
+                    className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete
+                  </button>
+                </div>
               </div>
             ))
           )}
-        </div>
-      </div>
-
-      {/* Interface & Performance Preferences */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <MousePointer className="h-4 w-4 text-amber-400" /> Interface & Performance Preferences
-        </h3>
-
-        <div className="space-y-4 text-xs">
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
-            <div>
-              <span className="font-semibold text-white block">Custom AetherPanel Pointer</span>
-              <span className="text-zinc-500 block text-[11px] mt-0.5">Enable desktop GPU-accelerated aura glow pointer</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={customCursorEnabled}
-              onChange={e => setCustomCursorEnabled(e.target.checked)}
-              className="w-4 h-4 accent-amber-500 rounded"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
-            <div>
-              <span className="font-semibold text-white block">Smooth Animations & Transitions</span>
-              <span className="text-zinc-500 block text-[11px] mt-0.5">Enable 60 FPS page route transitions and interactive micro-animations</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={animationsEnabled}
-              onChange={e => setAnimationsEnabled(e.target.checked)}
-              className="w-4 h-4 accent-amber-500 rounded"
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
-            <div>
-              <span className="font-semibold text-white block">Promotional Recommendations & Offers</span>
-              <span className="text-zinc-500 block text-[11px] mt-0.5">Display sponsored node upgrades and community discount announcements</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={adsEnabled}
-              onChange={e => setAdsEnabled(e.target.checked)}
-              className="w-4 h-4 accent-amber-500 rounded"
-            />
-          </div>
         </div>
       </div>
 

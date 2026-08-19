@@ -720,6 +720,46 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         };
       }
 
+      if (!dbCache!.settings.authProviders) {
+        dbCache!.settings.authProviders = {
+          emailPassword: {
+            enabled: true
+          },
+          google: {
+            enabled: true,
+            firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || '',
+            firebaseAuthDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+            firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
+            firebaseStorageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+            firebaseMessagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+            firebaseAppId: process.env.VITE_FIREBASE_APP_ID || ''
+          },
+          discord: {
+            enabled: true,
+            clientId: process.env.DISCORD_CLIENT_ID || '',
+            clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+            redirectUri: process.env.DISCORD_REDIRECT_URI || ''
+          }
+        };
+      }
+
+      if (!dbCache!.settings.themeSettings) {
+        dbCache!.settings.themeSettings = {
+          activeThemeId: 'golden',
+          activeFontId: 'Plus Jakarta Sans',
+          cardStyle: 'rounded-2xl',
+          glowIntensity: 'vibrant',
+          allowUserCustomization: true,
+          assets: {
+            logoUrl: '',
+            faviconUrl: '',
+            bgPatternUrl: '',
+            bannerUrl: '',
+            loginBgUrl: ''
+          }
+        };
+      }
+
       // Filter out demo user and demo customer data
       const demoUserIds = ['usr_demo', 'usr_demo_customer'];
       const demoEmails = ['demo@aetherpanel.com', 'demo@example.com'];
@@ -775,6 +815,10 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         dbCache!.nodes.push(localNode);
       }
 
+      if (!dbCache!.passwords) {
+        dbCache!.passwords = {};
+      }
+
       // Ensure primary admin account exists with admin@aetherpanel.in
       let admin = dbCache!.users.find(u => u.role === 'super_admin' || u.role === 'admin' || u.email === 'admin@aetherpanel.com' || u.email === adminEmail);
       if (!admin) {
@@ -798,10 +842,11 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         dbCache!.users.unshift(admin);
         dbCache!.passwords[admin.id] = adminHash;
       } else {
-        admin.email = adminEmail;
-        admin.username = 'admin';
         if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
-        dbCache!.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
+        // Ensure admin has a password hash initialized for adminopp
+        if (!dbCache!.passwords[admin.id] || !bcrypt.compareSync(adminPassword, dbCache!.passwords[admin.id])) {
+          dbCache!.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
+        }
       }
       delete dbCache!.passwords['usr_demo'];
 

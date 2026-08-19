@@ -3,13 +3,14 @@ import {
   Sliders, Save, Check, QrCode, CreditCard, Building, CheckCircle2,
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
-  AlertTriangle, HelpCircle
+  AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState } from '../../types';
+import { useBranding } from '../../lib/BrandingContext';
+import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'payments' | 'pending' | 'updates'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'payments' | 'pending' | 'updates'>('general');
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -18,6 +19,28 @@ export const AdminSettings: React.FC = () => {
   const [currencySymbol, setCurrencySymbol] = useState('$');
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  // Auth Provider Settings
+  const [authProviders, setAuthProviders] = useState<AuthProviderSettings>({
+    emailPassword: { enabled: true },
+    google: {
+      enabled: true,
+      firebaseConfig: {
+        apiKey: '',
+        authDomain: '',
+        projectId: '',
+        storageBucket: '',
+        messagingSenderId: '',
+        appId: ''
+      }
+    },
+    discord: {
+      enabled: true,
+      clientId: '',
+      clientSecret: '',
+      redirectUri: ''
+    }
+  });
 
   // System Version & Updates
   const [versionInfo, setVersionInfo] = useState<PanelVersionInfo | null>(null);
@@ -76,6 +99,13 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
+  const fetchAuthProviders = async () => {
+    const res = await apiRequest('/admin/auth-providers');
+    if (res.success && res.data) {
+      setAuthProviders(res.data);
+    }
+  };
+
   const fetchPendingOrders = async () => {
     setLoadingOrders(true);
     const res = await apiRequest('/admin/orders?status=pending');
@@ -120,6 +150,7 @@ export const AdminSettings: React.FC = () => {
 
   useEffect(() => {
     fetchSettings();
+    fetchAuthProviders();
     fetchPendingOrders();
     fetchVersionInfo();
     pollUpdateStatus();
@@ -135,9 +166,11 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
+  const { updateBrandNameLocally, refreshBranding } = useBranding();
+
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
-    await apiRequest('/admin/settings', {
+    const res = await apiRequest('/admin/settings', {
       method: 'PUT',
       body: JSON.stringify({
         brandName,
@@ -148,8 +181,28 @@ export const AdminSettings: React.FC = () => {
         maintenanceMode
       })
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    if (res.success) {
+      updateBrandNameLocally(brandName);
+      await refreshBranding();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } else {
+      setActionMsg(res.error?.message || 'Failed to save settings');
+    }
+  };
+
+  const handleSaveAuthProviders = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await apiRequest('/admin/auth-providers', {
+      method: 'PUT',
+      body: JSON.stringify(authProviders)
+    });
+    if (res.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } else {
+      setActionMsg(res.error?.message || 'Failed to save authentication settings.');
+    }
   };
 
   const handleSavePayments = async (e: React.FormEvent) => {
@@ -193,28 +246,34 @@ export const AdminSettings: React.FC = () => {
       <div className="border-b border-amber-500/20 pb-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sliders className="h-6 w-6 text-amber-400" /> Platform Configuration & Payment Gateways
+            <Sliders className="h-6 w-6 text-amber-400" /> Platform Configuration
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">Manage brand identity, QR code payment gateways, and approve manual payment submissions.</p>
+          <p className="text-xs text-zinc-400 mt-1">Manage global system parameters, authentication methods, payment gateways, and updates.</p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-2xl gap-1 text-xs font-semibold">
+        <div className="flex flex-wrap bg-zinc-900 border border-zinc-800 p-1 rounded-2xl gap-1 text-xs font-semibold">
           <button
             onClick={() => setActiveTab('general')}
-            className={`px-4 py-2 rounded-xl transition-all ${activeTab === 'general' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+            className={`px-3.5 py-2 rounded-xl transition-all ${activeTab === 'general' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
-            General Settings
+            General
+          </button>
+          <button
+            onClick={() => { setActiveTab('auth'); fetchAuthProviders(); }}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'auth' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <Shield className="h-3.5 w-3.5" /> Auth Providers
           </button>
           <button
             onClick={() => setActiveTab('payments')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'payments' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'payments' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
-            <QrCode className="h-3.5 w-3.5" /> Payment Gateways & QR Code
+            <QrCode className="h-3.5 w-3.5" /> Payments & QR
           </button>
           <button
             onClick={() => { setActiveTab('pending'); fetchPendingOrders(); }}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'pending' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'pending' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
             <Clock className="h-3.5 w-3.5 text-amber-400" /> Pending Approvals
             {pendingOrders.length > 0 && (
@@ -225,9 +284,9 @@ export const AdminSettings: React.FC = () => {
           </button>
           <button
             onClick={() => { setActiveTab('updates'); fetchVersionInfo(); pollUpdateStatus(); }}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'updates' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'updates' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
-            <ArrowUpCircle className="h-3.5 w-3.5" /> Updates & System Version
+            <ArrowUpCircle className="h-3.5 w-3.5" /> Updates
             {versionInfo?.isUpdateAvailable && (
               <span className="ml-1 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
             )}
@@ -317,204 +376,401 @@ export const AdminSettings: React.FC = () => {
         </form>
       )}
 
-      {/* TAB 2: Payment Gateways & QR Code Configuration */}
-      {activeTab === 'payments' && (
-        <form onSubmit={handleSavePayments} className="space-y-6">
-          
-          {/* UPI & QR CODE GATEWAY */}
-          <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-violet-400" />
-                <h3 className="text-base font-bold text-white">UPI & QR Code Gateway Settings</h3>
+      {/* TAB: Authentication Providers */}
+      {activeTab === 'auth' && (
+        <form onSubmit={handleSaveAuthProviders} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div>
+              <h2 className="text-base font-bold text-white">Authentication Providers & Social Logins</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Toggle sign-in methods and configure Firebase & Discord OAuth credentials.</p>
+            </div>
+          </div>
+
+          {/* Email / Password Provider */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Email & Password Authentication</div>
+                  <div className="text-[11px] text-zinc-400">Allow users to register and sign in with standard email credentials.</div>
+                </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-xs text-zinc-400">Enabled</span>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={gateways.upi.enabled}
-                  onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, enabled: e.target.checked } })}
-                  className="h-4 w-4 accent-violet-500 rounded"
+                  checked={authProviders.emailPassword?.enabled ?? true}
+                  onChange={(e) => setAuthProviders(prev => ({
+                    ...prev,
+                    emailPassword: { enabled: e.target.checked }
+                  }))}
+                  className="sr-only peer"
                 />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* Google Firebase Authentication */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Google Login (Firebase Authentication)</div>
+                  <div className="text-[11px] text-zinc-400">One-click Google Sign-in and account creation powered by Firebase Auth.</div>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={authProviders.google?.enabled ?? true}
+                  onChange={(e) => setAuthProviders(prev => ({
+                    ...prev,
+                    google: { ...prev.google, enabled: e.target.checked }
+                  }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">UPI ID (VPA)</label>
-                <input
-                  type="text"
-                  value={gateways.upi.upiId}
-                  onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, upiId: e.target.value } })}
-                  placeholder="e.g. merchant@upi or 9876543210@paytm"
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white font-mono"
-                />
-              </div>
+            {authProviders.google?.enabled && (
+              <div className="pt-2 border-t border-zinc-800/80 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Firebase API Key</label>
+                    <input
+                      type="text"
+                      value={authProviders.google?.firebaseConfig?.apiKey || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        google: {
+                          ...prev.google,
+                          firebaseConfig: { ...prev.google.firebaseConfig, apiKey: e.target.value }
+                        }
+                      }))}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Merchant / Business Name</label>
-                <input
-                  type="text"
-                  value={gateways.upi.merchantName}
-                  onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, merchantName: e.target.value } })}
-                  placeholder="e.g. AetherPanel Cloud Hosting"
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
-                />
-              </div>
-            </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Firebase Auth Domain</label>
+                    <input
+                      type="text"
+                      value={authProviders.google?.firebaseConfig?.authDomain || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        google: {
+                          ...prev.google,
+                          firebaseConfig: { ...prev.google.firebaseConfig, authDomain: e.target.value }
+                        }
+                      }))}
+                      placeholder="project-id.firebaseapp.com"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">Payment QR Code Image URL</label>
-              <input
-                type="text"
-                value={gateways.upi.qrCodeUrl}
-                onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, qrCodeUrl: e.target.value } })}
-                placeholder="Paste direct image URL for your UPI QR Code..."
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white font-mono"
-              />
-              <p className="text-[10px] text-zinc-500 mt-1">Provide a direct HTTPS URL to your GPay/PhonePe/Paytm QR Code image.</p>
-            </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Firebase Project ID</label>
+                    <input
+                      type="text"
+                      value={authProviders.google?.firebaseConfig?.projectId || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        google: {
+                          ...prev.google,
+                          firebaseConfig: { ...prev.google.firebaseConfig, projectId: e.target.value }
+                        }
+                      }))}
+                      placeholder="my-aetherpanel-app"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
 
-            {gateways.upi.qrCodeUrl && (
-              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center gap-4">
-                <img src={gateways.upi.qrCodeUrl} alt="QR Code Preview" className="h-24 w-24 object-cover rounded-xl border border-zinc-800" />
-                <div className="text-xs text-zinc-400">
-                  <div className="font-bold text-white mb-1">QR Code Preview</div>
-                  <div>This image will be shown to customers when they add funds via UPI / QR Scan.</div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Firebase App ID</label>
+                    <input
+                      type="text"
+                      value={authProviders.google?.firebaseConfig?.appId || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        google: {
+                          ...prev.google,
+                          firebaseConfig: { ...prev.google.firebaseConfig, appId: e.target.value }
+                        }
+                      }))}
+                      placeholder="1:123456789:web:abcdef"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
               </div>
             )}
-
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">Instructions for Customer</label>
-              <textarea
-                rows={2}
-                value={gateways.upi.instructions}
-                onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, instructions: e.target.value } })}
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2 text-xs text-white"
-              />
-            </div>
           </div>
 
-          {/* BANK TRANSFER GATEWAY */}
-          <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Building className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Bank Transfer Details</h3>
+          {/* Discord OAuth2 */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-[#5865F2]/10 text-[#5865F2] border border-[#5865F2]/20">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Discord OAuth2 Login</div>
+                  <div className="text-[11px] text-zinc-400">Allow users to log in directly with their Discord accounts.</div>
+                </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-xs text-zinc-400">Enabled</span>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={gateways.bank.enabled}
-                  onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, enabled: e.target.checked } })}
-                  className="h-4 w-4 accent-emerald-500 rounded"
+                  checked={authProviders.discord?.enabled ?? true}
+                  onChange={(e) => setAuthProviders(prev => ({
+                    ...prev,
+                    discord: { ...prev.discord, enabled: e.target.checked }
+                  }))}
+                  className="sr-only peer"
                 />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  value={gateways.bank.bankName}
-                  onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, bankName: e.target.value } })}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
-                />
-              </div>
+            {authProviders.discord?.enabled && (
+              <div className="pt-2 border-t border-zinc-800/80 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Discord Client ID (Application ID)</label>
+                    <input
+                      type="text"
+                      value={authProviders.discord?.clientId || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        discord: { ...prev.discord, clientId: e.target.value }
+                      }))}
+                      placeholder="123456789012345678"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Account Number</label>
-                <input
-                  type="text"
-                  value={gateways.bank.accountNumber}
-                  onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, accountNumber: e.target.value } })}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white font-mono"
-                />
-              </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Discord Client Secret</label>
+                    <input
+                      type="password"
+                      value={authProviders.discord?.clientSecret || ''}
+                      onChange={(e) => setAuthProviders(prev => ({
+                        ...prev,
+                        discord: { ...prev.discord, clientSecret: e.target.value }
+                      }))}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">IFSC / SWIFT Code</label>
-                <input
-                  type="text"
-                  value={gateways.bank.ifsc}
-                  onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, ifsc: e.target.value } })}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white font-mono"
-                />
+                <div className="text-[11px] text-zinc-500 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                  <strong>Discord OAuth2 Redirect URI:</strong>{' '}
+                  <code className="text-amber-400 font-mono">{typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '/api/v1/auth/discord/callback'}</code>
+                  <div className="mt-1">Add this redirect URI to your application inside Discord Developer Portal → OAuth2 → Redirects.</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="flex justify-end">
-            <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-md">
-              <Save className="h-4 w-4" /> Save Payment Gateways
+          <div className="flex justify-end pt-2">
+            <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5">
+              <Save className="h-4 w-4" /> Save Auth Provider Settings
             </button>
           </div>
         </form>
       )}
 
-      {/* TAB 3: Pending Payment Approvals */}
+      {/* TAB 2: Payment Gateways & QR Code Configuration */}
+      {activeTab === 'payments' && (
+        <form onSubmit={handleSavePayments} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div>
+              <h2 className="text-base font-bold text-white">Payment Gateways & QR Code Billing</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Enable instant UPI QR codes, direct bank transfer info, or crypto deposit addresses.</p>
+            </div>
+            <button type="submit" className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5">
+              <Save className="h-4 w-4" /> Save Gateways
+            </button>
+          </div>
+
+          {/* UPI Gateway */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <QrCode className="h-4 w-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">UPI QR Code Gateway (India & Instant)</h3>
+              </div>
+              <input
+                type="checkbox"
+                checked={gateways.upi.enabled}
+                onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, enabled: e.target.checked } })}
+                className="h-4 w-4 accent-amber-500 rounded"
+              />
+            </div>
+
+            {gateways.upi.enabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">UPI VPA / ID</label>
+                  <input
+                    type="text"
+                    value={gateways.upi.upiId}
+                    onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, upiId: e.target.value } })}
+                    placeholder="merchant@upi"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">Merchant Display Name</label>
+                  <input
+                    type="text"
+                    value={gateways.upi.merchantName}
+                    onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, merchantName: e.target.value } })}
+                    placeholder="AetherPanel Hosting"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 font-medium mb-1">Static QR Code Image URL (Direct PNG/JPG)</label>
+                  <input
+                    type="text"
+                    value={gateways.upi.qrCodeUrl}
+                    onChange={(e) => setGateways({ ...gateways, upi: { ...gateways.upi, qrCodeUrl: e.target.value } })}
+                    placeholder="https://i.imgur.com/your-upi-qr.png"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bank Transfer Gateway */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building className="h-4 w-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Bank Wire / IMPS / NEFT Details</h3>
+              </div>
+              <input
+                type="checkbox"
+                checked={gateways.bank.enabled}
+                onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, enabled: e.target.checked } })}
+                className="h-4 w-4 accent-amber-500 rounded"
+              />
+            </div>
+
+            {gateways.bank.enabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">Bank Name</label>
+                  <input
+                    type="text"
+                    value={gateways.bank.bankName}
+                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, bankName: e.target.value } })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">Account Holder</label>
+                  <input
+                    type="text"
+                    value={gateways.bank.accountHolder}
+                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, accountHolder: e.target.value } })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">Account Number / IBAN</label>
+                  <input
+                    type="text"
+                    value={gateways.bank.accountNumber}
+                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, accountNumber: e.target.value } })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">IFSC / Swift / Routing Code</label>
+                  <input
+                    type="text"
+                    value={gateways.bank.ifsc}
+                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, ifsc: e.target.value } })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </form>
+      )}
+
+      {/* TAB 3: Pending Approvals */}
       {activeTab === 'pending' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-400" /> Pending Customer Payment Requests
-            </h3>
-            <button onClick={fetchPendingOrders} className="p-2 text-xs text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl">
+        <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div>
+              <h2 className="text-base font-bold text-white">Manual Payment Proofs Pending Approval</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Verify user transaction reference numbers or UTRs and credit user balances.</p>
+            </div>
+            <button
+              onClick={fetchPendingOrders}
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1.5"
+            >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
           </div>
 
           {loadingOrders ? (
-            <div className="p-8 text-center text-xs text-zinc-400">Loading pending requests...</div>
+            <div className="p-8 text-center text-xs text-zinc-500 font-mono">Loading pending orders...</div>
           ) : pendingOrders.length === 0 ? (
-            <div className="p-10 text-center bg-zinc-900/60 border border-zinc-800 rounded-3xl space-y-2">
-              <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-              <div className="text-sm font-bold text-white">No Pending Payments</div>
-              <p className="text-xs text-zinc-400">All customer manual deposits and QR Code payments have been processed.</p>
+            <div className="p-12 text-center text-xs text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
+              No pending payment approvals at this time.
             </div>
           ) : (
             <div className="space-y-3">
-              {pendingOrders.map((o) => (
-                <div key={o.id} className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {pendingOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-violet-400">#{o.id}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-semibold">
-                        {o.paymentMethod}
+                      <span className="text-xs font-bold text-white font-mono">{order.id}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-bold">
+                        {order.method.toUpperCase()}
                       </span>
                     </div>
-
-                    <div className="text-xs font-semibold text-white">
-                      Customer: <span className="text-zinc-300 font-normal">{o.userEmail}</span>
+                    <div className="text-xs text-zinc-300">
+                      Amount: <strong className="text-emerald-400 font-mono">${order.amount.toFixed(2)}</strong> (Credits: +{order.creditsGranted})
                     </div>
-
-                    <div className="text-xs text-zinc-400">
-                      Amount Requested: <strong className="text-emerald-400 font-mono">${o.amount.toFixed(2)}</strong>
+                    <div className="text-[11px] text-zinc-400 font-mono">
+                      Ref / UTR: <span className="text-white font-bold">{order.transactionRef || 'None provided'}</span>
                     </div>
-
-                    {o.transactionRef && (
-                      <div className="text-xs bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800 font-mono text-amber-300 flex items-center gap-2">
-                        <span>Transaction Ref / UTR:</span>
-                        <strong>{o.transactionRef}</strong>
-                      </div>
-                    )}
+                    <div className="text-[10px] text-zinc-500">
+                      Submitted: {new Date(order.createdAt).toLocaleString()}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
-                      onClick={() => handleRejectOrder(o.id)}
-                      className="px-4 py-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 font-semibold text-xs flex items-center gap-1.5"
+                      onClick={() => handleRejectOrder(order.id)}
+                      className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold flex items-center justify-center gap-1.5"
                     >
-                      <XCircle className="h-4 w-4" /> Reject
+                      <XCircle className="h-3.5 w-3.5" /> Reject
                     </button>
                     <button
-                      onClick={() => handleApproveOrder(o.id)}
-                      className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                      onClick={() => handleApproveOrder(order.id)}
+                      className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20"
                     >
-                      <CheckCircle2 className="h-4 w-4" /> Approve & Credit
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Credit
                     </button>
                   </div>
                 </div>
@@ -527,126 +783,68 @@ export const AdminSettings: React.FC = () => {
       {/* TAB 4: Updates & System Version */}
       {activeTab === 'updates' && (
         <div className="space-y-6">
-          {/* Header Card */}
           <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-zinc-800 pb-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-zinc-800 pb-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpCircle className="h-5 w-5 text-cyan-400" />
-                  <h2 className="text-base font-bold text-white">AetherPanel Version & Update Manager</h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-semibold">
-                    {versionInfo?.currentVersion || 'v3.5.2'}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-1">Authentic system runtime telemetry, upstream GitHub synchronization, and automated update management.</p>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <GitBranch className="h-4 w-4 text-amber-400" /> AetherPanel Upstream Version & Health
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">Automated Git sync, dependency checks, and migrations.</p>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
+                  disabled={checkingUpdates || triggeringUpdate}
                   onClick={() => fetchVersionInfo(true)}
-                  disabled={checkingUpdates || updateJob?.status === 'in_progress'}
-                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdates ? 'animate-spin text-cyan-400' : ''}`} />
-                  {checkingUpdates ? 'Checking Upstream...' : 'Check for Updates'}
+                  <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdates ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>{checkingUpdates ? 'Checking...' : 'Check for Updates'}</span>
                 </button>
-                <button
-                  onClick={handleExecuteUpdate}
-                  disabled={triggeringUpdate || updateJob?.status === 'in_progress'}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-md disabled:opacity-50 transition-all"
-                >
-                  {updateJob?.status === 'in_progress' ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpCircle className="h-4 w-4" />
-                      Execute Safe Update
-                    </>
-                  )}
-                </button>
+                {versionInfo?.isUpdateAvailable && (
+                  <button
+                    type="button"
+                    disabled={triggeringUpdate || updateJob?.status === 'in_progress'}
+                    onClick={handleExecuteUpdate}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                  >
+                    <ArrowUpCircle className="h-4 w-4" />
+                    <span>Apply Update Now</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Version Telemetry Grid - Strict Authentic Output */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
-                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <GitBranch className="h-3.5 w-3.5 text-cyan-400" /> Installed Version
-                </div>
-                <div className="text-sm font-mono font-bold text-white mt-1">
-                  {versionInfo?.currentVersion || 'v3.5.2'}
-                </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
-                  SHA: {versionInfo?.commitHash || 'f89a2bc'} ({versionInfo?.branch || 'main'})
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <div className="text-[10px] font-mono uppercase text-zinc-500">Current Version</div>
+                <div className="text-base font-bold text-white font-mono flex items-center gap-2">
+                  <span>v{versionInfo?.currentVersion || '2.4.0'}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">STABLE</span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
-                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5 text-amber-400" /> Latest Upstream
-                </div>
-                <div className={`text-sm font-mono font-bold mt-1 ${versionInfo?.latestVersion === 'UNKNOWN' ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  {versionInfo?.latestVersion || 'UNKNOWN'}
-                </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
-                  SHA: {versionInfo?.latestCommitHash || 'UNKNOWN'}
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <div className="text-[10px] font-mono uppercase text-zinc-500">Latest Available</div>
+                <div className="text-base font-bold text-cyan-400 font-mono">
+                  v{versionInfo?.latestVersion || '2.4.0'}
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
-                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <Cpu className="h-3.5 w-3.5 text-emerald-400" /> Update Available
-                </div>
-                <div className="text-sm font-bold mt-1">
-                  {versionInfo?.isUpdateAvailable === 'YES' && (
-                    <span className="text-cyan-400 flex items-center gap-1 font-mono">
-                      YES <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-                    </span>
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <div className="text-[10px] font-mono uppercase text-zinc-500">Update Status</div>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-1">
+                  {versionInfo?.isUpdateAvailable ? (
+                    <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Update Ready</span>
+                  ) : (
+                    <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> System Up-to-date</span>
                   )}
-                  {versionInfo?.isUpdateAvailable === 'NO' && (
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="h-3.5 w-3.5" /> NO (Up to date)
-                    </span>
-                  )}
-                  {(!versionInfo || versionInfo.isUpdateAvailable === 'UNKNOWN') && (
-                    <span className="text-amber-400 flex items-center gap-1">
-                      <HelpCircle className="h-3.5 w-3.5" /> UNKNOWN
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">
-                  Tree: {versionInfo?.isDirtyWorkingTree ? 'Modified' : 'Clean'}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80">
-                <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <HardDrive className="h-3.5 w-3.5 text-violet-400" /> Runtime Host
-                </div>
-                <div className="text-xs font-mono font-bold text-white mt-1 truncate">
-                  Node {versionInfo?.nodeVersion || process.version}
-                </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
-                  {versionInfo?.platform || 'Linux'} ({versionInfo?.arch || 'x64'})
                 </div>
               </div>
             </div>
 
-            {/* Upstream Connectivity Status & Release Notes */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-2xl bg-zinc-950 border border-zinc-800/80 text-xs text-zinc-400 gap-2">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${versionInfo?.upstreamReachable ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span>
-                  GitHub API: {versionInfo?.upstreamReachable ? (
-                    <strong className="text-emerald-400">Reachable (200 OK)</strong>
-                  ) : (
-                    <strong className="text-amber-400">Unreachable / {versionInfo?.upstreamError || 'Offline'}</strong>
-                  )}
-                </span>
-              </div>
+            <div className="flex justify-between items-center pt-2">
               <div className="text-[11px] text-zinc-500 font-mono">
                 Last Checked: {versionInfo?.lastCheckedAt ? new Date(versionInfo.lastCheckedAt).toLocaleTimeString() : 'Never'}
               </div>
@@ -660,7 +858,7 @@ export const AdminSettings: React.FC = () => {
             )}
           </div>
 
-          {/* Active Update Execution Status & Step-by-Step Progress */}
+          {/* Active Update Execution Status */}
           {updateJob && updateJob.status !== 'idle' && (
             <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
               <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
@@ -693,38 +891,6 @@ export const AdminSettings: React.FC = () => {
                 </div>
               </div>
 
-              {/* Step-by-Step Verification Status List */}
-              {updateJob.steps && updateJob.steps.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-zinc-400">Pipeline Stages:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {updateJob.steps.map((step) => (
-                      <div
-                        key={step.id}
-                        className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex items-center justify-between text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          {step.status === 'SUCCESS' && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                          {step.status === 'RUNNING' && <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />}
-                          {step.status === 'FAILED' && <XCircle className="h-4 w-4 text-rose-400" />}
-                          {step.status === 'SKIPPED' && <HelpCircle className="h-4 w-4 text-zinc-500" />}
-                          {step.status === 'PENDING' && <Clock className="h-4 w-4 text-zinc-600" />}
-                          <span className="font-semibold text-white">{step.name}</span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold ${
-                          step.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-400' :
-                          step.status === 'RUNNING' ? 'bg-amber-500/10 text-amber-400' :
-                          step.status === 'FAILED' ? 'bg-rose-500/10 text-rose-400' :
-                          'bg-zinc-800 text-zinc-500'
-                        }`}>
-                          {step.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Terminal Logs Output */}
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-xs text-zinc-300 max-h-60 overflow-y-auto space-y-1">
                 {updateJob.logs.length === 0 ? (
@@ -744,4 +910,3 @@ export const AdminSettings: React.FC = () => {
     </div>
   );
 };
-

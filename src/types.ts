@@ -18,6 +18,9 @@ export interface User {
   twoFactorSecret?: string;
   tokenVersion?: number;
   mustChangePassword?: boolean;
+  authProvider?: 'local' | 'google' | 'discord';
+  googleId?: string;
+  discordId?: string;
   credits: number;
   createdAt: string;
   updatedAt: string;
@@ -472,6 +475,52 @@ export interface BackupSettings {
   autoCleanupEnabled: boolean;
 }
 
+export interface AuthProviderSettings {
+  emailPassword: {
+    enabled: boolean;
+  };
+  google: {
+    enabled: boolean;
+    clientId?: string;
+    clientSecret?: string;
+    firebaseApiKey?: string;
+    firebaseAuthDomain?: string;
+    firebaseProjectId?: string;
+    firebaseStorageBucket?: string;
+    firebaseMessagingSenderId?: string;
+    firebaseAppId?: string;
+  };
+  discord: {
+    enabled: boolean;
+    clientId?: string;
+    clientSecret?: string;
+    redirectUri?: string;
+  };
+}
+
+export interface CustomThemeSettings {
+  activeThemeId: 'golden' | 'emerald' | 'cyberpunk' | 'midnight' | 'crimson' | 'amber' | 'sapphire' | 'custom';
+  activeFontId: 'Outfit' | 'Inter' | 'Space Grotesk' | 'Plus Jakarta Sans' | 'JetBrains Mono' | 'Poppins' | 'Syne' | 'Fira Code';
+  accentColor?: string;
+  customColors?: {
+    accent: string;
+    accentHover: string;
+    bgBase: string;
+    bgCard: string;
+    borderColor: string;
+  };
+  assets?: {
+    logoUrl?: string;
+    faviconUrl?: string;
+    bgPatternUrl?: string; // Supports normal URLs, Imgur, GIF URLs
+    bannerUrl?: string;
+    loginBgUrl?: string;
+  };
+  cardStyle: 'rounded-xl' | 'rounded-2xl' | 'rounded-lg' | 'rounded-none';
+  glowIntensity: 'none' | 'subtle' | 'vibrant';
+  allowUserCustomization: boolean;
+}
+
 export interface SystemSettings {
   platformName?: string;
   brandName: string;
@@ -489,6 +538,8 @@ export interface SystemSettings {
   paymentGateways?: PaymentGatewaySettings;
   backupSettings?: BackupSettings;
   discordSettings?: DiscordBotSettings;
+  authProviders?: AuthProviderSettings;
+  themeSettings?: CustomThemeSettings;
 }
 
 export interface PluginItem {

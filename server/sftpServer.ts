@@ -170,7 +170,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                   const resolved = path.resolve(baseDir, '.' + (cleaned.startsWith('/') ? cleaned : '/' + cleaned));
 
                   // Strict containment check: cannot escape baseDir
-                  if (!resolved.startsWith(baseDir)) {
+                  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
                     return null;
                   }
                   return resolved;

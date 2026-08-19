@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
+import { BrandingProvider } from './lib/BrandingContext';
 import { apiRequest } from './lib/api';
 import { Server } from './types';
 import { ShieldAlert } from 'lucide-react';
@@ -58,6 +59,7 @@ import { AdminBackups } from './pages/admin/AdminBackups';
 import { AdminDiscord } from './pages/admin/AdminDiscord';
 import { AdminMonitoring } from './pages/admin/AdminMonitoring';
 import { AdminLegal } from './pages/admin/AdminLegal';
+import { AdminDiagnostics } from './pages/admin/AdminDiagnostics';
 
 
 function AppContent() {
@@ -279,6 +281,7 @@ function AppContent() {
           {currentPage === 'admin-support' && <AdminSupport />}
           {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
           {currentPage === 'admin-legal' && <AdminLegal />}
+          {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
           {currentPage === 'admin-settings' && <AdminSettings />}
           {currentPage === 'admin-ads' && <AdminAds />}
           {currentPage === 'admin-rewards' && <AdminRewards />}
@@ -413,9 +416,11 @@ function MustChangePasswordModal() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </BrandingProvider>
     </ThemeProvider>
   );
 }

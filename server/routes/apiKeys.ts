@@ -95,7 +95,31 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
   });
 });
 
-// DELETE /api/v1/api-keys/:id - Revoke an API key
+// POST /api/v1/api-keys/:id/revoke - Revoke an API key status
+router.post('/:id/revoke', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const key = (db.apiKeys || []).find(k => k.id === req.params.id);
+  if (!key) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'API key not found.' } });
+  }
+
+  if (key.userId !== req.user!.id && req.user!.role !== 'super_admin' && req.user!.role !== 'admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Unauthorized to revoke this key.' } });
+  }
+
+  key.status = 'revoked';
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'REVOKE_API_KEY', key.id,
+    `Revoked API key '${key.name}' (${key.keyPrefix})`
+  );
+
+  res.json({ success: true, message: `API Key '${key.name}' marked as revoked.`, data: key });
+});
+
+// DELETE /api/v1/api-keys/:id - Revoke and remove an API key
 router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const idx = (db.apiKeys || []).findIndex(k => k.id === req.params.id);

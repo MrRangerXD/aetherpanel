@@ -478,6 +478,7 @@ EOF
     cat <<EOF > "$INSTALL_DIR/data/db.json"
 {
   "users": [],
+  "passwords": {},
   "servers": [],
   "nodes": [],
   "plans": [],
@@ -578,6 +579,8 @@ EOF
   echo -e "Repository:      ${BOLD}${REPO_URL}${NC}"
   echo -e "Install Dir:     ${BOLD}${INSTALL_DIR}${NC}"
   echo -e "Web Panel URL:   ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT}${NC}"
+  echo -e "Default Admin:   ${BOLD}admin@aetherpanel.in${NC}"
+  echo -e "Default Pass:    ${BOLD}adminopp${NC} (Required to update on first login)"
   echo -e "Service Status:  ${GREEN}● active (running)${NC}"
   echo -e "Logs Location:   ${BOLD}/var/log/aetherpanel/panel.log${NC}"
   echo -e "Installer Log:   ${BOLD}${LOG_FILE}${NC}\n"

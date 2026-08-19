@@ -78,6 +78,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
           </button>
 
           <button
+            onClick={() => onNavigate('admin-diagnostics')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-diagnostics' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+          >
+            <ShieldAlert className="h-4 w-4 text-amber-400" />
+            <span>System Diagnostics</span>
+          </button>
+
+          <button
             onClick={() => onNavigate('admin-backups')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-backups' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
           >

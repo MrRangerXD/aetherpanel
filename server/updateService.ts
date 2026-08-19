@@ -383,7 +383,7 @@ export async function executePanelUpdate(initiatedBy: string): Promise<{ success
       appendUpdateLog('Step 4/5: Running TypeScript and assets compilation verification...');
 
       await new Promise<void>((resolve, reject) => {
-        exec('npm run lint', { cwd, timeout: 30000 }, (err, stdout, stderr) => {
+        exec('npm run lint', { cwd, timeout: 30000, env: process.env }, (err, stdout, stderr) => {
           if (err) {
             appendUpdateLog(`❌ Compilation verification failed: ${stderr || err.message}`);
             reject(new Error(`Compilation check failed: ${stderr || err.message}`));

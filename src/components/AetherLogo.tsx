@@ -1,4 +1,5 @@
 import React from 'react';
+import { useBranding } from '../lib/BrandingContext';
 
 interface AetherLogoProps {
   variant?: 'full' | 'compact';
@@ -13,6 +14,24 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
   className = '',
   onClick
 }) => {
+  const { brandName } = useBranding();
+
+  // Parse brand name prefix & suffix for styling (e.g., "AetherPanel" -> "Aether" + "Panel")
+  let prefix = brandName;
+  let suffix = '';
+
+  if (brandName.toLowerCase().endsWith('panel') && brandName.length > 5) {
+    prefix = brandName.substring(0, brandName.length - 5);
+    suffix = brandName.substring(brandName.length - 5);
+  } else if (brandName.toLowerCase().endsWith('cloud') && brandName.length > 5) {
+    prefix = brandName.substring(0, brandName.length - 5);
+    suffix = brandName.substring(brandName.length - 5);
+  } else if (brandName.includes(' ')) {
+    const parts = brandName.split(' ');
+    prefix = parts.slice(0, -1).join(' ');
+    suffix = ' ' + parts[parts.length - 1];
+  }
+
   if (variant === 'compact') {
     return (
       <div 
@@ -61,7 +80,12 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
       </div>
       <div className="flex flex-col leading-none">
         <span className="text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-0.5">
-          Aether<span className="bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent">Panel</span>
+          {prefix}
+          {suffix && (
+            <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
+              {suffix}
+            </span>
+          )}
         </span>
         <span className="text-[9px] font-bold tracking-widest text-zinc-400 uppercase mt-0.5 font-mono">
           CLOUD INFRASTRUCTURE

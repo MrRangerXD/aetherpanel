@@ -1117,7 +1117,7 @@ export function safePath(serverId: string, relPath: string = ''): string {
   const cleaned = path.normalize(sanitized).replace(/^(\.\.[\/\\])+/, '');
   const resolved = path.resolve(baseDir, '.' + (cleaned.startsWith('/') ? cleaned : '/' + cleaned));
 
-  if (!resolved.startsWith(baseDir)) {
+  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
     return baseDir;
   }
   return resolved;
@@ -1125,11 +1125,11 @@ export function safePath(serverId: string, relPath: string = ''): string {
 
 // File Operations
 export function listServerFiles(serverId: string, relPath: string = ''): ServerFile[] {
-  const baseDir = getServerDir(serverId);
-  const targetDir = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetDir = safePath(serverId, relPath);
 
   // Security check - path traversal prevention
-  if (!targetDir.startsWith(baseDir)) {
+  if (targetDir !== baseDir && !targetDir.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied: Outside server root directory');
   }
 
@@ -1160,10 +1160,10 @@ export function listServerFiles(serverId: string, relPath: string = ''): ServerF
 }
 
 export function readServerFile(serverId: string, relPath: string): string {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetPath = safePath(serverId, relPath);
 
-  if (!targetPath.startsWith(baseDir)) {
+  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied: Outside server root directory');
   }
 
@@ -1175,10 +1175,10 @@ export function readServerFile(serverId: string, relPath: string): string {
 }
 
 export function writeServerFile(serverId: string, relPath: string, content: string): boolean {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetPath = safePath(serverId, relPath);
 
-  if (!targetPath.startsWith(baseDir)) {
+  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied: Outside server root directory');
   }
 
@@ -1192,10 +1192,10 @@ export function writeServerFile(serverId: string, relPath: string, content: stri
 }
 
 export function deleteServerItem(serverId: string, relPath: string): void {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetPath = safePath(serverId, relPath);
 
-  if (!targetPath.startsWith(baseDir)) {
+  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied');
   }
 
@@ -1205,10 +1205,10 @@ export function deleteServerItem(serverId: string, relPath: string): void {
 }
 
 export function createServerDirectory(serverId: string, relPath: string): void {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetPath = safePath(serverId, relPath);
 
-  if (!targetPath.startsWith(baseDir)) {
+  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied');
   }
 
@@ -1218,11 +1218,12 @@ export function createServerDirectory(serverId: string, relPath: string): void {
 }
 
 export function renameServerItem(serverId: string, oldRelPath: string, newRelPath: string): void {
-  const baseDir = getServerDir(serverId);
-  const oldPath = path.join(baseDir, oldRelPath);
-  const newPath = path.join(baseDir, newRelPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const oldPath = safePath(serverId, oldRelPath);
+  const newPath = safePath(serverId, newRelPath);
 
-  if (!oldPath.startsWith(baseDir) || !newPath.startsWith(baseDir)) {
+  if ((oldPath !== baseDir && !oldPath.startsWith(baseDir + path.sep)) ||
+      (newPath !== baseDir && !newPath.startsWith(baseDir + path.sep))) {
     throw new Error('Access denied: Outside server root directory');
   }
 
@@ -1239,10 +1240,10 @@ export function renameServerItem(serverId: string, oldRelPath: string, newRelPat
 }
 
 export function chmodServerItem(serverId: string, relPath: string, mode: number | string): void {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+  const baseDir = path.resolve(getServerDir(serverId));
+  const targetPath = safePath(serverId, relPath);
 
-  if (!targetPath.startsWith(baseDir)) {
+  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied: Outside server root directory');
   }
 

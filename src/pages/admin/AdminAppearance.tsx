@@ -1,52 +1,119 @@
-import React, { useState } from 'react';
-import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye } from 'lucide-react';
-import { useTheme, AccentColor, FontFamily } from '../../lib/ThemeContext';
+import React, { useState, useEffect } from 'react';
+import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useTheme } from '../../lib/ThemeContext';
+import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
+import { apiRequest } from '../../lib/api';
 
 export const AdminAppearance: React.FC = () => {
-  const { accent, setAccent, theme, setTheme, font, setFont, accentClasses } = useTheme();
+  const {
+    activeThemeId,
+    setActiveThemeId,
+    activeFontId,
+    setActiveFontId,
+    theme,
+    setTheme,
+    themeAssets,
+    setThemeAssets,
+    applySystemThemeSettings
+  } = useTheme();
 
-  const [selectedAccent, setSelectedAccent] = useState<AccentColor>(accent);
-  const [selectedUiFont, setSelectedUiFont] = useState<FontFamily>(font || 'inter');
+  const [selectedThemeId, setSelectedThemeId] = useState(activeThemeId || 'golden');
+  const [selectedFontId, setSelectedFontId] = useState(activeFontId || 'Plus Jakarta Sans');
+  const [logoUrl, setLogoUrl] = useState(themeAssets.logoUrl || '');
+  const [faviconUrl, setFaviconUrl] = useState(themeAssets.faviconUrl || '');
+  const [bgPatternUrl, setBgPatternUrl] = useState(themeAssets.bgPatternUrl || '');
+  const [bannerUrl, setBannerUrl] = useState(themeAssets.bannerUrl || '');
+  const [cardStyle, setCardStyle] = useState<'rounded-2xl' | 'rounded-xl' | 'rounded-lg'>('rounded-2xl');
+  const [glowIntensity, setGlowIntensity] = useState<'vibrant' | 'subtle' | 'none'>('vibrant');
+  const [allowUserCustomization, setAllowUserCustomization] = useState(true);
+
+  const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const accentsList: { id: AccentColor; name: string; gradient: string; hex: string }[] = [
-    { id: 'amber', name: 'Aether Golden', gradient: 'from-amber-400 to-yellow-600', hex: '#f59e0b' },
-    { id: 'cyan', name: 'Aether Cyber Cyan', gradient: 'from-cyan-400 to-blue-600', hex: '#06b6d4' },
-    { id: 'emerald', name: 'Aether Matrix Emerald', gradient: 'from-emerald-400 to-teal-600', hex: '#10b981' },
-    { id: 'rose', name: 'Aether Crimson Rose', gradient: 'from-rose-400 to-red-600', hex: '#f43f5e' },
-    { id: 'violet', name: 'Aether Royal Violet', gradient: 'from-purple-400 to-indigo-600', hex: '#a855f7' },
-  ];
+  useEffect(() => {
+    const loadSettings = async () => {
+      const res = await apiRequest('/admin/theme-settings');
+      if (res.success && res.data) {
+        const d = res.data;
+        if (d.activeThemeId) setSelectedThemeId(d.activeThemeId);
+        if (d.activeFontId) setSelectedFontId(d.activeFontId);
+        if (d.assets) {
+          setLogoUrl(d.assets.logoUrl || '');
+          setFaviconUrl(d.assets.faviconUrl || '');
+          setBgPatternUrl(d.assets.bgPatternUrl || '');
+          setBannerUrl(d.assets.bannerUrl || '');
+        }
+        if (d.cardStyle) setCardStyle(d.cardStyle);
+        if (d.glowIntensity) setGlowIntensity(d.glowIntensity);
+        if (d.allowUserCustomization !== undefined) setAllowUserCustomization(d.allowUserCustomization);
+      }
+    };
+    loadSettings();
+  }, []);
 
-  const handleSaveTheme = () => {
-    setAccent(selectedAccent);
-    setFont(selectedUiFont);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  const handleSaveTheme = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+
+    const payload = {
+      activeThemeId: selectedThemeId,
+      activeFontId: selectedFontId,
+      cardStyle,
+      glowIntensity,
+      allowUserCustomization,
+      assets: {
+        logoUrl: logoUrl.trim(),
+        faviconUrl: faviconUrl.trim(),
+        bgPatternUrl: bgPatternUrl.trim(),
+        bannerUrl: bannerUrl.trim()
+      }
+    };
+
+    const res = await apiRequest('/admin/theme-settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+
+    if (res.success) {
+      setActiveThemeId(selectedThemeId);
+      setActiveFontId(selectedFontId);
+      setThemeAssets(payload.assets);
+      applySystemThemeSettings(payload as any);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } else {
+      setErrorMsg(res.error?.message || 'Failed to save theme settings.');
+    }
+    setLoading(false);
   };
 
   const handleResetDefaults = () => {
-    setSelectedAccent('amber');
-    setSelectedUiFont('inter');
-    setAccent('amber');
-    setFont('inter');
+    setSelectedThemeId('golden');
+    setSelectedFontId('Plus Jakarta Sans');
+    setLogoUrl('');
+    setFaviconUrl('');
+    setBgPatternUrl('');
+    setBannerUrl('');
+    setCardStyle('rounded-2xl');
+    setGlowIntensity('vibrant');
+    setAllowUserCustomization(true);
     setTheme('dark');
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900/60 border border-zinc-800/80 p-6 rounded-2xl backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900/80 border border-zinc-800 p-6 rounded-2xl backdrop-blur-md shadow-xl">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
               <Sliders className="h-5 w-5" />
             </div>
-            <h1 className="text-xl font-bold text-white tracking-tight">Fonts & Theme Appearance</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Themes, Fonts & Visual Assets</h1>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Configure global brand accents, default system themes, and typography roles across AetherPanel.
+            Customize the global look and feel of AetherPanel. Set primary color palettes, typography, custom logos, and wallpaper animations.
           </p>
         </div>
 
@@ -56,56 +123,76 @@ export const AdminAppearance: React.FC = () => {
             className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs flex items-center gap-1.5 transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
-            <span>Reset to Golden Default</span>
+            <span>Reset to Default</span>
           </button>
           <button
             onClick={handleSaveTheme}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition-all"
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
           >
-            {savedSuccess ? <Check className="h-4 w-4 stroke-[3]" /> : <Sparkles className="h-4 w-4" />}
-            <span>{savedSuccess ? 'Settings Applied!' : 'Apply Brand Settings'}</span>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : savedSuccess ? (
+              <Check className="h-4 w-4 stroke-[3]" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            <span>{savedSuccess ? 'Settings Saved!' : 'Save & Publish Theme'}</span>
           </button>
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Accent Colors & Dark/Light Mode */}
+        {/* Left Column: Theme Presets & Typography */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Brand Accent Selection */}
-          <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-5">
+          {/* Theme Presets Selection */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Palette className="h-4 w-4 text-amber-400" />
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                  Primary Brand Accent
+                  Active Theme Preset
                 </h3>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                ACTIVE: {selectedAccent.toUpperCase()}
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                ACTIVE: {selectedThemeId.toUpperCase()}
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {accentsList.map((item) => {
-                const isSelected = selectedAccent === item.id;
+              {THEME_PRESETS.map((item) => {
+                const isSelected = selectedThemeId === item.id;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setSelectedAccent(item.id)}
-                    className={`p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
+                    type="button"
+                    onClick={() => setSelectedThemeId(item.id)}
+                    className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
                       isSelected
-                        ? 'bg-zinc-800/80 border-amber-500/60 shadow-md ring-1 ring-amber-500/40'
-                        : 'bg-zinc-950/50 border-zinc-800/80 hover:bg-zinc-900 hover:border-zinc-700'
+                        ? 'bg-zinc-800/90 border-amber-500 shadow-md ring-1 ring-amber-500/40'
+                        : 'bg-zinc-950/60 border-zinc-800 hover:bg-zinc-900 hover:border-zinc-700'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${item.gradient} shadow-sm shrink-0 flex items-center justify-center`}>
-                        {isSelected && <Check className="h-4 w-4 text-zinc-950 stroke-[3]" />}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">{item.name}</div>
-                        <div className="text-[10px] text-zinc-400 font-mono">{item.hex}</div>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-white">{item.name}</div>
+                      {isSelected && <Check className="h-4 w-4 text-amber-400 stroke-[3]" />}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">{item.description}</p>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {item.previewColors.map((color, idx) => (
+                        <div
+                          key={idx}
+                          className="w-4 h-4 rounded-full border border-black/40 shadow-sm"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
                     </div>
                   </button>
                 );
@@ -113,94 +200,134 @@ export const AdminAppearance: React.FC = () => {
             </div>
           </div>
 
-          {/* Theme Mode Preference */}
-          <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
-              <span>Theme Interface Mode</span>
-            </h3>
-
-            <div className="grid grid-cols-2 gap-3">
-              {(['dark', 'light'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setTheme(mode)}
-                  className={`p-3.5 rounded-xl border text-center transition-all ${
-                    theme === mode
-                      ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 font-bold'
-                      : 'bg-zinc-950/50 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <span className="capitalize text-xs">{mode} Mode</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Typography Config */}
-          <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-5">
-            <div className="flex items-center gap-2">
-              <Type className="h-4 w-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                System Typography & Fonts
-              </h3>
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Type className="h-4 w-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  System Font Typography
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
+                {selectedFontId}
+              </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Primary System Font</label>
-              <select
-                value={selectedUiFont}
-                onChange={(e) => setSelectedUiFont(e.target.value as FontFamily)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-              >
-                <option value="inter">Inter / Plus Jakarta Sans (Default)</option>
-                <option value="geist">Geist Sans</option>
-                <option value="jetbrains">JetBrains Mono (Monospace)</option>
-                <option value="system-sans">System Sans-Serif</option>
-                <option value="system-mono">System Monospace</option>
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {FONT_OPTIONS.map((f) => {
+                const isSelected = selectedFontId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFontId(f.id)}
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? 'bg-zinc-800/90 border-amber-500 shadow-md ring-1 ring-amber-500/40'
+                        : 'bg-zinc-950/60 border-zinc-800 hover:bg-zinc-900 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-xs font-bold text-white">{f.name}</div>
+                      <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400">
+                        {f.category}
+                      </span>
+                    </div>
+                    <div
+                      className="text-xs text-zinc-300 mt-2 truncate"
+                      style={{ fontFamily: f.fontFamily }}
+                    >
+                      {f.sample}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* Right Column: Live Interactive Preview Card */}
+        {/* Right Column: Custom Asset URLs & Preview */}
         <div className="space-y-6">
-          <div className="p-6 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-5 sticky top-24">
-            <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
-              <Eye className="h-4 w-4 text-amber-400" />
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                Real-Time UI Preview
+          {/* Custom Assets URLs */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-amber-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Custom Assets & URLs
               </h3>
             </div>
 
-            {/* Simulated Panel Card */}
-            <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-zinc-400 tracking-wider">
-                  PREVIEW CARD
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  ONLINE
-                </span>
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">Logo Image URL</label>
+                <input
+                  type="text"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                />
               </div>
 
               <div>
-                <h4 className="text-base font-extrabold text-white">
-                  AetherPanel Cloud Node
-                </h4>
-                <p className="text-xs text-zinc-400 mt-1">
-                  Manage high-performance Minecraft & Discord Bot instances with instant scaling.
+                <label className="block text-zinc-300 font-medium mb-1">Favicon URL</label>
+                <input
+                  type="text"
+                  value={faviconUrl}
+                  onChange={(e) => setFaviconUrl(e.target.value)}
+                  placeholder="https://example.com/favicon.ico"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1">
+                  Background Wallpaper / Animated GIF URL
+                </label>
+                <input
+                  type="text"
+                  value={bgPatternUrl}
+                  onChange={(e) => setBgPatternUrl(e.target.value)}
+                  placeholder="https://i.imgur.com/... or https://...gif"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Supports Imgur links, direct PNG/JPEG, and loop animated GIFs.
                 </p>
               </div>
 
-              {/* Sample Code Block */}
-              <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-amber-300">
-                <code>$ systemctl status aether-daemon</code>
-              </div>
+              {bgPatternUrl && (
+                <div className="rounded-xl border border-zinc-800 p-2 bg-zinc-950 overflow-hidden">
+                  <div className="text-[10px] text-zinc-400 font-semibold mb-1">Wallpaper Live Preview:</div>
+                  <div
+                    className="h-24 rounded-lg bg-cover bg-center border border-zinc-800"
+                    style={{ backgroundImage: `url('${bgPatternUrl}')` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
 
-              {/* Sample Button */}
-              <button className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 text-zinc-950 font-bold text-xs shadow-md">
-                Primary Action Button
-              </button>
+          {/* User Customization Toggle */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-3">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+              Permissions
+            </h3>
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <div className="text-xs font-semibold text-white">Allow User Personalization</div>
+                <div className="text-[11px] text-zinc-400">Permit individual users to pick custom client-side themes.</div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allowUserCustomization}
+                  onChange={(e) => setAllowUserCustomization(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
             </div>
           </div>
         </div>

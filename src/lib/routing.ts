@@ -75,6 +75,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'backups' || sub === 'backup') return { page: 'admin-backups', params: queryObj };
     if (sub === 'nodes') return { page: 'admin-nodes', params: queryObj };
     if (sub === 'monitoring' || sub === 'alerts' || sub === 'health') return { page: 'admin-monitoring', params: queryObj };
+    if (sub === 'diagnostics' || sub === 'diag') return { page: 'admin-diagnostics', params: queryObj };
     if (sub === 'billing' || sub === 'payments') return { page: 'admin-billing', params: queryObj };
 
     if (sub === 'coupons') return { page: 'admin-coupons', params: queryObj };
