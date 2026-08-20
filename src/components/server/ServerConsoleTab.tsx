@@ -421,7 +421,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         <div
           ref={consoleContainerRef}
           onScroll={handleScroll}
-          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-4 font-mono text-xs text-zinc-300 h-[480px] overflow-y-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white"
+          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-4 font-mono text-xs text-zinc-300 h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white"
           tabIndex={0}
         >
           {filteredLogs.length === 0 ? (
@@ -461,7 +461,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               return (
                 <div
                   key={idx}
-                  className={`leading-relaxed whitespace-pre-wrap break-all ${colorClass} hover:bg-zinc-900/40 px-1 rounded transition-colors`}
+                  className={`leading-relaxed whitespace-pre font-mono text-[11px] w-max min-w-full ${colorClass} hover:bg-zinc-900/40 px-1 rounded transition-colors`}
                 >
                   {cleaned}
                 </div>

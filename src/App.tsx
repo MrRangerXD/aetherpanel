@@ -4,7 +4,6 @@ import { ThemeProvider } from './lib/ThemeContext';
 import { BrandingProvider } from './lib/BrandingContext';
 import { apiRequest } from './lib/api';
 import { Server } from './types';
-import { ShieldAlert } from 'lucide-react';
 import { parseUrlToRoute, routeToUrl } from './lib/routing';
 
 // Components
@@ -172,7 +171,7 @@ function AppContent() {
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       {/* Custom GPU Cursor */}
       <CustomCursor />
 
@@ -299,116 +298,9 @@ function AppContent() {
         </main>
       </div>
 
-      {/* Forced Password Change Modal */}
-      {user && user.mustChangePassword && <MustChangePasswordModal />}
-
       {/* Footer for Public Views */}
       {isPublicPage && <Footer onNavigate={handleNavigate} />}
 
-    </div>
-  );
-}
-
-function MustChangePasswordModal() {
-  const { refreshUser } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const res = await apiRequest('/auth/change-password', {
-      method: 'PUT',
-      body: JSON.stringify({ currentPassword, newPassword })
-    });
-
-    if (res.success) {
-      await refreshUser();
-    } else {
-      setError(res.error?.message || 'Failed to update password.');
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-zinc-900 border border-amber-500/30 rounded-3xl p-6 shadow-2xl space-y-5">
-        <div className="flex items-center gap-3 text-amber-400">
-          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-            <ShieldAlert className="h-6 w-6 text-amber-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-white">Password Change Required</h3>
-            <p className="text-xs text-zinc-400">Security Requirement: Update your initial account password.</p>
-          </div>
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Current (Initial) Password</label>
-            <input
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="e.g. adminopp"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">New Password</label>
-            <input
-              type="password"
-              required
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Enter new strong password"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              required
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new strong password"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 shadow-lg transition-all flex items-center justify-center gap-2"
-          >
-            {loading ? 'Updating Password...' : 'Update Password & Continue'}
-          </button>
-        </form>
-      </div>
     </div>
   );
 }

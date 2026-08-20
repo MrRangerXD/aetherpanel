@@ -24,40 +24,85 @@ router.get('/options', authMiddleware, async (req: AuthenticatedRequest, res: Re
   });
 });
 
+// User deployment mutex locks to prevent allocation race conditions
+const userDeployLocks = new Map<string, Promise<void>>();
+
+async function withUserDeployLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  while (userDeployLocks.has(userId)) {
+    await userDeployLocks.get(userId);
+  }
+  let resolveLock: () => void;
+  const lockPromise = new Promise<void>(resolve => {
+    resolveLock = resolve;
+  });
+  userDeployLocks.set(userId, lockPromise);
+  try {
+    return await fn();
+  } finally {
+    userDeployLocks.delete(userId);
+    resolveLock!();
+  }
+}
+
 // POST /api/v1/deploy/create - Deploy server instance
 router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const {
-      name, planId, templateId, nodeId, location, software, version,
-      billingCycle, couponCode, paymentMethod, environmentVars
-    } = req.body;
+  return withUserDeployLock(req.user!.id, async () => {
+    try {
+      const {
+        name, planId, templateId, nodeId, location, software, version,
+        billingCycle, couponCode, paymentMethod, environmentVars
+      } = req.body;
 
-    if (!name || !planId) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Server name and plan selection are required.' }
-      });
-    }
+      if (!name || !planId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Server name and plan selection are required.' }
+        });
+      }
 
-    const db = await getDb();
-    const plan = db.plans.find(p => p.id === planId && p.isActive);
+      const db = await getDb();
 
-    if (!plan) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'PLAN_NOT_FOUND', message: 'Selected plan is invalid or inactive.' }
-      });
-    }
+      // Verify fresh user account state
+      const freshUser = db.users.find(u => u.id === req.user!.id);
+      if (!freshUser) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'User account no longer exists.' }
+        });
+      }
 
-    const template = templateId ? (db.templates || []).find(t => t.id === templateId) : null;
+      if (freshUser.isSuspended) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account is currently suspended. Deployment is prohibited.' }
+        });
+      }
 
-    const userServers = db.servers.filter(s => s.userId === req.user!.id);
-    if (userServers.length >= plan.serverLimit && plan.serverLimit > 0) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'SERVER_LIMIT_REACHED', message: `Server limit reached for this plan tier (${plan.serverLimit} max servers). Upgrade plan or delete an existing server.` }
-      });
-    }
+      const plan = db.plans.find(p => p.id === planId && p.isActive);
+
+      if (!plan) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PLAN_NOT_FOUND', message: 'Selected plan is invalid or inactive.' }
+        });
+      }
+
+      const template = templateId ? (db.templates || []).find(t => t.id === templateId) : null;
+
+      const userLimit = typeof freshUser.serverLimit === 'number'
+        ? freshUser.serverLimit
+        : (plan.serverLimit > 0 ? plan.serverLimit : 1);
+      const userServers = db.servers.filter(s => s.userId === freshUser.id);
+      if (userServers.length >= userLimit) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'SERVER_LIMIT_REACHED',
+            message: `You have reached your server allocation quota (${userLimit} max server${userLimit === 1 ? '' : 's'}). Delete an existing server or contact an administrator to increase your allocation quota.`,
+            details: { allowed: userLimit, used: userServers.length }
+          }
+        });
+      }
 
     // Advanced Node Scheduler
     let targetNode = null;
@@ -289,6 +334,7 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'DEPLOYMENT_FAILED', message: err.message || 'Server deployment failed.' } });
   }
+  });
 });
 
 export default router;

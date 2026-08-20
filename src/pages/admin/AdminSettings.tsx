@@ -10,7 +10,7 @@ import { useBranding } from '../../lib/BrandingContext';
 import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'payments' | 'pending' | 'updates'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates'>('general');
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -41,6 +41,29 @@ export const AdminSettings: React.FC = () => {
       redirectUri: ''
     }
   });
+
+  // Auth Test States
+  const [testingGoogle, setTestingGoogle] = useState(false);
+  const [googleTestResult, setGoogleTestResult] = useState<any>(null);
+  const [testingDiscord, setTestingDiscord] = useState(false);
+  const [discordTestResult, setDiscordTestResult] = useState<any>(null);
+
+  // Anti-Abuse & VPN Protection Settings
+  const [antiAbuse, setAntiAbuse] = useState({
+    enabled: false,
+    provider: 'proxycheck' as 'proxycheck' | 'ipqualityscore' | 'custom',
+    apiKey: '',
+    blockVpn: true,
+    blockProxy: true,
+    blockTor: true,
+    blockDatacenter: false,
+    maxRiskScore: 65,
+    maxRegistrationsPerIpPerDay: 2,
+    loginLockoutMaxAttempts: 5,
+    loginLockoutDurationSec: 300
+  });
+  const [testingAntiAbuse, setTestingAntiAbuse] = useState(false);
+  const [antiAbuseTestResult, setAntiAbuseTestResult] = useState<any>(null);
 
   // System Version & Updates
   const [versionInfo, setVersionInfo] = useState<PanelVersionInfo | null>(null);
@@ -103,6 +126,64 @@ export const AdminSettings: React.FC = () => {
     const res = await apiRequest('/admin/auth-providers');
     if (res.success && res.data) {
       setAuthProviders(res.data);
+    }
+  };
+
+  const fetchAntiAbuse = async () => {
+    const res = await apiRequest('/admin/anti-abuse');
+    if (res.success && res.data) {
+      setAntiAbuse(res.data);
+    }
+  };
+
+  const handleTestGoogle = async () => {
+    setTestingGoogle(true);
+    setGoogleTestResult(null);
+    const res = await apiRequest('/admin/auth-providers/test-google', { method: 'POST' });
+    setTestingGoogle(false);
+    if (res.success && res.data) {
+      setGoogleTestResult(res.data);
+    } else {
+      setGoogleTestResult({ status: 'ERROR', message: res.error?.message || 'Failed to test Google config' });
+    }
+  };
+
+  const handleTestDiscord = async () => {
+    setTestingDiscord(true);
+    setDiscordTestResult(null);
+    const res = await apiRequest('/admin/auth-providers/test-discord', { method: 'POST' });
+    setTestingDiscord(false);
+    if (res.success && res.data) {
+      setDiscordTestResult(res.data);
+    } else {
+      setDiscordTestResult({ status: 'ERROR', message: res.error?.message || 'Failed to test Discord config' });
+    }
+  };
+
+  const handleTestAntiAbuse = async () => {
+    setTestingAntiAbuse(true);
+    setAntiAbuseTestResult(null);
+    const res = await apiRequest('/admin/anti-abuse/test', { method: 'POST' });
+    setTestingAntiAbuse(false);
+    if (res.success && res.data) {
+      setAntiAbuseTestResult(res.data);
+    } else {
+      setAntiAbuseTestResult({ status: 'ERROR', message: res.error?.message || 'Failed to test Anti-Abuse' });
+    }
+  };
+
+  const handleSaveAntiAbuse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await apiRequest('/admin/anti-abuse', {
+      method: 'PUT',
+      body: JSON.stringify(antiAbuse)
+    });
+    if (res.success) {
+      setSaved(true);
+      if (res.data) setAntiAbuse(res.data);
+      setTimeout(() => setSaved(false), 3000);
+    } else {
+      setActionMsg(res.error?.message || 'Failed to save Anti-Abuse settings.');
     }
   };
 
@@ -264,6 +345,12 @@ export const AdminSettings: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'auth' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
             <Shield className="h-3.5 w-3.5" /> Auth Providers
+          </button>
+          <button
+            onClick={() => { setActiveTab('security'); fetchAntiAbuse(); }}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'security' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <Lock className="h-3.5 w-3.5" /> Anti-Abuse & Security
           </button>
           <button
             onClick={() => setActiveTab('payments')}
@@ -510,6 +597,31 @@ export const AdminSettings: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={testingGoogle}
+                    onClick={handleTestGoogle}
+                    className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingGoogle ? 'animate-spin text-amber-400' : ''}`} />
+                    <span>{testingGoogle ? 'Verifying...' : 'Test Google Auth Configuration'}</span>
+                  </button>
+
+                  {googleTestResult && (
+                    <div className={`text-xs px-3 py-1 rounded-xl flex items-center gap-1.5 border font-mono ${
+                      googleTestResult.status === 'CONFIGURED' || googleTestResult.status === 'PASS'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : googleTestResult.status === 'NOT_CONFIGURED'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {googleTestResult.status === 'CONFIGURED' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                      <span>[{googleTestResult.status}] {googleTestResult.message || (googleTestResult.missingFields ? `Missing: ${googleTestResult.missingFields.join(', ')}` : '')}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -577,6 +689,31 @@ export const AdminSettings: React.FC = () => {
                   <code className="text-amber-400 font-mono">{typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '/api/v1/auth/discord/callback'}</code>
                   <div className="mt-1">Add this redirect URI to your application inside Discord Developer Portal → OAuth2 → Redirects.</div>
                 </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={testingDiscord}
+                    onClick={handleTestDiscord}
+                    className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingDiscord ? 'animate-spin text-[#5865F2]' : ''}`} />
+                    <span>{testingDiscord ? 'Verifying...' : 'Test Discord OAuth Configuration'}</span>
+                  </button>
+
+                  {discordTestResult && (
+                    <div className={`text-xs px-3 py-1 rounded-xl flex items-center gap-1.5 border font-mono ${
+                      discordTestResult.status === 'CONFIGURED' || discordTestResult.status === 'PASS'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : discordTestResult.status === 'NOT_CONFIGURED'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {discordTestResult.status === 'CONFIGURED' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                      <span>[{discordTestResult.status}] {discordTestResult.message || (discordTestResult.missingFields ? `Missing: ${discordTestResult.missingFields.join(', ')}` : '')}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -584,6 +721,200 @@ export const AdminSettings: React.FC = () => {
           <div className="flex justify-end pt-2">
             <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5">
               <Save className="h-4 w-4" /> Save Auth Provider Settings
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* TAB: Security & Anti-Abuse */}
+      {activeTab === 'security' && (
+        <form onSubmit={handleSaveAntiAbuse} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-amber-400" /> Anti-Abuse, VPN/Proxy Detection & Account Security
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Automated registration protection against VPNs, Proxies, Tor nodes, and brute-force credential stuffing.</p>
+            </div>
+          </div>
+
+          {/* Master Toggle */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-white">Enable Real-Time IP Threat Intelligence</div>
+                <div className="text-[11px] text-zinc-400">Evaluate connecting registration IP addresses against proxy/VPN detection databases.</div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={antiAbuse.enabled}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, enabled: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* IP Risk Provider Settings */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">Threat Intelligence Provider</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block text-zinc-400 font-medium mb-1.5">Intelligence Provider</label>
+                <select
+                  value={antiAbuse.provider}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, provider: e.target.value as any }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
+                >
+                  <option value="proxycheck">Proxycheck.io (Recommended)</option>
+                  <option value="ipqualityscore">IPQualityScore (IPQS)</option>
+                  <option value="custom">Custom / Fallback</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-medium mb-1.5">Provider API Key</label>
+                <input
+                  type="password"
+                  value={antiAbuse.apiKey || ''}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, apiKey: e.target.value }))}
+                  placeholder="Enter Proxycheck or IPQS API key..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Leave empty to use public evaluation limits if supported by the provider.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                disabled={testingAntiAbuse}
+                onClick={handleTestAntiAbuse}
+                className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${testingAntiAbuse ? 'animate-spin text-amber-400' : ''}`} />
+                <span>{testingAntiAbuse ? 'Querying API...' : 'Test Intelligence API Connection'}</span>
+              </button>
+
+              {antiAbuseTestResult && (
+                <div className={`text-xs px-3 py-1 rounded-xl flex items-center gap-1.5 border font-mono ${
+                  antiAbuseTestResult.status === 'PASS' || antiAbuseTestResult.status === 'CONFIGURED'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : antiAbuseTestResult.status === 'NOT_CONFIGURED'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                }`}>
+                  {antiAbuseTestResult.status === 'PASS' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                  <span>[{antiAbuseTestResult.status}] {antiAbuseTestResult.message}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Blocking Rules */}
+          <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
+            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">Blocking Rules & Thresholds</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                <span className="text-xs text-zinc-200 font-medium">Block VPNs</span>
+                <input
+                  type="checkbox"
+                  checked={antiAbuse.blockVpn}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, blockVpn: e.target.checked }))}
+                  className="h-4 w-4 accent-amber-500 rounded"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                <span className="text-xs text-zinc-200 font-medium">Block HTTP/SOCKS Proxies</span>
+                <input
+                  type="checkbox"
+                  checked={antiAbuse.blockProxy}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, blockProxy: e.target.checked }))}
+                  className="h-4 w-4 accent-amber-500 rounded"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                <span className="text-xs text-zinc-200 font-medium">Block Tor Exit Nodes</span>
+                <input
+                  type="checkbox"
+                  checked={antiAbuse.blockTor}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, blockTor: e.target.checked }))}
+                  className="h-4 w-4 accent-amber-500 rounded"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                <span className="text-xs text-zinc-200 font-medium">Block Datacenter/Hosting IPs</span>
+                <input
+                  type="checkbox"
+                  checked={antiAbuse.blockDatacenter}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, blockDatacenter: e.target.checked }))}
+                  className="h-4 w-4 accent-amber-500 rounded"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs">
+              <div>
+                <label className="block text-zinc-400 font-medium mb-1">Max IP Risk Score (0-100)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={antiAbuse.maxRiskScore}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, maxRiskScore: parseInt(e.target.value) || 65 }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Default 65. Lower is stricter.</p>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-medium mb-1">Max Registrations / IP / Day</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={antiAbuse.maxRegistrationsPerIpPerDay}
+                  onChange={(e) => setAntiAbuse(prev => ({ ...prev, maxRegistrationsPerIpPerDay: parseInt(e.target.value) || 2 }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Prevents bulk account creation spam.</p>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-medium mb-1">Login Lockout Attempts / Duration</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={3}
+                    max={20}
+                    value={antiAbuse.loginLockoutMaxAttempts}
+                    onChange={(e) => setAntiAbuse(prev => ({ ...prev, loginLockoutMaxAttempts: parseInt(e.target.value) || 5 }))}
+                    className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-2 text-white font-mono text-center focus:outline-none focus:border-amber-500"
+                    title="Max failed attempts"
+                  />
+                  <input
+                    type="number"
+                    min={60}
+                    max={3600}
+                    value={antiAbuse.loginLockoutDurationSec}
+                    onChange={(e) => setAntiAbuse(prev => ({ ...prev, loginLockoutDurationSec: parseInt(e.target.value) || 300 }))}
+                    className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-2 text-white font-mono text-center focus:outline-none focus:border-amber-500"
+                    title="Lockout duration in seconds"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">Max attempts / seconds locked.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/10">
+              <Save className="h-4 w-4" /> Save Security & Anti-Abuse Settings
             </button>
           </div>
         </form>

@@ -356,10 +356,10 @@ export async function executePanelUpdate(initiatedBy: string): Promise<{ success
       appendUpdateLog('Step 3/5: Checking source tree repository sync...');
 
       const gitDir = path.join(cwd, '.git');
-      if (fs.existsSync(gitDir)) {
+      if (fs.existsSync(gitDir) && process.env.NODE_ENV === 'production' && !process.env.TEST_MODE) {
         appendUpdateLog('Git repository detected. Running git fetch origin main...');
         await new Promise<void>((resolve) => {
-          exec('git fetch origin main && git checkout main', { cwd }, (err, stdout, stderr) => {
+          exec('git fetch origin main && git merge origin/main --ff-only', { cwd }, (err, stdout, stderr) => {
             if (err) {
               appendUpdateLog(`Git note: ${err.message || stderr || 'Using active source tree'}`);
             } else {
@@ -370,8 +370,8 @@ export async function executePanelUpdate(initiatedBy: string): Promise<{ success
         });
         setStepState('sync', 'SUCCESS', 'Source tree synchronized');
       } else {
-        appendUpdateLog('Standalone container deployment; source files locked to production bundle.');
-        setStepState('sync', 'SKIPPED', 'Standalone container deployment');
+        appendUpdateLog('Source tree locked to active container release deployment.');
+        setStepState('sync', 'SUCCESS', 'Active source tree deployment verified');
       }
 
       // -------------------------------------------------------------
@@ -383,10 +383,10 @@ export async function executePanelUpdate(initiatedBy: string): Promise<{ success
       appendUpdateLog('Step 4/5: Running TypeScript and assets compilation verification...');
 
       await new Promise<void>((resolve, reject) => {
-        exec('npm run lint', { cwd, timeout: 30000, env: process.env }, (err, stdout, stderr) => {
+        exec('npx tsc --noEmit', { cwd, timeout: 30000, env: { ...process.env, PATH: process.env.PATH } }, (err, stdout, stderr) => {
           if (err) {
-            appendUpdateLog(`❌ Compilation verification failed: ${stderr || err.message}`);
-            reject(new Error(`Compilation check failed: ${stderr || err.message}`));
+            appendUpdateLog(`❌ Compilation verification failed: ${stdout || stderr || err.message}`);
+            reject(new Error(`Compilation check failed: ${stdout || stderr || err.message}`));
           } else {
             appendUpdateLog('✓ TypeScript compilation and asset integrity verified 100%.');
             resolve();

@@ -144,6 +144,49 @@ export async function runComprehensiveVerification() {
     record('Authentication', 'Invalid Password Rejection', 'FAIL', `Exception: ${err.message}`);
   }
 
+  // 1.3.1 Rate Limiting & Account Lockout Verification
+  try {
+    const rateTestEmail = `rate_target_${Date.now()}@aether.local`;
+    let lockedStatus = 0;
+    let retryAfterHeader = '';
+
+    for (let i = 0; i < 6; i++) {
+      const attemptRes = await httpRequest('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'X-Simulated-IP': '198.51.100.42' },
+        body: {
+          email: rateTestEmail,
+          password: `WrongPassword_${i}`
+        }
+      });
+      if (attemptRes.status === 429) {
+        lockedStatus = 429;
+        retryAfterHeader = attemptRes.headers?.['retry-after'] || '';
+        break;
+      }
+    }
+
+    if (lockedStatus === 429) {
+      record('Authentication', 'Login Abuse Rate Limiter & Lockout', 'PASS', `HTTP 429 returned after repeated failures (Retry-After: ${retryAfterHeader || 'active'})`);
+    } else {
+      record('Authentication', 'Login Abuse Rate Limiter & Lockout', 'FAIL', `Did not trigger HTTP 429 lockout after repeated failed attempts`);
+    }
+  } catch (err: any) {
+    record('Authentication', 'Login Abuse Rate Limiter & Lockout', 'FAIL', `Exception: ${err.message}`);
+  }
+
+  // 1.3.2 Anti-Abuse Status Diagnostic
+  try {
+    const antiAbuseRes = await httpRequest('/api/v1/auth/anti-abuse-status');
+    if (antiAbuseRes.status === 200 && antiAbuseRes.data?.success && antiAbuseRes.data?.data?.status) {
+      record('Authentication', 'Anti-Abuse Risk Engine Status', 'PASS', `HTTP 200 — Status: ${antiAbuseRes.data.data.status}`);
+    } else {
+      record('Authentication', 'Anti-Abuse Risk Engine Status', 'FAIL', `HTTP ${antiAbuseRes.status}: ${JSON.stringify(antiAbuseRes.data)}`);
+    }
+  } catch (err: any) {
+    record('Authentication', 'Anti-Abuse Risk Engine Status', 'FAIL', `Exception: ${err.message}`);
+  }
+
   // 1.4 Protected route without auth
   try {
     const unauthRes = await httpRequest('/api/v1/servers');
@@ -344,7 +387,9 @@ export async function runComprehensiveVerification() {
       const optionsRes = await httpRequest('/api/v1/deploy/options', {
         headers: { Authorization: `Bearer ${adminToken}` }
       });
-      const validPlanId = optionsRes.data?.data?.plans?.[0]?.id || 'plan_mc_starter';
+      const plansList = optionsRes.data?.data?.plans || [];
+      const smallestPlan = plansList.slice().sort((a: any, b: any) => (a.ramMB || 0) - (b.ramMB || 0))[0];
+      const validPlanId = smallestPlan?.id || optionsRes.data?.data?.plans?.[0]?.id || 'plan_bot_starter';
 
       const deployRes = await httpRequest('/api/v1/deploy/create', {
         method: 'POST',
@@ -425,6 +470,84 @@ export async function runComprehensiveVerification() {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${adminToken}` }
         });
+      }
+
+      // 4.6 Server Allocation & Quota Limit Enforcement Test
+      try {
+        const quotaEmail = `quota_test_${Date.now()}@aether.local`;
+        const quotaRegRes = await httpRequest('/api/v1/auth/register', {
+          method: 'POST',
+          body: {
+            username: `quota_usr_${Date.now()}`,
+            email: quotaEmail,
+            password: 'SecureQuotaPassword123!',
+            displayName: 'Quota Test User'
+          }
+        });
+
+        if (quotaRegRes.status === 200 && quotaRegRes.data?.data?.token) {
+          const quotaToken = quotaRegRes.data.data.token;
+          const quotaUserId = quotaRegRes.data.data.user.id;
+
+          // Grant credits to test user
+          await httpRequest(`/api/v1/admin/users/${quotaUserId}/credits`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${adminToken}` },
+            body: { amount: 100, mode: 'add' }
+          });
+
+          // Deploy 1st server (allowed by 1-server default quota)
+          const quotaServer1Res = await httpRequest('/api/v1/deploy/create', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${quotaToken}` },
+            body: { name: 'Quota Server 1', planId: validPlanId, paymentMethod: 'balance' }
+          });
+
+          const s1Created = quotaServer1Res.status === 200 && quotaServer1Res.data?.success;
+          const s1Id = quotaServer1Res.data?.data?.server?.id;
+
+          // Attempt to deploy 2nd server (should be blocked by quota)
+          const quotaServer2FailRes = await httpRequest('/api/v1/deploy/create', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${quotaToken}` },
+            body: { name: 'Quota Server 2 Blocked', planId: validPlanId, paymentMethod: 'balance' }
+          });
+
+          const s2Blocked = quotaServer2FailRes.status === 403 && quotaServer2FailRes.data?.error?.code === 'SERVER_LIMIT_REACHED';
+
+          // Admin updates quota to 2
+          const patchAllocRes = await httpRequest(`/api/v1/admin/users/${quotaUserId}/allocation`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${adminToken}` },
+            body: { serverLimit: 2 }
+          });
+          const allocPatched = patchAllocRes.status === 200 && patchAllocRes.data?.data?.serverLimit === 2;
+
+          // Deploy 2nd server now (should succeed)
+          const quotaServer2PassRes = await httpRequest('/api/v1/deploy/create', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${quotaToken}` },
+            body: { name: 'Quota Server 2 Allowed', planId: validPlanId, paymentMethod: 'balance' }
+          });
+          const s2Created = quotaServer2PassRes.status === 200 && quotaServer2PassRes.data?.success;
+          if (!s2Created) {
+            console.log('quotaServer2PassRes error debug:', quotaServer2PassRes.status, quotaServer2PassRes.data);
+          }
+          const s2Id = quotaServer2PassRes.data?.data?.server?.id;
+
+          if (s1Created && s2Blocked && allocPatched && s2Created) {
+            record('Server Management', 'Server Allocation Quota Enforcement', 'PASS', `1-server quota blocked 2nd creation (HTTP 403); admin updated allocation to 2; 2nd server deployed successfully`);
+          } else {
+            record('Server Management', 'Server Allocation Quota Enforcement', 'FAIL', `S1: ${s1Created}, S2 Blocked: ${s2Blocked}, Alloc Patched: ${allocPatched}, S2 Created: ${s2Created}`);
+          }
+
+          // Cleanup quota servers & test user
+          if (s1Id) await httpRequest(`/api/v1/admin/servers/${s1Id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } });
+          if (s2Id) await httpRequest(`/api/v1/admin/servers/${s2Id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } });
+          await httpRequest(`/api/v1/admin/users/${quotaUserId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } });
+        }
+      } catch (err: any) {
+        record('Server Management', 'Server Allocation Quota Enforcement', 'FAIL', `Exception: ${err.message}`);
       }
     } catch (err: any) {
       record('Server Management', 'Server Lifecycle', 'FAIL', `Exception: ${err.message}`);
@@ -549,7 +672,13 @@ export async function runComprehensiveVerification() {
   console.log('\n--- SECTION 9: ADMIN USER PASSWORD RESET & SESSION REVOCATION ---');
   if (adminToken) {
     try {
-      const resetRes = await httpRequest(`/api/v1/admin/users/usr_admin/reset-password`, {
+      // Get current admin user ID dynamically
+      const meRes = await httpRequest('/api/v1/auth/me', {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      const adminUserId = meRes.data?.data?.id || 'usr_admin';
+
+      const resetRes = await httpRequest(`/api/v1/admin/users/${adminUserId}/reset-password`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${adminToken}` },
         body: { newPassword: 'NewAdminSecuredPass2026!' }
@@ -580,10 +709,11 @@ export async function runComprehensiveVerification() {
 
         if (newLoginRes.status === 200 && newLoginRes.data?.data?.token) {
           const newAdminToken = newLoginRes.data.data.token;
+          adminToken = newAdminToken;
           record('Admin Password Reset', 'Login with New Password', 'PASS', `HTTP 200 — Successfully logged in with updated password`);
 
           // Restore password back to adminopp
-          await httpRequest(`/api/v1/admin/users/usr_admin/reset-password`, {
+          await httpRequest(`/api/v1/admin/users/${adminUserId}/reset-password`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${newAdminToken}` },
             body: { newPassword: 'adminopp' }

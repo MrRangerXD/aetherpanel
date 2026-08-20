@@ -31,6 +31,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  if (process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1') {
+    app.set('trust proxy', true);
+  }
+
   // Basic Body Parsers
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));

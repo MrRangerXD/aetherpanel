@@ -410,9 +410,34 @@ install_panel() {
   print_banner
   echo -e "${PURPLE}${BOLD}=== AETHERPANEL CONTROL PLANE INSTALLATION ===${NC}\n"
   
-  read -p "Enter preferred Panel Web Port [Default: 3000]: " USER_PORT
-  if [ -n "$USER_PORT" ]; then
-    PANEL_PORT="$USER_PORT"
+  if [ -z "$PANEL_PORT" ]; then
+    read -p "Enter preferred Panel Web Port [Default: 3000]: " USER_PORT
+    if [ -n "$USER_PORT" ]; then
+      PANEL_PORT="$USER_PORT"
+    else
+      PANEL_PORT=3000
+    fi
+  fi
+
+  if [ -z "$ADMIN_EMAIL" ]; then
+    read -p "Enter Admin Email Address [Default: admin@aetherpanel.in]: " INPUT_ADMIN_EMAIL
+    ADMIN_EMAIL="${INPUT_ADMIN_EMAIL:-admin@aetherpanel.in}"
+  fi
+
+  if [ -z "$ADMIN_PASS" ]; then
+    read -s -p "Enter Admin Password [Default: adminopp]: " INPUT_ADMIN_PASS
+    echo ""
+    if [ -n "$INPUT_ADMIN_PASS" ]; then
+      read -s -p "Confirm Admin Password: " INPUT_CONFIRM_PASS
+      echo ""
+      if [ "$INPUT_ADMIN_PASS" != "$INPUT_CONFIRM_PASS" ]; then
+        echo -e "${RED}[ERROR] Passwords do not match. Aborting installation.${NC}"
+        return 1
+      fi
+      ADMIN_PASS="$INPUT_ADMIN_PASS"
+    else
+      ADMIN_PASS="adminopp"
+    fi
   fi
 
   echo -e "\n${BOLD}Beginning 8-Step Installation Sequence...${NC}\n"
@@ -462,10 +487,26 @@ AETHER_STORAGE_PATH=${INSTALL_DIR}/data
 EOF
     fi
 
+    # Save initial admin credentials if specified
+    if [ -n "$ADMIN_EMAIL" ]; then
+      echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
+    fi
+    if [ -n "$ADMIN_PASS" ]; then
+      echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
+    fi
+
     # Generate secure random secret if crypto/openssl is available
     if command -v openssl &> /dev/null; then
       SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "aether_secret_$(date +%s)")
       echo "JWT_SECRET=${SESSION_SECRET}" >> "$INSTALL_DIR/.env"
+    fi
+  else
+    # Maintain or append admin credentials if missing
+    if [ -n "$ADMIN_EMAIL" ] && ! grep -q "AETHER_ADMIN_EMAIL" "$INSTALL_DIR/.env"; then
+      echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
+    fi
+    if [ -n "$ADMIN_PASS" ] && ! grep -q "AETHER_ADMIN_PASSWORD" "$INSTALL_DIR/.env"; then
+      echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
     fi
   fi
   echo -e "${GREEN}[✓] Step 5 complete: Environment configured at ${INSTALL_DIR}/.env.${NC}\n"
@@ -579,8 +620,8 @@ EOF
   echo -e "Repository:      ${BOLD}${REPO_URL}${NC}"
   echo -e "Install Dir:     ${BOLD}${INSTALL_DIR}${NC}"
   echo -e "Web Panel URL:   ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT}${NC}"
-  echo -e "Default Admin:   ${BOLD}admin@aetherpanel.in${NC}"
-  echo -e "Default Pass:    ${BOLD}adminopp${NC} (Required to update on first login)"
+  echo -e "Admin Account:   ${BOLD}${ADMIN_EMAIL:-admin@aetherpanel.in}${NC}"
+  echo -e "Admin Password:  ${BOLD}${ADMIN_PASS:-adminopp}${NC}"
   echo -e "Service Status:  ${GREEN}● active (running)${NC}"
   echo -e "Logs Location:   ${BOLD}/var/log/aetherpanel/panel.log${NC}"
   echo -e "Installer Log:   ${BOLD}${LOG_FILE}${NC}\n"
@@ -1066,6 +1107,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --port)
       PANEL_PORT="$2"
+      shift 2
+      ;;
+    --admin-email)
+      ADMIN_EMAIL="$2"
+      shift 2
+      ;;
+    --admin-password|--admin-pass)
+      ADMIN_PASS="$2"
       shift 2
       ;;
     --branch)

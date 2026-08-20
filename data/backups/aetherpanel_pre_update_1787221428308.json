@@ -237,7 +237,8 @@
       "serverLimit": 1,
       "credits": 10,
       "createdAt": "2026-08-20T10:23:35.613Z",
-      "updatedAt": "2026-08-20T10:23:35.613Z"
+      "updatedAt": "2026-08-20T10:23:35.613Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     }
   ],
   "passwords": {
@@ -610,9 +611,9 @@
       "locationName": "Primary Control Plane VPS",
       "flagCode": "LOCAL",
       "totalRamMB": 4096,
-      "usedRamMB": 1305,
+      "usedRamMB": 2377,
       "totalCpuCores": 2,
-      "usedCpuCores": 0.1,
+      "usedCpuCores": 1.6,
       "totalDiskGB": 504,
       "usedDiskGB": 1,
       "reservedRamMB": 2048,
@@ -629,9 +630,9 @@
       "status": "online",
       "isMaintenanceMode": false,
       "isLocalNode": true,
-      "serverCount": 0,
+      "serverCount": 3,
       "daemonToken": "daemon_token_local_node_secret_82910",
-      "lastHeartbeatAt": "2026-08-20T10:23:55.588Z",
+      "lastHeartbeatAt": "2026-08-20T10:23:44.519Z",
       "isSecure": true,
       "installationId": "aep_mt1an3njd042648f1b80066a"
     }
@@ -695,7 +696,8 @@
       "currency": "USD",
       "status": "paid",
       "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:36.120Z"
+      "createdAt": "2026-08-20T10:23:36.120Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "ord_1787221416087",
@@ -708,7 +710,8 @@
       "currency": "USD",
       "status": "paid",
       "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:36.087Z"
+      "createdAt": "2026-08-20T10:23:36.087Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "ord_1787221415909",
@@ -721,7 +724,8 @@
       "currency": "USD",
       "status": "paid",
       "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:35.909Z"
+      "createdAt": "2026-08-20T10:23:35.909Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "ord_1787220671354",
@@ -1129,7 +1133,8 @@
       "targetResource": "usr_1787221416769",
       "details": "Deleted user account admin_created_1787221416652@aether.local",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.788Z"
+      "createdAt": "2026-08-20T10:23:36.788Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416783_qcbi",
@@ -1140,7 +1145,8 @@
       "targetResource": "usr_1787221416769",
       "details": "Adjusted credits for admin_created_1787221416652@aether.local (remove: $10) -> Balance: $40",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.783Z"
+      "createdAt": "2026-08-20T10:23:36.783Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416777_lny7",
@@ -1151,7 +1157,8 @@
       "targetResource": "usr_1787221416769",
       "details": "Suspended user admin_created_1787221416652@aether.local",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.777Z"
+      "createdAt": "2026-08-20T10:23:36.777Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416770_i5lt",
@@ -1162,7 +1169,8 @@
       "targetResource": "usr_1787221416769",
       "details": "Admin created user admin_created_1787221416652@aether.local with role user",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.770Z"
+      "createdAt": "2026-08-20T10:23:36.770Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416646_5f4q",
@@ -1173,7 +1181,8 @@
       "targetResource": "SYSTEM",
       "details": "Updated system settings",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.646Z"
+      "createdAt": "2026-08-20T10:23:36.646Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416638_qnu2",
@@ -1184,7 +1193,8 @@
       "targetResource": "SYSTEM",
       "details": "Updated system settings",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.638Z"
+      "createdAt": "2026-08-20T10:23:36.638Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416633_9hyu",
@@ -1195,7 +1205,8 @@
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.633Z"
+      "createdAt": "2026-08-20T10:23:36.633Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416523_rpv3",
@@ -1206,7 +1217,8 @@
       "targetResource": "usr_admin",
       "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.523Z"
+      "createdAt": "2026-08-20T10:23:36.523Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416405_k750",
@@ -1217,7 +1229,8 @@
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.405Z"
+      "createdAt": "2026-08-20T10:23:36.405Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416293_928l",
@@ -1228,7 +1241,8 @@
       "targetResource": "usr_admin",
       "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.293Z"
+      "createdAt": "2026-08-20T10:23:36.293Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416155_thmg",
@@ -1239,7 +1253,8 @@
       "targetResource": "usr_1787221415972_6cao",
       "details": "Deleted user account quota_test_1787221415971@aether.local",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.155Z"
+      "createdAt": "2026-08-20T10:23:36.155Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416148_b6gy",
@@ -1250,7 +1265,8 @@
       "targetResource": "srv_1787221416120_lxo8",
       "details": "Admin deleted server 'Quota Server 2 Allowed' (srv_1787221416120_lxo8) owned by user usr_1787221415972_6cao",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.148Z"
+      "createdAt": "2026-08-20T10:23:36.148Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416141_9fwh",
@@ -1261,7 +1277,8 @@
       "targetResource": "srv_1787221416087_mx4z",
       "details": "Admin deleted server 'Quota Server 1' (srv_1787221416087_mx4z) owned by user usr_1787221415972_6cao",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.141Z"
+      "createdAt": "2026-08-20T10:23:36.141Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416134_6kil",
@@ -1272,7 +1289,8 @@
       "targetResource": "srv_1787221416120_lxo8",
       "details": "Provisioned server 'Quota Server 2 Allowed' from template 'Node.js' ($0.00)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.134Z"
+      "createdAt": "2026-08-20T10:23:36.134Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416117_vmhn",
@@ -1283,7 +1301,8 @@
       "targetResource": "usr_1787221415972_6cao",
       "details": "Updated server allocation limit for quota_test_1787221415971@aether.local to 2",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.117Z"
+      "createdAt": "2026-08-20T10:23:36.117Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416106_oosq",
@@ -1294,7 +1313,8 @@
       "targetResource": "srv_1787221416087_mx4z",
       "details": "Provisioned server 'Quota Server 1' from template 'Node.js' ($0.00)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.106Z"
+      "createdAt": "2026-08-20T10:23:36.106Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416084_8z1i",
@@ -1305,7 +1325,8 @@
       "targetResource": "usr_1787221415972_6cao",
       "details": "Adjusted credits for quota_test_1787221415971@aether.local (add: $100) -> Balance: $110",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.084Z"
+      "createdAt": "2026-08-20T10:23:36.084Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221416075_1oam",
@@ -1316,7 +1337,8 @@
       "targetResource": "ACCOUNT",
       "details": "User registered account",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.075Z"
+      "createdAt": "2026-08-20T10:23:36.075Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415968_bt7f",
@@ -1327,7 +1349,8 @@
       "targetResource": "srv_1787221415909_mgdo",
       "details": "Admin deleted server 'Verification Bot Server' (srv_1787221415909_mgdo) owned by user usr_admin",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.968Z"
+      "createdAt": "2026-08-20T10:23:35.968Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415953_egqz",
@@ -1338,7 +1361,8 @@
       "targetResource": "srv_1787221415909_mgdo",
       "details": "Executed stop on server Verification Bot Server",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.953Z"
+      "createdAt": "2026-08-20T10:23:35.953Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415943_zrt0",
@@ -1349,7 +1373,8 @@
       "targetResource": "srv_1787221415909_mgdo",
       "details": "Executed start on server Verification Bot Server",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.943Z"
+      "createdAt": "2026-08-20T10:23:35.943Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415914_6qev",
@@ -1360,7 +1385,8 @@
       "targetResource": "srv_1787221415909_mgdo",
       "details": "Provisioned server 'Verification Bot Server' from template 'Node.js' ($0.00)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.914Z"
+      "createdAt": "2026-08-20T10:23:35.914Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415899_21ib",
@@ -1371,7 +1397,8 @@
       "targetResource": "key_1787221415870_l4dn",
       "details": "Revoked API key 'Automated Audit Verification Key' (aeth_live_2c040f...23c6)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.899Z"
+      "createdAt": "2026-08-20T10:23:35.899Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415892_k5yj",
@@ -1382,7 +1409,8 @@
       "targetResource": "key_1787221415870_l4dn",
       "details": "Revoked API key 'Automated Audit Verification Key' (aeth_live_2c040f...23c6)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.892Z"
+      "createdAt": "2026-08-20T10:23:35.892Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415871_dzuo",
@@ -1393,7 +1421,8 @@
       "targetResource": "key_1787221415870_l4dn",
       "details": "Created API key token 'Automated Audit Verification Key'",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.871Z"
+      "createdAt": "2026-08-20T10:23:35.871Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415732_in3s",
@@ -1404,7 +1433,8 @@
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.732Z"
+      "createdAt": "2026-08-20T10:23:35.732Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787221415617_q84d",
@@ -1415,7 +1445,8 @@
       "targetResource": "ACCOUNT",
       "details": "User registered account",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.617Z"
+      "createdAt": "2026-08-20T10:23:35.617Z",
+      "installationId": "aep_mt1an3njd042648f1b80066a"
     },
     {
       "id": "aud_1787220672319_v0zi",

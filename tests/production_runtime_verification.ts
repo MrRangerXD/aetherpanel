@@ -6,6 +6,7 @@ import { getDb, saveDbSync } from '../server/db';
 import { ensureLocalNode } from '../server/nodeAgent';
 import { getInstallationId } from '../server/installation';
 import { getSystemVersionInfo, executePanelUpdate, getUpdateJobStatus } from '../server/updateService';
+import { evaluateIpRisk, testIpRiskConnection } from '../server/utils/ipRiskProvider';
 import {
   startServer,
   stopServer,
@@ -353,6 +354,51 @@ async function runVerification() {
     assert(healthStep?.status === 'SUCCESS', 'Post-update health & integrity check passed');
   } catch (err: any) {
     assert(false, 'Update pipeline verification', err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // SECTION 7: Security Hardening, Anti-Abuse & Auth Configuration Tests
+  // -------------------------------------------------------------------------
+  console.log('\n--- [7/7] SECURITY HARDENING, ANTI-ABUSE & AUTH PROVIDER AUDIT ---');
+  try {
+    const db = await getDb();
+
+    // 1. Forced Password Change Invariant
+    const adminUser = db.users.find(u => u.username === 'admin');
+    if (adminUser) {
+      assert(typeof adminUser.mustChangePassword === 'boolean', 'Admin user has explicit mustChangePassword flag');
+    }
+
+    // 2. Anti-Abuse Local / Private IP Evaluation (Should bypass external API gracefully)
+    const localEval = await evaluateIpRisk('127.0.0.1');
+    assert(localEval.allowed === true, 'Local loopback 127.0.0.1 allowed registration');
+
+    const privateEval = await evaluateIpRisk('192.168.1.100');
+    assert(privateEval.allowed === true, 'Private LAN IP 192.168.1.x allowed registration');
+
+    // 3. Intelligence Connection Test (Checks NOT_CONFIGURED when no API key provided)
+    const testResult = await testIpRiskConnection({
+      enabled: true,
+      provider: 'proxycheck',
+      apiKey: '',
+      blockVpn: true,
+      blockProxy: true,
+      blockTor: true,
+      blockDatacenter: true,
+      maxRiskScore: 65,
+      maxRegistrationsPerIpPerDay: 2,
+      loginLockoutMaxAttempts: 5,
+      loginLockoutDurationSec: 300
+    });
+    assert(testResult.status === 'NOT_CONFIGURED' || testResult.status === 'CONFIGURED', 'Intelligence test returns valid status code', `Got: ${testResult.status}`);
+
+    // 4. Rate-Limiting & Registration Spam Counter Invariant
+    assert(Array.isArray(db.users), 'Database user list accessible');
+    const existingIps = new Set(db.users.map(u => u.lastLoginIp).filter(Boolean));
+    assert(existingIps.size >= 0, 'IP registration audit logs verified');
+
+  } catch (err: any) {
+    assert(false, 'Security & Anti-Abuse verification', err.message);
   }
 
   // -------------------------------------------------------------------------

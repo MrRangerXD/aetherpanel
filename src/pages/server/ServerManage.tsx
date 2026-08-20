@@ -1517,8 +1517,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               )}
 
               {/* Files Table */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-                <table className="w-full text-left text-xs">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
                     <tr>
                       <th className="p-3">Name</th>
@@ -1529,46 +1529,48 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60">
                     {files.map((file, i) => (
-                      <tr key={i} className="hover:bg-zinc-900 transition-colors">
+                      <tr key={i} className="hover:bg-zinc-900/40 transition-colors">
                         <td className="p-3">
                           <button
                             onClick={() => handleOpenFile(file)}
-                            className="flex items-center gap-2 font-mono text-zinc-200 hover:text-violet-400 transition-colors"
+                            className="flex items-center gap-2 font-mono text-zinc-200 hover:text-violet-400 transition-colors text-left"
                           >
                             {file.isDir ? (
-                              <Folder className="h-4 w-4 text-amber-400 fill-amber-400/10" />
+                              <Folder className="h-4 w-4 text-amber-400 fill-amber-400/10 shrink-0" />
                             ) : file.name.endsWith('.zip') || file.name.endsWith('.tar.gz') ? (
-                              <FileArchive className="h-4 w-4 text-rose-400" />
+                              <FileArchive className="h-4 w-4 text-rose-400 shrink-0" />
                             ) : (
-                              <FileText className="h-4 w-4 text-cyan-400" />
+                              <FileText className="h-4 w-4 text-cyan-400 shrink-0" />
                             )}
-                            <span className="font-semibold">{file.name}</span>
+                            <span className="font-semibold break-all">{file.name}</span>
                           </button>
                         </td>
-                        <td className="p-3 font-mono text-zinc-400">
+                        <td className="p-3 font-mono text-zinc-400 whitespace-nowrap">
                           {file.isDir ? 'DIR' : `${(file.size / 1024).toFixed(1)} KB`}
                         </td>
-                        <td className="p-3 text-zinc-500">{file.updatedAt}</td>
+                        <td className="p-3 text-zinc-500 whitespace-nowrap">{file.updatedAt}</td>
                         <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1">
                             {!file.isDir && (
                               <a
                                 href={`/api/v1/servers/${serverId}/files/download?path=${encodeURIComponent(currentPath === '/' ? file.name : `${currentPath}/${file.name}`)}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="p-1 text-zinc-400 hover:text-emerald-400"
+                                className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/50 transition-colors shrink-0"
                                 title="Download File"
+                                aria-label={`Download ${file.name}`}
                               >
-                                <Download className="h-3.5 w-3.5" />
+                                <Download className="h-4 w-4" />
                               </a>
                             )}
                             {file.name.endsWith('.zip') && (
                               <button
                                 onClick={() => handleDecompress(file.name)}
-                                className="p-1 text-zinc-400 hover:text-amber-400"
+                                className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-amber-400 hover:bg-zinc-800/50 transition-colors shrink-0"
                                 title="Extract ZIP"
+                                aria-label={`Extract zip file ${file.name}`}
                               >
-                                <Zap className="h-3.5 w-3.5" />
+                                <Zap className="h-4 w-4" />
                               </button>
                             )}
                             <button
@@ -1578,17 +1580,19 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                                 setRenameNewPath(oldP);
                                 setShowRenameModal(true);
                               }}
-                              className="p-1 text-zinc-400 hover:text-violet-400"
+                              className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-violet-400 hover:bg-zinc-800/50 transition-colors shrink-0"
                               title="Rename Item"
+                              aria-label={`Rename ${file.name}`}
                             >
-                              <Edit3 className="h-3.5 w-3.5" />
+                              <Edit3 className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteFile(file.name)}
-                              className="p-1 text-zinc-400 hover:text-rose-400"
+                              className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/50 transition-colors shrink-0"
                               title="Delete Item"
+                              aria-label={`Delete ${file.name}`}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         </td>

@@ -81,6 +81,7 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
     displayName: displayName || username.trim(),
     role: role || 'user',
     credits: parseFloat(credits) || 0,
+    serverLimit: typeof req.body.serverLimit === 'number' ? req.body.serverLimit : (role === 'admin' || role === 'super_admin' ? 50 : 1),
     isSuspended: false,
     emailVerified: true,
     twoFactorEnabled: false,
@@ -97,14 +98,14 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, data: newUser, message: `User ${newUser.email} created successfully` });
 });
 
-// PUT /api/v1/admin/users/:id - Update user role, credits, status
+// PUT /api/v1/admin/users/:id - Update user role, credits, status, allocation
 router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const user = db.users.find(u => u.id === req.params.id);
 
   if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
 
-  const { role, isSuspended, credits, displayName } = req.body;
+  const { role, isSuspended, credits, displayName, serverLimit } = req.body;
 
   if (role && ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(role)) {
     user.role = role;
@@ -114,6 +115,9 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   }
   if (typeof credits === 'number') {
     user.credits = credits;
+  }
+  if (typeof serverLimit === 'number') {
+    user.serverLimit = serverLimit;
   }
   if (displayName) {
     user.displayName = displayName;
@@ -125,6 +129,26 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_USER', user.id, `Updated user ${user.email} (Role: ${user.role}, Suspended: ${user.isSuspended})`);
 
   res.json({ success: true, data: user });
+});
+
+// PATCH /api/v1/admin/users/:id/allocation - Admin update user server quota
+router.patch('/users/:id/allocation', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const user = db.users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+
+  const { serverLimit } = req.body;
+  if (typeof serverLimit !== 'number' || serverLimit < 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_LIMIT', message: 'Server limit must be a non-negative number' } });
+  }
+
+  user.serverLimit = serverLimit;
+  user.updatedAt = new Date().toISOString();
+  saveDbSync();
+
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_USER_ALLOCATION', user.id, `Updated server allocation limit for ${user.email} to ${serverLimit}`);
+
+  res.json({ success: true, data: { userId: user.id, serverLimit: user.serverLimit } });
 });
 
 // PATCH /api/v1/admin/users/:id/role
@@ -1380,8 +1404,8 @@ router.post('/discord-bot/test', async (req: AuthenticatedRequest, res: Response
     return res.json({
       success: true,
       data: {
-        status: 'DISCONNECTED',
-        message: 'BLOCKED — MISSING PRODUCTION BOT TOKEN',
+        status: 'NOT_CONFIGURED',
+        message: 'Discord Bot Gateway: NOT CONFIGURED (Bot Token & Guild ID required)',
         requiredConfig: [
           'DISCORD_BOT_TOKEN',
           'DISCORD_GUILD_ID'
@@ -1394,12 +1418,93 @@ router.post('/discord-bot/test', async (req: AuthenticatedRequest, res: Response
   res.json({
     success: true,
     data: {
-      status: 'CONNECTED',
-      message: 'Discord Bot Gateway connected and active.',
+      status: 'CONFIGURED',
+      message: 'Discord Bot Gateway configured and active.',
       requiredConfig: [],
       lastCheck: new Date().toISOString()
     }
   });
+});
+
+// GET /api/v1/admin/anti-abuse - Get Anti-Abuse & VPN protection settings
+router.get('/anti-abuse', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const antiAbuse = db.settings.antiAbuse || {
+    enabled: false,
+    provider: 'proxycheck',
+    apiKey: '',
+    blockVpn: true,
+    blockProxy: true,
+    blockTor: true,
+    blockDatacenter: false,
+    maxRiskScore: 65,
+    maxRegistrationsPerIpPerDay: 2,
+    loginLockoutMaxAttempts: 5,
+    loginLockoutDurationSec: 300
+  };
+
+  res.json({
+    success: true,
+    data: {
+      ...antiAbuse,
+      apiKey: antiAbuse.apiKey ? '••••••••••••••••' : (process.env.VPN_CHECK_API_KEY ? '••••••••••••••••' : '')
+    }
+  });
+});
+
+// PUT /api/v1/admin/anti-abuse - Update Anti-Abuse & VPN protection settings
+router.put('/anti-abuse', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  const db = await getDb();
+  const incoming = req.body || {};
+  const existingApiKey = db.settings.antiAbuse?.apiKey || process.env.VPN_CHECK_API_KEY || '';
+  const newApiKey = incoming.apiKey && !incoming.apiKey.includes('••••') ? incoming.apiKey : existingApiKey;
+
+  db.settings.antiAbuse = {
+    enabled: incoming.enabled ?? false,
+    provider: incoming.provider || 'proxycheck',
+    apiKey: newApiKey,
+    blockVpn: incoming.blockVpn ?? true,
+    blockProxy: incoming.blockProxy ?? true,
+    blockTor: incoming.blockTor ?? true,
+    blockDatacenter: incoming.blockDatacenter ?? false,
+    maxRiskScore: typeof incoming.maxRiskScore === 'number' ? incoming.maxRiskScore : 65,
+    maxRegistrationsPerIpPerDay: typeof incoming.maxRegistrationsPerIpPerDay === 'number' ? incoming.maxRegistrationsPerIpPerDay : 2,
+    loginLockoutMaxAttempts: typeof incoming.loginLockoutMaxAttempts === 'number' ? incoming.loginLockoutMaxAttempts : 5,
+    loginLockoutDurationSec: typeof incoming.loginLockoutDurationSec === 'number' ? incoming.loginLockoutDurationSec : 300
+  };
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_ANTI_ABUSE',
+    'SECURITY',
+    `Updated Anti-Abuse security settings (Enabled: ${db.settings.antiAbuse.enabled}, Provider: ${db.settings.antiAbuse.provider})`
+  );
+
+  res.json({
+    success: true,
+    message: 'Anti-Abuse protection settings saved successfully.',
+    data: {
+      ...db.settings.antiAbuse,
+      apiKey: db.settings.antiAbuse.apiKey ? '••••••••••••••••' : ''
+    }
+  });
+});
+
+// POST /api/v1/admin/anti-abuse/test - Test IP intelligence API connection
+router.post('/anti-abuse/test', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const { testIpRiskConnection } = await import('../utils/ipRiskProvider');
+  const antiAbuse = db.settings.antiAbuse || { enabled: false };
+  const result = await testIpRiskConnection(antiAbuse);
+  res.json({ success: true, data: result });
 });
 
 // GET /api/v1/admin/sftp/status - Get SFTP Subsystem status & config

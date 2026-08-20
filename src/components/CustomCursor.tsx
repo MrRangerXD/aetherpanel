@@ -11,8 +11,11 @@ export const CustomCursor: React.FC = () => {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   useEffect(() => {
-    // Detect mobile touch
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    // Detect mobile touch vs fine pointers (mouse) and check prefers-reduced-motion
+    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (!hasFinePointer || 'ontouchstart' in window || navigator.maxTouchPoints > 0) {
       setIsTouchDevice(true);
       return;
     }
@@ -54,8 +57,10 @@ export const CustomCursor: React.FC = () => {
 
     // Smooth lerp for outer ring using requestAnimationFrame
     const render = () => {
-      ringX += (mouseX - ringX) * 0.2;
-      ringY += (mouseY - ringY) * 0.2;
+      // If prefersReducedMotion is active, bypass smooth lerping to reduce transitions
+      const lerpFactor = prefersReducedMotion ? 1.0 : 0.2;
+      ringX += (mouseX - ringX) * lerpFactor;
+      ringY += (mouseY - ringY) * lerpFactor;
 
       if (cursorRingRef.current) {
         cursorRingRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0)`;

@@ -4,8 +4,146 @@ import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { generateToken, authMiddleware, createAuditLog, AuthenticatedRequest } from '../auth';
 import { User, DiscordAccount } from '../../src/types';
+import { evaluateIpRisk, AntiAbuseConfig } from '../utils/ipRiskProvider';
 
 const router = Router();
+
+// Rate limiting & abuse protection tracking
+interface LoginFailureRecord {
+  count: number;
+  firstFailedAt: number;
+  lockedUntil?: number;
+}
+
+const loginIpFailures = new Map<string, LoginFailureRecord>();
+const loginIdentifierFailures = new Map<string, LoginFailureRecord>();
+const registrationIpTrack = new Map<string, { count: number; resetAt: number }>();
+
+const MAX_FAILED_ATTEMPTS = 5;
+const FAILURE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_REGISTRATIONS_PER_HOUR = 10;
+const REGISTRATION_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+function getClientIp(req: any): string {
+  // Only allow test IP overrides in test environments
+  if (process.env.NODE_ENV === 'test' || process.env.TEST_MODE === 'true') {
+    const simulated = req.headers['x-simulated-ip'] || req.headers['x-test-ip'];
+    if (simulated) return String(simulated).trim();
+  }
+
+  // Only trust proxy headers when explicit reverse proxy trust is configured
+  const isTrustProxy = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
+  if (isTrustProxy) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      const ips = (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',');
+      const clientIp = ips[0].trim();
+      if (clientIp) return clientIp;
+    }
+    const realIp = req.headers['x-real-ip'];
+    if (realIp) return String(realIp).trim();
+  }
+
+  return req.socket?.remoteAddress || req.ip || '127.0.0.1';
+}
+
+function checkLoginLockout(ip: string, identifier: string): { isLocked: boolean; remainingSeconds: number } {
+  const now = Date.now();
+  // If not loopback, check IP lockout
+  if (ip !== '127.0.0.1' && ip !== '::1') {
+    const ipRec = loginIpFailures.get(ip);
+    if (ipRec && ipRec.lockedUntil && ipRec.lockedUntil > now) {
+      return { isLocked: true, remainingSeconds: Math.ceil((ipRec.lockedUntil - now) / 1000) };
+    }
+  }
+  // Check identifier lockout for all environments
+  const idRec = loginIdentifierFailures.get(identifier.toLowerCase());
+  if (idRec && idRec.lockedUntil && idRec.lockedUntil > now) {
+    return { isLocked: true, remainingSeconds: Math.ceil((idRec.lockedUntil - now) / 1000) };
+  }
+  return { isLocked: false, remainingSeconds: 0 };
+}
+
+function recordLoginFailure(ip: string, identifier: string): { locked: boolean; remainingSeconds: number } {
+  const now = Date.now();
+  
+  // Track by IP
+  let ipRec = loginIpFailures.get(ip);
+  if (!ipRec || now - ipRec.firstFailedAt > FAILURE_WINDOW_MS) {
+    ipRec = { count: 1, firstFailedAt: now };
+  } else {
+    ipRec.count++;
+  }
+  if (ipRec.count >= MAX_FAILED_ATTEMPTS) {
+    ipRec.lockedUntil = now + LOCKOUT_DURATION_MS;
+  }
+  loginIpFailures.set(ip, ipRec);
+
+  // Track by identifier
+  const cleanId = identifier.toLowerCase();
+  let idRec = loginIdentifierFailures.get(cleanId);
+  if (!idRec || now - idRec.firstFailedAt > FAILURE_WINDOW_MS) {
+    idRec = { count: 1, firstFailedAt: now };
+  } else {
+    idRec.count++;
+  }
+  if (idRec.count >= MAX_FAILED_ATTEMPTS) {
+    idRec.lockedUntil = now + LOCKOUT_DURATION_MS;
+  }
+  loginIdentifierFailures.set(cleanId, idRec);
+
+  const locked = (ipRec.lockedUntil !== undefined && ipRec.lockedUntil > now) || (idRec.lockedUntil !== undefined && idRec.lockedUntil > now);
+  const remainingSeconds = locked ? Math.ceil(LOCKOUT_DURATION_MS / 1000) : 0;
+  return { locked, remainingSeconds };
+}
+
+function clearLoginFailures(ip: string, identifier: string) {
+  loginIpFailures.delete(ip);
+  loginIdentifierFailures.delete(identifier.toLowerCase());
+}
+
+function checkRegistrationRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const rec = registrationIpTrack.get(ip);
+  if (!rec || now > rec.resetAt) {
+    registrationIpTrack.set(ip, { count: 1, resetAt: now + REGISTRATION_WINDOW_MS });
+    return true;
+  }
+  if (rec.count >= MAX_REGISTRATIONS_PER_HOUR) {
+    return false;
+  }
+  rec.count++;
+  return true;
+}
+
+// GET /api/v1/auth/anti-abuse-status - Real configuration status for VPN/Proxy abuse protection
+router.get('/anti-abuse-status', async (req, res) => {
+  try {
+    const db = await getDb();
+    const hasKey = !!(process.env.VPN_CHECK_API_KEY || process.env.PROXYCHECK_KEY || (db.settings as any).antiAbuse?.apiKey);
+    if (!hasKey) {
+      return res.json({
+        success: true,
+        data: {
+          status: 'NOT_CONFIGURED',
+          message: 'VPN/Proxy Detection: NOT CONFIGURED',
+          enabled: false
+        }
+      });
+    }
+    return res.json({
+      success: true,
+      data: {
+        status: 'CONFIGURED',
+        provider: 'proxycheck',
+        enabled: true
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });
+  }
+});
 
 // GET /api/v1/auth/config - Public auth provider availability and public client configuration
 router.get('/config', async (req, res) => {
@@ -56,7 +194,29 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    const clientIp = getClientIp(req);
+    if (!checkRegistrationRateLimit(clientIp)) {
+      return res.status(429).json({
+        success: false,
+        error: { code: 'REGISTRATION_RATE_LIMITED', message: 'Too many registration requests from this network. Please try again later.' }
+      });
+    }
+
     const db = await getDb();
+
+    // Anti-Abuse & VPN / Proxy Risk Evaluation
+    if (db.settings?.antiAbuse) {
+      const riskCheck = await evaluateIpRisk(clientIp, db.settings.antiAbuse);
+      if (!riskCheck.allowed) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: riskCheck.errorCode || 'HIGH_RISK_NETWORK',
+            message: riskCheck.reason || 'Network address is flagged by Anti-Abuse security policies.'
+          }
+        });
+      }
+    }
 
     if (db.settings.authProviders?.emailPassword?.enabled === false) {
       return res.status(403).json({
@@ -94,6 +254,7 @@ router.post('/register', async (req, res) => {
       emailVerified: true,
       twoFactorEnabled: false,
       authProvider: 'local',
+      serverLimit: 1,
       credits: 10.0, // Welcome credit
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -132,6 +293,19 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const clientIp = getClientIp(req);
+    const lockout = checkLoginLockout(clientIp, email);
+    if (lockout.isLocked) {
+      res.setHeader('Retry-After', lockout.remainingSeconds.toString());
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'TOO_MANY_FAILED_ATTEMPTS',
+          message: `Too many failed login attempts. Please try again in ${lockout.remainingSeconds} seconds.`
+        }
+      });
+    }
+
     const db = await getDb();
 
     if (db.settings.authProviders?.emailPassword?.enabled === false) {
@@ -144,6 +318,17 @@ router.post('/login', async (req, res) => {
     const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() || u.username.toLowerCase() === email.toLowerCase());
 
     if (!user) {
+      const fail = recordLoginFailure(clientIp, email);
+      if (fail.locked) {
+        res.setHeader('Retry-After', fail.remainingSeconds.toString());
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_FAILED_ATTEMPTS',
+            message: `Too many failed login attempts. Please try again in ${fail.remainingSeconds} seconds.`
+          }
+        });
+      }
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' }
@@ -161,11 +346,25 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, passwordHash || '');
 
     if (!isMatch) {
+      const fail = recordLoginFailure(clientIp, email);
+      if (fail.locked) {
+        res.setHeader('Retry-After', fail.remainingSeconds.toString());
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_FAILED_ATTEMPTS',
+            message: `Too many failed login attempts. Please try again in ${fail.remainingSeconds} seconds.`
+          }
+        });
+      }
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' }
       });
     }
+
+    // Successful login: clear failure counters
+    clearLoginFailures(clientIp, email);
 
     const token = generateToken(user);
     await createAuditLog(user.id, user.email, user.role, 'USER_LOGIN', 'SESSION', 'Successful user authentication');
@@ -320,6 +519,7 @@ router.post('/firebase-verify', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'google',
       googleId: cleanGoogleId,
+      serverLimit: 1,
       credits: 10.0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -446,6 +646,7 @@ router.post('/firebase-google', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'google',
       googleId: cleanGoogleId,
+      serverLimit: 1,
       credits: 10.0, // Welcome credit
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -719,6 +920,7 @@ router.get('/discord/callback', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'discord',
       discordId,
+      serverLimit: 1,
       credits: 10.0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -823,8 +1025,8 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
   }
 });
 
-// PUT /api/v1/auth/change-password
-router.put('/change-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// PUT & POST /api/v1/auth/change-password - User voluntary password change
+const handleChangePassword = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
 
@@ -871,7 +1073,10 @@ router.put('/change-password', authMiddleware, async (req: AuthenticatedRequest,
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });
   }
-});
+};
+
+router.put('/change-password', authMiddleware, handleChangePassword);
+router.post('/change-password', authMiddleware, handleChangePassword);
 
 export default router;
 

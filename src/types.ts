@@ -21,6 +21,9 @@ export interface User {
   authProvider?: 'local' | 'google' | 'discord';
   googleId?: string;
   discordId?: string;
+  lastLoginIp?: string;
+  registrationIp?: string;
+  serverLimit?: number;
   credits: number;
   createdAt: string;
   updatedAt: string;
@@ -521,6 +524,20 @@ export interface CustomThemeSettings {
   allowUserCustomization: boolean;
 }
 
+export interface AntiAbuseSettings {
+  enabled: boolean;
+  provider: 'proxycheck' | 'ipqualityscore' | 'custom';
+  apiKey?: string;
+  blockVpn: boolean;
+  blockProxy: boolean;
+  blockTor: boolean;
+  blockDatacenter: boolean;
+  maxRiskScore: number;
+  maxRegistrationsPerIpPerDay: number;
+  loginLockoutMaxAttempts: number;
+  loginLockoutDurationSec: number;
+}
+
 export interface SystemSettings {
   platformName?: string;
   brandName: string;
@@ -540,6 +557,7 @@ export interface SystemSettings {
   discordSettings?: DiscordBotSettings;
   authProviders?: AuthProviderSettings;
   themeSettings?: CustomThemeSettings;
+  antiAbuse?: AntiAbuseSettings;
 }
 
 export interface PluginItem {

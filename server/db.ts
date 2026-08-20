@@ -799,7 +799,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           reservedRamMB: 2048,
           reservedCpuCores: 1,
           reservedDiskGB: 10,
-          ramOverallocatePercent: 0,
+          ramOverallocatePercent: 100,
           cpuOverallocatePercent: 0,
           diskOverallocatePercent: 0,
           maxServers: 100,
@@ -834,7 +834,8 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           emailVerified: true,
           twoFactorEnabled: false,
           tokenVersion: 1,
-          mustChangePassword: true,
+          mustChangePassword: false,
+          serverLimit: 50,
           credits: 500.0,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -843,12 +844,23 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         dbCache!.passwords[admin.id] = adminHash;
       } else {
         if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
-        // Ensure admin has a password hash initialized for adminopp
-        if (!dbCache!.passwords[admin.id] || !bcrypt.compareSync(adminPassword, dbCache!.passwords[admin.id])) {
+        if (admin.serverLimit === undefined) admin.serverLimit = 50;
+        // Only initialize password if no password hash exists in database
+        if (!dbCache!.passwords[admin.id]) {
           dbCache!.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
         }
       }
       delete dbCache!.passwords['usr_demo'];
+
+      // Normalize all existing users: remove any mandatory password change requirements and assign default server limits
+      dbCache!.users.forEach(u => {
+        if (u.mustChangePassword) {
+          u.mustChangePassword = false;
+        }
+        if (u.serverLimit === undefined) {
+          u.serverLimit = (u.role === 'admin' || u.role === 'super_admin') ? 50 : 1;
+        }
+      });
 
       dbCache!.nodes.forEach(n => {
         if (n.daemonPort === undefined) n.daemonPort = 8080;
@@ -995,7 +1007,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     isSuspended: false,
     emailVerified: true,
     twoFactorEnabled: false,
-    mustChangePassword: true,
+    mustChangePassword: false,
+    serverLimit: 50,
     credits: 500.0,
     installationId: currentInstId,
     createdAt: new Date().toISOString(),

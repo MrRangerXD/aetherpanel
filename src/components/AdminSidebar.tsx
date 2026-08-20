@@ -16,7 +16,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
   const { user, logout } = useAuth();
 
   return (
-    <aside className="w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950 flex flex-col justify-between min-h-[calc(100vh-4rem)]">
+    <aside className="hidden md:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950 flex-col justify-between min-h-[calc(100vh-4rem)]">
       <div>
         {/* Admin Header */}
         <div className="p-4 border-b border-amber-500/20 bg-amber-500/5">

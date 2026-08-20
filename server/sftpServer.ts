@@ -173,6 +173,17 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                   if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
                     return null;
                   }
+
+                  // Symlink traversal protection: verify realpath stays inside baseDir
+                  if (fs.existsSync(resolved)) {
+                    try {
+                      const realResolved = fs.realpathSync(resolved);
+                      if (realResolved !== baseDir && !realResolved.startsWith(baseDir + path.sep)) {
+                        return null; // Block symlink escaping sandbox!
+                      }
+                    } catch {}
+                  }
+
                   return resolved;
                 }
 

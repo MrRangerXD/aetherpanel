@@ -15,8 +15,8 @@
       "credits": 500,
       "installationId": "aep_mt1an3njd042648f1b80066a",
       "createdAt": "2026-08-20T09:03:58.226Z",
-      "updatedAt": "2026-08-20T10:23:36.522Z",
-      "tokenVersion": 23,
+      "updatedAt": "2026-08-20T10:11:11.905Z",
+      "tokenVersion": 21,
       "serverLimit": 50
     },
     {
@@ -222,26 +222,10 @@
       "createdAt": "2026-08-20T10:11:10.573Z",
       "updatedAt": "2026-08-20T10:11:10.573Z",
       "installationId": "aep_mt1an3njd042648f1b80066a"
-    },
-    {
-      "id": "usr_1787221415481_zk4r",
-      "username": "user_1787221415448",
-      "displayName": "Test Customer",
-      "email": "test_user_1787221415448@aether.local",
-      "role": "user",
-      "avatarUrl": "https://api.dicebear.com/7.x/identicon/svg?seed=user_1787221415448",
-      "isSuspended": false,
-      "emailVerified": true,
-      "twoFactorEnabled": false,
-      "authProvider": "local",
-      "serverLimit": 1,
-      "credits": 10,
-      "createdAt": "2026-08-20T10:23:35.613Z",
-      "updatedAt": "2026-08-20T10:23:35.613Z"
     }
   ],
   "passwords": {
-    "usr_admin": "$2b$10$3Q/n3ftObsYH3KC7XQDmgOc8yNizqd.f7CgpfNgYH7cobltRzl47m",
+    "usr_admin": "$2b$10$tBBX4FkinYjllCQtYh0L9.pytPevmpIkev7GR.U5zr9AW3v6.tsM.",
     "usr_1787216982510_jbl2": "$2b$10$mlpiHSSSKZMJHhceDwL4XOI4/fwMOGkalcNKK1DtBuMaVTjlQ8axm",
     "usr_1787217054293_jrs0": "$2b$10$Rvq90ysHAlhxnJWUbm1NouJulMtHYY7Ul03ITm7v9AOUQ77F4jMVe",
     "usr_1787217807908_1nf5": "$2b$10$QmGhe9Nvd4mkguyjXt0NPO3KUR3v2t5LX3Xx8aAQXOIURdI4ptWGO",
@@ -262,9 +246,7 @@
     "usr_1787220201693_2wld": "$2b$10$cxDhCKQYV8TO1xhKNDOKxeCx3DI/56.n8B1CkPHyDxSi77oF2Vu9e",
     "usr_1787220202153_2j4u": "$2b$10$BwW6DUkTa5AgEKzmhXhyAejLGoJXgvUZSjuMhFNw0kgr8OJGjFHna",
     "usr_1787220670365_tku6": "$2b$10$0j/Dl1qV.amNHvmTPMemxemIF0mHG98bvmP1dW0i.x2J63t8QZmoK",
-    "usr_1787220671158_nhel": "$2b$10$iv7cJd2ti.3tilFH9HgTkugLvkRTUj6VYxh6ToHDEg3izyRUgqbva",
-    "usr_1787221415481_zk4r": "$2b$10$n1/jIFmtgxWeum182uNWmuIlD4nalC1K2Ur8OkBgFoCshxX4vEZuO",
-    "usr_1787221415972_6cao": "$2b$10$bHubr7ll3pfrJOWOC1T5N.fJvjhmr1hsVZqznGQwhDidnEa8rw/Ny"
+    "usr_1787220671158_nhel": "$2b$10$iv7cJd2ti.3tilFH9HgTkugLvkRTUj6VYxh6ToHDEg3izyRUgqbva"
   },
   "products": [
     {
@@ -610,7 +592,7 @@
       "locationName": "Primary Control Plane VPS",
       "flagCode": "LOCAL",
       "totalRamMB": 4096,
-      "usedRamMB": 1305,
+      "usedRamMB": 1105,
       "totalCpuCores": 2,
       "usedCpuCores": 0.1,
       "totalDiskGB": 504,
@@ -631,7 +613,7 @@
       "isLocalNode": true,
       "serverCount": 0,
       "daemonToken": "daemon_token_local_node_secret_82910",
-      "lastHeartbeatAt": "2026-08-20T10:23:55.588Z",
+      "lastHeartbeatAt": "2026-08-20T10:17:30.565Z",
       "isSecure": true,
       "installationId": "aep_mt1an3njd042648f1b80066a"
     }
@@ -684,45 +666,6 @@
   "schedules": [],
   "activities": [],
   "orders": [
-    {
-      "id": "ord_1787221416120",
-      "userId": "usr_1787221415972_6cao",
-      "userEmail": "quota_test_1787221415971@aether.local",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
-      "billingCycle": "monthly",
-      "amount": 0,
-      "currency": "USD",
-      "status": "paid",
-      "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:36.120Z"
-    },
-    {
-      "id": "ord_1787221416087",
-      "userId": "usr_1787221415972_6cao",
-      "userEmail": "quota_test_1787221415971@aether.local",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
-      "billingCycle": "monthly",
-      "amount": 0,
-      "currency": "USD",
-      "status": "paid",
-      "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:36.087Z"
-    },
-    {
-      "id": "ord_1787221415909",
-      "userId": "usr_admin",
-      "userEmail": "admin@aetherpanel.in",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
-      "billingCycle": "monthly",
-      "amount": 0,
-      "currency": "USD",
-      "status": "paid",
-      "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-20T10:23:35.909Z"
-    },
     {
       "id": "ord_1787220671354",
       "userId": "usr_1787220671158_nhel",
@@ -1120,303 +1063,6 @@
     }
   ],
   "auditLogs": [
-    {
-      "id": "aud_1787221416788_y0xw",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_USER",
-      "targetResource": "usr_1787221416769",
-      "details": "Deleted user account admin_created_1787221416652@aether.local",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.788Z"
-    },
-    {
-      "id": "aud_1787221416783_qcbi",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_ADJUST_CREDITS",
-      "targetResource": "usr_1787221416769",
-      "details": "Adjusted credits for admin_created_1787221416652@aether.local (remove: $10) -> Balance: $40",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.783Z"
-    },
-    {
-      "id": "aud_1787221416777_lny7",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_SUSPEND_USER",
-      "targetResource": "usr_1787221416769",
-      "details": "Suspended user admin_created_1787221416652@aether.local",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.777Z"
-    },
-    {
-      "id": "aud_1787221416770_i5lt",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_CREATE_USER",
-      "targetResource": "usr_1787221416769",
-      "details": "Admin created user admin_created_1787221416652@aether.local with role user",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.770Z"
-    },
-    {
-      "id": "aud_1787221416646_5f4q",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_SETTINGS",
-      "targetResource": "SYSTEM",
-      "details": "Updated system settings",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.646Z"
-    },
-    {
-      "id": "aud_1787221416638_qnu2",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_SETTINGS",
-      "targetResource": "SYSTEM",
-      "details": "Updated system settings",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.638Z"
-    },
-    {
-      "id": "aud_1787221416633_9hyu",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.633Z"
-    },
-    {
-      "id": "aud_1787221416523_rpv3",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_FORCE_PASSWORD_RESET",
-      "targetResource": "usr_admin",
-      "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.523Z"
-    },
-    {
-      "id": "aud_1787221416405_k750",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.405Z"
-    },
-    {
-      "id": "aud_1787221416293_928l",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_FORCE_PASSWORD_RESET",
-      "targetResource": "usr_admin",
-      "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.293Z"
-    },
-    {
-      "id": "aud_1787221416155_thmg",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_USER",
-      "targetResource": "usr_1787221415972_6cao",
-      "details": "Deleted user account quota_test_1787221415971@aether.local",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.155Z"
-    },
-    {
-      "id": "aud_1787221416148_b6gy",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787221416120_lxo8",
-      "details": "Admin deleted server 'Quota Server 2 Allowed' (srv_1787221416120_lxo8) owned by user usr_1787221415972_6cao",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.148Z"
-    },
-    {
-      "id": "aud_1787221416141_9fwh",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787221416087_mx4z",
-      "details": "Admin deleted server 'Quota Server 1' (srv_1787221416087_mx4z) owned by user usr_1787221415972_6cao",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.141Z"
-    },
-    {
-      "id": "aud_1787221416134_6kil",
-      "actorId": "usr_1787221415972_6cao",
-      "actorEmail": "quota_test_1787221415971@aether.local",
-      "actorRole": "user",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787221416120_lxo8",
-      "details": "Provisioned server 'Quota Server 2 Allowed' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.134Z"
-    },
-    {
-      "id": "aud_1787221416117_vmhn",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_USER_ALLOCATION",
-      "targetResource": "usr_1787221415972_6cao",
-      "details": "Updated server allocation limit for quota_test_1787221415971@aether.local to 2",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.117Z"
-    },
-    {
-      "id": "aud_1787221416106_oosq",
-      "actorId": "usr_1787221415972_6cao",
-      "actorEmail": "quota_test_1787221415971@aether.local",
-      "actorRole": "user",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787221416087_mx4z",
-      "details": "Provisioned server 'Quota Server 1' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.106Z"
-    },
-    {
-      "id": "aud_1787221416084_8z1i",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_ADJUST_CREDITS",
-      "targetResource": "usr_1787221415972_6cao",
-      "details": "Adjusted credits for quota_test_1787221415971@aether.local (add: $100) -> Balance: $110",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.084Z"
-    },
-    {
-      "id": "aud_1787221416075_1oam",
-      "actorId": "usr_1787221415972_6cao",
-      "actorEmail": "quota_test_1787221415971@aether.local",
-      "actorRole": "user",
-      "action": "USER_REGISTER",
-      "targetResource": "ACCOUNT",
-      "details": "User registered account",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:36.075Z"
-    },
-    {
-      "id": "aud_1787221415968_bt7f",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787221415909_mgdo",
-      "details": "Admin deleted server 'Verification Bot Server' (srv_1787221415909_mgdo) owned by user usr_admin",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.968Z"
-    },
-    {
-      "id": "aud_1787221415953_egqz",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_STOP",
-      "targetResource": "srv_1787221415909_mgdo",
-      "details": "Executed stop on server Verification Bot Server",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.953Z"
-    },
-    {
-      "id": "aud_1787221415943_zrt0",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_START",
-      "targetResource": "srv_1787221415909_mgdo",
-      "details": "Executed start on server Verification Bot Server",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.943Z"
-    },
-    {
-      "id": "aud_1787221415914_6qev",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787221415909_mgdo",
-      "details": "Provisioned server 'Verification Bot Server' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.914Z"
-    },
-    {
-      "id": "aud_1787221415899_21ib",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "DELETE_API_KEY",
-      "targetResource": "key_1787221415870_l4dn",
-      "details": "Revoked API key 'Automated Audit Verification Key' (aeth_live_2c040f...23c6)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.899Z"
-    },
-    {
-      "id": "aud_1787221415892_k5yj",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "REVOKE_API_KEY",
-      "targetResource": "key_1787221415870_l4dn",
-      "details": "Revoked API key 'Automated Audit Verification Key' (aeth_live_2c040f...23c6)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.892Z"
-    },
-    {
-      "id": "aud_1787221415871_dzuo",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "CREATE_API_KEY",
-      "targetResource": "key_1787221415870_l4dn",
-      "details": "Created API key token 'Automated Audit Verification Key'",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.871Z"
-    },
-    {
-      "id": "aud_1787221415732_in3s",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.732Z"
-    },
-    {
-      "id": "aud_1787221415617_q84d",
-      "actorId": "usr_1787221415481_zk4r",
-      "actorEmail": "test_user_1787221415448@aether.local",
-      "actorRole": "user",
-      "action": "USER_REGISTER",
-      "targetResource": "ACCOUNT",
-      "details": "User registered account",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.617Z"
-    },
     {
       "id": "aud_1787220672319_v0zi",
       "actorId": "usr_admin",
@@ -4932,16 +4578,6 @@
   "telemetryHistory": {},
   "apiKeys": [],
   "apiAuditLogs": [
-    {
-      "id": "apiaud_1787221415883_4vn9",
-      "apiKeyId": "key_1787221415870_l4dn",
-      "userId": "usr_admin",
-      "endpoint": "/api/v1/servers",
-      "method": "GET",
-      "statusCode": 200,
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-20T10:23:35.884Z"
-    },
     {
       "id": "apiaud_1787220670971_7660",
       "apiKeyId": "key_1787220670959_ohm8",
