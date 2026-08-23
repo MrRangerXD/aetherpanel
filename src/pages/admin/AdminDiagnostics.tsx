@@ -224,6 +224,32 @@ export const AdminDiagnostics: React.FC = () => {
               <p className="text-[11px] text-zinc-400 mt-1">
                 The container sandbox routes port 3000 exclusively. External WAN SFTP ingress requires host port mapping:
               </p>
+            {/* Playit.GG Agent */}
+            <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2 mt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">Playit.GG Global Network:</span>
+                {renderBadge(data.sftp.playitAgent)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                 <div className="bg-zinc-950 p-2 rounded border border-zinc-800">
+                    <span className="text-[9px] text-zinc-500 uppercase block">Binary</span>
+                    <span className="text-xs font-semibold text-white">{data.sftp.playitBinary}</span>
+                 </div>
+                 <div className="bg-zinc-950 p-2 rounded border border-zinc-800">
+                    <span className="text-[9px] text-zinc-500 uppercase block">Connection</span>
+                    <span className="text-xs font-semibold text-white">{data.sftp.playitConnection}</span>
+                 </div>
+                 <div className="bg-zinc-950 p-2 rounded border border-zinc-800">
+                    <span className="text-[9px] text-zinc-500 uppercase block">Claim Status</span>
+                    <span className="text-xs font-semibold text-white">{data.sftp.playitClaim}</span>
+                 </div>
+                 <div className="bg-zinc-950 p-2 rounded border border-zinc-800">
+                    <span className="text-[9px] text-zinc-500 uppercase block">Tunnel Endpoint</span>
+                    <span className="text-xs font-semibold text-amber-300 font-mono truncate block">{data.sftp.playitEndpoint}</span>
+                 </div>
+              </div>
+            </div>
+
               <div className="flex flex-wrap gap-1 mt-1">
                 {data.sftp.requiredConfig.map((item: string) => (
                   <code key={item} className="px-2 py-0.5 rounded bg-zinc-950 text-[10px] font-mono text-zinc-300 border border-zinc-800">{item}</code>

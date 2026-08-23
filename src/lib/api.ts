@@ -6,10 +6,15 @@ export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   message?: string;
+  total?: number;
+  succeeded?: number;
+  failed?: number;
+  results?: any[];
   error?: {
     code: string;
     message: string;
   };
+  [key: string]: any;
 }
 
 export async function apiRequest<T = any>(

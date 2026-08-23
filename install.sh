@@ -377,6 +377,33 @@ download_panel_source() {
   return 0
 }
 
+install_playit_binary() {
+  local target_bin="$1"
+  echo -e "${YELLOW}    Verifying Playit.GG background agent daemon binary...${NC}"
+  
+  local need_download=true
+  if [ -f "$target_bin" ]; then
+    # Run validation test (ignoring exit status 2 because of missing arguments)
+    if file "$target_bin" | grep -q "corrupted" || ! "$target_bin" --help &>/dev/null && [ $? -ne 2 ]; then
+      echo -e "${YELLOW}    [!] Existing playit binary is corrupted or invalid. Overwriting...${NC}"
+    else
+      echo -e "${GREEN}[✓] Playit.GG binary verified successfully.${NC}"
+      need_download=false
+    fi
+  fi
+
+  if [ "$need_download" = true ]; then
+    echo -e "${CYAN}    Downloading uncorrupted official Playit.GG binary...${NC}"
+    mkdir -p "$(dirname "$target_bin")"
+    if curl -L -o "$target_bin" "https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64" >> "$LOG_FILE" 2>&1; then
+      chmod +x "$target_bin"
+      echo -e "${GREEN}[✓] Playit.GG binary downloaded and verified successfully.${NC}"
+    else
+      echo -e "${RED}[!] Warning: Failed to download Playit.GG binary. You can manually download it to $target_bin.${NC}"
+    fi
+  fi
+}
+
 # ==============================================================================
 # 7. OPTION 1: PANEL INSTALLATION (8-STEP PROGRESS)
 # ==============================================================================
@@ -551,6 +578,9 @@ EOF
   echo -e "${CYAN}    Compiling frontend and backend bundles (npm run build)...${NC}"
   log_msg "Building production bundle via npm run build"
   npm run build >> "$LOG_FILE" 2>&1 || true
+
+  # Install/Verify Playit Binary
+  install_playit_binary "$INSTALL_DIR/bin/playit"
 
   # Create / update systemd service
   cat <<EOF > /etc/systemd/system/aetherpanel.service
@@ -781,6 +811,9 @@ try {
   process.exit(1);
 }
 EOF
+
+  # Install/Verify Playit Binary on Node
+  install_playit_binary "/usr/local/bin/playit"
 
   echo -e "\n${YELLOW}[SERVICE] Configuring Systemd Service (/etc/systemd/system/aethernode.service)...${NC}"
   cat <<EOF > /etc/systemd/system/aethernode.service

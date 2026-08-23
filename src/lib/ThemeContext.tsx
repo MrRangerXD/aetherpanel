@@ -16,6 +16,9 @@ interface ThemeContextType {
   customCursorEnabled: boolean;
   animationsEnabled: boolean;
   adsEnabled: boolean;
+  allowUserCustomization: boolean;
+  backgroundBlur: string;
+  backgroundOverlayOpacity: number;
   themeAssets: {
     logoUrl?: string;
     faviconUrl?: string;
@@ -30,6 +33,8 @@ interface ThemeContextType {
   setCustomCursorEnabled: (enabled: boolean) => void;
   setAnimationsEnabled: (enabled: boolean) => void;
   setAdsEnabled: (enabled: boolean) => void;
+  setBackgroundBlur: (blur: string) => void;
+  setBackgroundOverlayOpacity: (opacity: number) => void;
   setThemeAssets: (assets: Partial<ThemeContextType['themeAssets']>) => void;
   applySystemThemeSettings: (settings: CustomThemeSettings) => void;
   accentClasses: {
@@ -85,21 +90,62 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return val !== null ? val === 'true' : true;
   });
 
-  // Load system theme settings on initial boot
+  const [allowUserCustomization, setAllowUserCustomization] = useState<boolean>(true);
+  const [backgroundBlur, setBackgroundBlurState] = useState<string>(() => {
+    return localStorage.getItem('aether_background_blur') || 'none';
+  });
+  const [backgroundOverlayOpacity, setBackgroundOverlayOpacityState] = useState<number>(() => {
+    const val = localStorage.getItem('aether_background_overlay_opacity');
+    return val !== null ? parseInt(val) : 75;
+  });
+
+  // Load system theme settings on initial boot from public endpoint
   useEffect(() => {
     const fetchSystemTheme = async () => {
       try {
-        const res = await apiRequest('/admin/theme-settings');
+        const res = await apiRequest('/public/theme-settings');
         if (res.success && res.data) {
           const sys = res.data as CustomThemeSettings;
-          if (!localStorage.getItem('aether_active_theme_id') && sys.activeThemeId) {
-            setActiveThemeIdState(sys.activeThemeId);
+          setAllowUserCustomization(sys.allowUserCustomization);
+          
+          if (sys.backgroundBlur) {
+            setBackgroundBlurState(sys.backgroundBlur);
           }
-          if (!localStorage.getItem('aether_active_font_id') && sys.activeFontId) {
-            setActiveFontIdState(sys.activeFontId);
+          if (sys.backgroundOverlayOpacity !== undefined) {
+            setBackgroundOverlayOpacityState(sys.backgroundOverlayOpacity);
           }
-          if (sys.assets) {
-            setThemeAssetsState(prev => ({ ...sys.assets, ...prev }));
+
+          if (!sys.allowUserCustomization) {
+            // Force authoritative values from system settings, discarding client overrides
+            if (sys.activeThemeId) setActiveThemeIdState(sys.activeThemeId);
+            if (sys.activeFontId) setActiveFontIdState(sys.activeFontId);
+            if (sys.assets) setThemeAssetsState(sys.assets);
+          } else {
+            // Load custom settings from localStorage if user overrides exist
+            const localTheme = localStorage.getItem('aether_active_theme_id');
+            const localFont = localStorage.getItem('aether_active_font_id');
+            const localAssetsStr = localStorage.getItem('aether_theme_assets');
+            const localBlur = localStorage.getItem('aether_background_blur');
+            const localOpacity = localStorage.getItem('aether_background_overlay_opacity');
+
+            if (localTheme) setActiveThemeIdState(localTheme);
+            else if (sys.activeThemeId) setActiveThemeIdState(sys.activeThemeId);
+
+            if (localFont) setActiveFontIdState(localFont);
+            else if (sys.activeFontId) setActiveFontIdState(sys.activeFontId);
+
+            if (localBlur) setBackgroundBlurState(localBlur);
+            if (localOpacity) setBackgroundOverlayOpacityState(parseInt(localOpacity));
+
+            if (localAssetsStr) {
+              try {
+                setThemeAssetsState(JSON.parse(localAssetsStr));
+              } catch {
+                if (sys.assets) setThemeAssetsState(sys.assets);
+              }
+            } else if (sys.assets) {
+              setThemeAssetsState(sys.assets);
+            }
           }
         }
       } catch {
@@ -149,7 +195,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     document.body.style.fontFamily = activeFont.fontFamily;
   }, [activeFontId, activeFont]);
 
-  // Apply Favicon & Background Asset
+  // Apply Favicon & Background Asset (Image / animated GIF, Blur control, Overlay opacity)
   useEffect(() => {
     localStorage.setItem('aether_theme_assets', JSON.stringify(themeAssets));
 
@@ -163,15 +209,51 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       link.href = themeAssets.faviconUrl;
     }
 
-    if (themeAssets.bgPatternUrl) {
-      document.body.style.backgroundImage = `radial-gradient(rgba(0, 0, 0, 0.75), rgba(9, 9, 11, 0.95)), url('${themeAssets.bgPatternUrl}')`;
-      document.body.style.backgroundSize = 'cover';
-      document.body.style.backgroundAttachment = 'fixed';
-      document.body.style.backgroundPosition = 'center';
-    } else {
-      document.body.style.backgroundImage = '';
+    // Dynamic wallpaper, blur, and opacity styling tag
+    let styleTag = document.getElementById('aether-custom-bg-styles') as HTMLStyleElement | null;
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'aether-custom-bg-styles';
+      document.head.appendChild(styleTag);
     }
-  }, [themeAssets]);
+
+    const blurVal = backgroundBlur === 'none' ? '0px' : backgroundBlur;
+    const bgUrl = themeAssets.bgPatternUrl || '';
+    const opacityVal = backgroundOverlayOpacity / 100;
+
+    styleTag.innerHTML = `
+      body {
+        background-color: #09090b !important;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: -20;
+        background-image: ${bgUrl ? `url('${bgUrl}')` : 'none'};
+        background-size: cover;
+        background-attachment: fixed;
+        background-position: center;
+        pointer-events: none;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: -10;
+        background-color: rgba(9, 9, 11, ${opacityVal}) !important;
+        backdrop-filter: blur(${blurVal}) !important;
+        -webkit-backdrop-filter: blur(${blurVal}) !important;
+        pointer-events: none;
+      }
+    `;
+  }, [themeAssets, backgroundBlur, backgroundOverlayOpacity]);
 
   useEffect(() => {
     localStorage.setItem('aether_custom_cursor', String(customCursorEnabled));
@@ -186,20 +268,47 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [adsEnabled]);
 
   const setTheme = (mode: ThemeMode) => setThemeState(mode);
-  const setActiveThemeId = (id: string) => setActiveThemeIdState(id);
-  const setActiveFontId = (id: string) => setActiveFontIdState(id);
+  
+  const setActiveThemeId = (id: string) => {
+    if (!allowUserCustomization) return;
+    setActiveThemeIdState(id);
+  };
+  
+  const setActiveFontId = (id: string) => {
+    if (!allowUserCustomization) return;
+    setActiveFontIdState(id);
+  };
+  
   const setAccent = (acc: AccentColor) => setAccentState(acc);
   const setCustomCursorEnabled = (enabled: boolean) => setCustomCursorState(enabled);
   const setAnimationsEnabled = (enabled: boolean) => setAnimationsState(enabled);
   const setAdsEnabled = (enabled: boolean) => setAdsState(enabled);
+
+  const setBackgroundBlur = (blur: string) => {
+    if (!allowUserCustomization) return;
+    setBackgroundBlurState(blur);
+    localStorage.setItem('aether_background_blur', blur);
+  };
+
+  const setBackgroundOverlayOpacity = (opacity: number) => {
+    if (!allowUserCustomization) return;
+    setBackgroundOverlayOpacityState(opacity);
+    localStorage.setItem('aether_background_overlay_opacity', String(opacity));
+  };
+
   const setThemeAssets = (assets: Partial<ThemeContextType['themeAssets']>) => {
+    if (!allowUserCustomization) return;
     setThemeAssetsState(prev => ({ ...prev, ...assets }));
   };
 
   const applySystemThemeSettings = (settings: CustomThemeSettings) => {
+    // Admins can apply system theme settings globally
     if (settings.activeThemeId) setActiveThemeIdState(settings.activeThemeId);
     if (settings.activeFontId) setActiveFontIdState(settings.activeFontId);
+    if (settings.backgroundBlur) setBackgroundBlurState(settings.backgroundBlur);
+    if (settings.backgroundOverlayOpacity !== undefined) setBackgroundOverlayOpacityState(settings.backgroundOverlayOpacity);
     if (settings.assets) setThemeAssetsState(prev => ({ ...prev, ...settings.assets }));
+    setAllowUserCustomization(settings.allowUserCustomization);
   };
 
   const getAccentClasses = (): ThemeContextType['accentClasses'] => {
@@ -274,6 +383,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         customCursorEnabled,
         animationsEnabled,
         adsEnabled,
+        allowUserCustomization,
+        backgroundBlur,
+        backgroundOverlayOpacity,
         themeAssets,
         setTheme,
         setActiveThemeId,
@@ -282,6 +394,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCustomCursorEnabled,
         setAnimationsEnabled,
         setAdsEnabled,
+        setBackgroundBlur,
+        setBackgroundOverlayOpacity,
         setThemeAssets,
         applySystemThemeSettings,
         accentClasses: getAccentClasses()

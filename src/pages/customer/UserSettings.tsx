@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
 import { apiRequest } from '../../lib/api';
 import { DiscordAccount, ApiKey, WebhookSubscription } from '../../types';
 
@@ -18,7 +19,10 @@ export const UserSettings: React.FC = () => {
     animationsEnabled, setAnimationsEnabled,
     adsEnabled, setAdsEnabled,
     activeThemeId, setActiveThemeId,
-    activeFontId, setActiveFontId
+    activeFontId, setActiveFontId,
+    allowUserCustomization,
+    backgroundBlur, setBackgroundBlur,
+    backgroundOverlayOpacity, setBackgroundOverlayOpacity
   } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -382,6 +386,134 @@ export const UserSettings: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Visual Themes & Personalization */}
+      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Palette className="h-4 w-4 text-amber-400" /> Interface Personalization
+          </h3>
+          {!allowUserCustomization && (
+            <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/50 flex items-center gap-1.5 shadow-sm">
+              <Shield className="h-3.5 w-3.5 text-amber-500" />
+              <span>LOCKED BY ADMIN</span>
+            </span>
+          )}
+        </div>
+
+        {!allowUserCustomization ? (
+          <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-start gap-3">
+            <Shield className="h-5 w-5 text-amber-500/80 shrink-0 mt-0.5" />
+            <div className="text-xs text-zinc-400 leading-relaxed">
+              <div className="font-semibold text-white">System theme settings are authoritative</div>
+              Platform-wide styling is locked by system administrators to maintain AetherPanel's consistent luxury identity. Personal customization controls are currently disabled.
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Theme Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">Select Visual Theme</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {THEME_PRESETS.map((p) => {
+                    const isSelected = activeThemeId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setActiveThemeId(p.id)}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-1.5 transition-all ${
+                          isSelected
+                            ? 'bg-zinc-800/90 border-amber-500 ring-1 ring-amber-500/30'
+                            : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <span className="text-xs font-bold text-white">{p.name}</span>
+                        <div className="flex gap-1">
+                          {p.previewColors.map((color, i) => (
+                            <span key={i} className="w-3.5 h-3.5 rounded-full border border-black/40" style={{ backgroundColor: color }} />
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Font Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">Select Typography</label>
+                <select
+                  value={activeFontId}
+                  onChange={(e) => setActiveFontId(e.target.value)}
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                >
+                  {FONT_OPTIONS.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name} ({f.category})</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  Applies high-legibility displaying and body typeface styling globally across AetherPanel modules.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              {/* Custom Cursor Toggle */}
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white">Interactive Custom Cursor</div>
+                  <div className="text-[10px] text-zinc-500">Premium glowing aura outer ring.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customCursorEnabled}
+                    onChange={(e) => setCustomCursorEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Animations Toggle */}
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white">Layout Transitions</div>
+                  <div className="text-[10px] text-zinc-500">Smooth kinetic route movements.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={animationsEnabled}
+                    onChange={(e) => setAnimationsEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Promotional Ads Toggle */}
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white">Platform Sponsor Cards</div>
+                  <div className="text-[10px] text-zinc-500">Support development by enabling.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={adsEnabled}
+                    onChange={(e) => setAdsEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Change Password Form */}
       <form onSubmit={handleChangePassword} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">

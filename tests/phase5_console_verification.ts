@@ -261,13 +261,14 @@ done
 
     const nodeBotCode = `
 const readline = require('readline');
+if (process.stdout._handle && typeof process.stdout._handle.setBlocking === 'function') {
+  process.stdout._handle.setBlocking(true);
+}
 console.log("[Bot/INFO]: Node.js Discord bot initializing...");
 console.log("[Bot/INFO]: Bot connected as DiscordMaster#1337");
 
 const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false
+  input: process.stdin
 });
 
 rl.on('line', (line) => {
@@ -285,6 +286,7 @@ rl.on('line', (line) => {
   }
 });
 `;
+    fs.writeFileSync(path.join(nodeDir, 'package.json'), JSON.stringify({ name: 'discord-bot', version: '1.0.0', type: 'commonjs' }, null, 2));
     fs.writeFileSync(path.join(nodeDir, 'index.js'), nodeBotCode);
 
     const nodeServerRecord: Server = {
@@ -497,14 +499,15 @@ while True:
 
     const relBotScript = `
 const readline = require('readline');
+if (process.stdout._handle && typeof process.stdout._handle.setBlocking === 'function') {
+  process.stdout._handle.setBlocking(true);
+}
 console.log("[RelBot]: Initial log buffer entry #1");
 console.log("[RelBot]: Initial log buffer entry #2");
 console.log("[RelBot]: Initial log buffer entry #3");
 
 const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false
+  input: process.stdin
 });
 
 rl.on('line', (line) => {
@@ -517,6 +520,7 @@ rl.on('line', (line) => {
   }
 });
 `;
+    fs.writeFileSync(path.join(relDir, 'package.json'), JSON.stringify({ name: 'rel-bot', version: '1.0.0', type: 'commonjs' }, null, 2));
     fs.writeFileSync(path.join(relDir, 'index.js'), relBotScript);
 
     const relServerRecord: Server = {

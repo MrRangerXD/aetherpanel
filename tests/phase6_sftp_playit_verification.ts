@@ -137,6 +137,7 @@ async function runPhase6Verification() {
   // Case B: Node has Playit SFTP Tunnel configured
   const nodeRec = db.nodes.find(n => n.id === testNodeId)!;
   nodeRec.sftpFqdn = undefined;
+  nodeRec.fqdn = undefined;
   nodeRec.playitSftpAddress = 'sftp-eu1.auto.playit.gg';
   nodeRec.playitSftpPort = 2022;
   saveDbSync();
@@ -148,6 +149,7 @@ async function runPhase6Verification() {
 
   // Case C: Fallback to Panel host header when node addresses are loopback
   nodeRec.playitSftpAddress = undefined;
+  nodeRec.playitAgentInstalled = false;
   nodeRec.sftpFqdn = undefined;
   nodeRec.fqdn = undefined;
   nodeRec.hostname = 'localhost';

@@ -97,6 +97,29 @@ router.get('/settings', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/v1/public/theme-settings
+router.get('/theme-settings', async (req: Request, res: Response) => {
+  const db = await getDb();
+  const themeSettings = db.settings.themeSettings || {
+    activeThemeId: 'golden',
+    activeFontId: 'Plus Jakarta Sans',
+    cardStyle: 'rounded-2xl',
+    glowIntensity: 'vibrant',
+    allowUserCustomization: true,
+    assets: {
+      logoUrl: '',
+      faviconUrl: '',
+      bgPatternUrl: '',
+      bannerUrl: '',
+      loginBgUrl: ''
+    }
+  };
+  res.json({
+    success: true,
+    data: themeSettings
+  });
+});
+
 // GET /api/v1/public/legal
 router.get('/legal', async (req: Request, res: Response) => {
   const db = await getDb();

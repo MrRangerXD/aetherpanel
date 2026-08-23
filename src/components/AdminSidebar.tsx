@@ -16,7 +16,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
   const { user, logout } = useAuth();
 
   return (
-    <aside className="hidden md:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950 flex-col justify-between min-h-[calc(100vh-4rem)]">
+    <aside className="hidden lg:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950 flex-col justify-between min-h-[calc(100vh-4rem)]">
       <div>
         {/* Admin Header */}
         <div className="p-4 border-b border-amber-500/20 bg-amber-500/5">
@@ -59,6 +59,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
           >
             <Package className="h-4 w-4" />
             <span>Products & Plans</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('admin-server-types')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-server-types' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+          >
+            <Layers className="h-4 w-4 text-amber-400" />
+            <span>Server Types & Themes</span>
           </button>
 
           <button

@@ -67,6 +67,11 @@ function getConsoleBuffer(serverId: string, isRunning: boolean = false): string[
 
 export function appendConsoleLog(serverId: string, logLine: string) {
   const buf = getConsoleBuffer(serverId, true);
+  // If buffer currently only has the offline placeholder message, replace it
+  if (buf.length === 1 && buf[0].includes('Server is currently offline')) {
+    buf.pop();
+  }
+
   // Clean ANSI control characters if any
   const cleaned = logLine.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trimEnd();
   if (!cleaned) return;
@@ -507,7 +512,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       });
 
       child.on('exit', (code, signal) => {
-        handleProcessExit(serverId, code, signal);
+        handleProcessExit(serverId, code, signal, child);
       });
 
       server.status = 'running';
@@ -679,7 +684,7 @@ export async function startServer(serverId: string): Promise<boolean> {
       });
 
       child.on('exit', (code, signal) => {
-        handleProcessExit(serverId, code, signal);
+        handleProcessExit(serverId, code, signal, child);
       });
 
       server.status = 'running';
@@ -730,7 +735,13 @@ function setupStableUptimeReset(serverId: string) {
 }
 
 // Process Exit & Crash Handler with Auto-Restart Policies
-async function handleProcessExit(serverId: string, code: number | null, signal: string | null) {
+async function handleProcessExit(serverId: string, code: number | null, signal: string | null, exitedChild?: ChildProcess) {
+  const currentEntry = activeProcesses.get(serverId);
+  // If another process was already spawned for this server, ignore stale exit event
+  if (currentEntry && exitedChild && currentEntry.child !== exitedChild) {
+    return;
+  }
+
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
   if (!server) return;
@@ -780,8 +791,8 @@ async function handleProcessExit(serverId: string, code: number | null, signal: 
   server.startup.lastCrashReason = `Exit code ${code}${signal ? `, Signal ${signal}` : ''}`;
   server.startup.crashCount = (server.startup.crashCount || 0) + 1;
 
-  const restartPolicy = server.startup.autoRestartPolicy || (server.startup.restartOnCrash !== false ? 'on_crash' : 'never');
-  const shouldRestart = restartPolicy === 'always' || (restartPolicy === 'on_crash' && code !== 0);
+  const restartPolicy = server.startup.autoRestartPolicy || (server.startup.restartOnCrash === true ? 'on_crash' : 'never');
+  const shouldRestart = server.startup.restartOnCrash === true && (restartPolicy === 'always' || (restartPolicy === 'on_crash' && code !== 0));
   const maxRestarts = server.startup.maxCrashRestarts ?? 5;
   const delaySec = server.startup.crashRestartDelaySeconds ?? 5;
 
@@ -801,9 +812,9 @@ async function handleProcessExit(serverId: string, code: number | null, signal: 
     if (server.startup.crashCount > maxRestarts) {
       appendConsoleLog(serverId, `[AetherDaemon/CRASH]: Maximum auto-restart limit (${maxRestarts}) reached. Auto-recovery suspended.`);
     }
-    server.status = 'crashed';
+    server.status = 'stopped';
     saveDbSync();
-    emitServerStatus(serverId, 'crashed', { exitCode: code, signal, willRestart: false });
+    emitServerStatus(serverId, 'stopped', { exitCode: code, signal, willRestart: false });
   }
 }
 
@@ -952,10 +963,8 @@ export async function restartServer(serverId: string): Promise<boolean> {
   }
   emitServerStatus(serverId, 'restarting');
   await stopServer(serverId);
-  setTimeout(async () => {
-    await startServer(serverId);
-  }, 1000);
-  return true;
+  await new Promise(r => setTimeout(r, 400));
+  return await startServer(serverId);
 }
 
 // Panel Boot State Reconciliation & Auto-Start on Boot
@@ -1126,6 +1135,12 @@ export function safePath(serverId: string, relPath: string = ''): string {
 // File Operations
 export function listServerFiles(serverId: string, relPath: string = ''): ServerFile[] {
   const baseDir = path.resolve(getServerDir(serverId));
+  if (relPath && relPath !== '/' && relPath !== '.') {
+    const rawTarget = path.resolve(baseDir, relPath.replace(/\0/g, ''));
+    if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
+      throw new Error('Access denied: Outside server root directory');
+    }
+  }
   const targetDir = safePath(serverId, relPath);
 
   // Security check - path traversal prevention
@@ -1161,6 +1176,11 @@ export function listServerFiles(serverId: string, relPath: string = ''): ServerF
 
 export function readServerFile(serverId: string, relPath: string): string {
   const baseDir = path.resolve(getServerDir(serverId));
+  const rawTarget = path.resolve(baseDir, (relPath || '').replace(/\0/g, ''));
+  if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Outside server root directory');
+  }
+
   const targetPath = safePath(serverId, relPath);
 
   if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
@@ -1176,6 +1196,11 @@ export function readServerFile(serverId: string, relPath: string): string {
 
 export function writeServerFile(serverId: string, relPath: string, content: string): boolean {
   const baseDir = path.resolve(getServerDir(serverId));
+  const rawTarget = path.resolve(baseDir, (relPath || '').replace(/\0/g, ''));
+  if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Outside server root directory');
+  }
+
   const targetPath = safePath(serverId, relPath);
 
   if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
@@ -1199,9 +1224,208 @@ export function deleteServerItem(serverId: string, relPath: string): void {
     throw new Error('Access denied');
   }
 
+  if (targetPath === baseDir) {
+    throw new Error('Cannot delete server root directory');
+  }
+
   if (fs.existsSync(targetPath)) {
     fs.rmSync(targetPath, { recursive: true, force: true });
   }
+}
+
+export function deleteServerItems(serverId: string, relPaths: string[]): {
+  succeeded: string[];
+  failed: Array<{ path: string; error: string }>;
+} {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const succeeded: string[] = [];
+  const failed: Array<{ path: string; error: string }> = [];
+
+  for (const rel of relPaths) {
+    try {
+      const targetPath = safePath(serverId, rel);
+      if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
+        failed.push({ path: rel, error: 'Access denied: outside root' });
+        continue;
+      }
+      if (targetPath === baseDir) {
+        failed.push({ path: rel, error: 'Cannot delete server root' });
+        continue;
+      }
+      if (fs.existsSync(targetPath)) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      }
+      succeeded.push(rel);
+    } catch (err: any) {
+      failed.push({ path: rel, error: err.message || 'Deletion error' });
+    }
+  }
+
+  return { succeeded, failed };
+}
+
+function getAvailablePath(targetPath: string): string {
+  if (!fs.existsSync(targetPath)) return targetPath;
+  const dir = path.dirname(targetPath);
+  const ext = path.extname(targetPath);
+  const base = path.basename(targetPath, ext);
+  let counter = 1;
+  while (fs.existsSync(path.join(dir, `${base} (${counter})${ext}`))) {
+    counter++;
+  }
+  return path.join(dir, `${base} (${counter})${ext}`);
+}
+
+export function moveServerItems(
+  serverId: string,
+  sources: string[],
+  destinationDir: string,
+  conflictStrategy: 'replace' | 'rename' | 'skip' = 'replace'
+): {
+  moved: string[];
+  skipped: string[];
+  conflicts: string[];
+  errors: Array<{ path: string; error: string }>;
+} {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const destDirPath = safePath(serverId, destinationDir);
+
+  if (destDirPath !== baseDir && !destDirPath.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Destination is outside server root');
+  }
+
+  if (!fs.existsSync(destDirPath)) {
+    fs.mkdirSync(destDirPath, { recursive: true });
+  }
+
+  const moved: string[] = [];
+  const skipped: string[] = [];
+  const conflicts: string[] = [];
+  const errors: Array<{ path: string; error: string }> = [];
+
+  for (const src of sources) {
+    try {
+      const srcPath = safePath(serverId, src);
+      if (srcPath !== baseDir && !srcPath.startsWith(baseDir + path.sep)) {
+        errors.push({ path: src, error: 'Access denied: Source is outside server root' });
+        continue;
+      }
+      if (srcPath === baseDir) {
+        errors.push({ path: src, error: 'Cannot move server root directory' });
+        continue;
+      }
+      if (!fs.existsSync(srcPath)) {
+        errors.push({ path: src, error: 'Source file does not exist' });
+        continue;
+      }
+
+      // Check if moving folder inside itself
+      if (destDirPath === srcPath || destDirPath.startsWith(srcPath + path.sep)) {
+        errors.push({ path: src, error: 'Cannot move a folder into itself' });
+        continue;
+      }
+
+      const itemName = path.basename(srcPath);
+      let targetPath = path.join(destDirPath, itemName);
+
+      if (fs.existsSync(targetPath)) {
+        conflicts.push(src);
+        if (conflictStrategy === 'skip') {
+          skipped.push(src);
+          continue;
+        } else if (conflictStrategy === 'rename') {
+          targetPath = getAvailablePath(targetPath);
+        } else if (conflictStrategy === 'replace') {
+          if (fs.statSync(targetPath).isDirectory()) {
+            fs.rmSync(targetPath, { recursive: true, force: true });
+          }
+        }
+      }
+
+      fs.renameSync(srcPath, targetPath);
+      moved.push(src);
+    } catch (err: any) {
+      errors.push({ path: src, error: err.message || 'Move error' });
+    }
+  }
+
+  return { moved, skipped, conflicts, errors };
+}
+
+export function copyServerItems(
+  serverId: string,
+  sources: string[],
+  destinationDir: string,
+  conflictStrategy: 'replace' | 'rename' | 'skip' = 'replace'
+): {
+  copied: string[];
+  skipped: string[];
+  conflicts: string[];
+  errors: Array<{ path: string; error: string }>;
+} {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const destDirPath = safePath(serverId, destinationDir);
+
+  if (destDirPath !== baseDir && !destDirPath.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Destination is outside server root');
+  }
+
+  if (!fs.existsSync(destDirPath)) {
+    fs.mkdirSync(destDirPath, { recursive: true });
+  }
+
+  const copied: string[] = [];
+  const skipped: string[] = [];
+  const conflicts: string[] = [];
+  const errors: Array<{ path: string; error: string }> = [];
+
+  for (const src of sources) {
+    try {
+      const srcPath = safePath(serverId, src);
+      if (srcPath !== baseDir && !srcPath.startsWith(baseDir + path.sep)) {
+        errors.push({ path: src, error: 'Access denied: Source is outside server root' });
+        continue;
+      }
+      if (srcPath === baseDir) {
+        errors.push({ path: src, error: 'Cannot copy server root directory' });
+        continue;
+      }
+      if (!fs.existsSync(srcPath)) {
+        errors.push({ path: src, error: 'Source file does not exist' });
+        continue;
+      }
+
+      // Check if copying directory into itself
+      if (destDirPath === srcPath || destDirPath.startsWith(srcPath + path.sep)) {
+        errors.push({ path: src, error: 'Cannot copy a folder into itself' });
+        continue;
+      }
+
+      const itemName = path.basename(srcPath);
+      let targetPath = path.join(destDirPath, itemName);
+
+      if (fs.existsSync(targetPath)) {
+        conflicts.push(src);
+        if (conflictStrategy === 'skip') {
+          skipped.push(src);
+          continue;
+        } else if (conflictStrategy === 'rename') {
+          targetPath = getAvailablePath(targetPath);
+        } else if (conflictStrategy === 'replace') {
+          if (fs.statSync(targetPath).isDirectory()) {
+            fs.rmSync(targetPath, { recursive: true, force: true });
+          }
+        }
+      }
+
+      fs.cpSync(srcPath, targetPath, { recursive: true, force: true });
+      copied.push(src);
+    } catch (err: any) {
+      errors.push({ path: src, error: err.message || 'Copy error' });
+    }
+  }
+
+  return { copied, skipped, conflicts, errors };
 }
 
 export function createServerDirectory(serverId: string, relPath: string): void {
@@ -1255,39 +1479,68 @@ export function chmodServerItem(serverId: string, relPath: string, mode: number 
   fs.chmodSync(targetPath, numMode);
 }
 
-export function compressServerItem(serverId: string, relPath: string): string {
-  const baseDir = getServerDir(serverId);
-  const targetPath = path.join(baseDir, relPath);
+export function compressServerItems(
+  serverId: string,
+  relPaths: string[],
+  outputZipName?: string,
+  currentDir: string = '/'
+): string {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const currentDirPath = safePath(serverId, currentDir);
 
-  if (!targetPath.startsWith(baseDir)) {
-    throw new Error('Access denied');
-  }
-
-  if (!fs.existsSync(targetPath)) {
-    throw new Error('Item to compress not found');
+  if (currentDirPath !== baseDir && !currentDirPath.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Outside server root');
   }
 
   const zip = new AdmZip();
-  const stat = fs.statSync(targetPath);
-  const zipFileName = `${path.basename(targetPath)}_${Date.now()}.zip`;
-  const zipPath = path.join(path.dirname(targetPath), zipFileName);
+  let itemsCount = 0;
 
-  if (stat.isDirectory()) {
-    zip.addLocalFolder(targetPath);
-  } else {
-    zip.addLocalFile(targetPath);
+  for (const rel of relPaths) {
+    const targetPath = safePath(serverId, rel);
+    if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
+      continue;
+    }
+    if (!fs.existsSync(targetPath)) {
+      continue;
+    }
+
+    const stat = fs.statSync(targetPath);
+    const itemName = path.basename(targetPath);
+
+    if (stat.isDirectory()) {
+      zip.addLocalFolder(targetPath, itemName);
+    } else {
+      zip.addLocalFile(targetPath);
+    }
+    itemsCount++;
   }
+
+  if (itemsCount === 0) {
+    throw new Error('No valid files or folders found to compress');
+  }
+
+  const rawZipName = outputZipName?.trim()
+    ? (outputZipName.endsWith('.zip') ? outputZipName.trim() : `${outputZipName.trim()}.zip`)
+    : `archive_${Date.now()}.zip`;
+
+  // Prevent path traversal in archive name
+  const cleanZipName = path.basename(rawZipName);
+  const zipPath = path.join(currentDirPath, cleanZipName);
 
   zip.writeZip(zipPath);
   return path.relative(baseDir, zipPath).replace(/\\/g, '/');
 }
 
-// Secure Zip Decompression protecting against Zip Slip path traversal
-export function decompressServerItem(serverId: string, zipRelPath: string): void {
-  const baseDir = getServerDir(serverId);
-  const zipPath = path.join(baseDir, zipRelPath);
+export function compressServerItem(serverId: string, relPath: string): string {
+  return compressServerItems(serverId, [relPath], undefined, path.dirname(relPath));
+}
 
-  if (!zipPath.startsWith(baseDir)) {
+// Secure Zip Decompression protecting against Zip Slip path traversal
+export function decompressServerItem(serverId: string, zipRelPath: string, destinationDir?: string): void {
+  const baseDir = path.resolve(getServerDir(serverId));
+  const zipPath = safePath(serverId, zipRelPath);
+
+  if (zipPath !== baseDir && !zipPath.startsWith(baseDir + path.sep)) {
     throw new Error('Access denied');
   }
 
@@ -1295,7 +1548,18 @@ export function decompressServerItem(serverId: string, zipRelPath: string): void
     throw new Error('ZIP file not found');
   }
 
-  const destDir = path.dirname(zipPath);
+  const destDir = destinationDir
+    ? safePath(serverId, destinationDir)
+    : path.dirname(zipPath);
+
+  if (destDir !== baseDir && !destDir.startsWith(baseDir + path.sep)) {
+    throw new Error('Access denied: Destination is outside server root');
+  }
+
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
   const zip = new AdmZip(zipPath);
   const zipEntries = zip.getEntries();
 
@@ -1304,7 +1568,7 @@ export function decompressServerItem(serverId: string, zipRelPath: string): void
     const resolvedPath = path.resolve(destDir, entryPath);
 
     // Zip Slip check
-    if (!resolvedPath.startsWith(destDir)) {
+    if (resolvedPath !== destDir && !resolvedPath.startsWith(destDir + path.sep)) {
       throw new Error(`Security Violation: Zip Slip detected in entry '${entryPath}'`);
     }
 

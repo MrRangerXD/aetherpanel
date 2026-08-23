@@ -26,6 +26,8 @@ export const AdminAppearance: React.FC = () => {
   const [cardStyle, setCardStyle] = useState<'rounded-2xl' | 'rounded-xl' | 'rounded-lg'>('rounded-2xl');
   const [glowIntensity, setGlowIntensity] = useState<'vibrant' | 'subtle' | 'none'>('vibrant');
   const [allowUserCustomization, setAllowUserCustomization] = useState(true);
+  const [backgroundBlur, setBackgroundBlur] = useState<string>('none');
+  const [backgroundOverlayOpacity, setBackgroundOverlayOpacity] = useState<number>(75);
 
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -47,6 +49,8 @@ export const AdminAppearance: React.FC = () => {
         if (d.cardStyle) setCardStyle(d.cardStyle);
         if (d.glowIntensity) setGlowIntensity(d.glowIntensity);
         if (d.allowUserCustomization !== undefined) setAllowUserCustomization(d.allowUserCustomization);
+        if (d.backgroundBlur) setBackgroundBlur(d.backgroundBlur);
+        if (d.backgroundOverlayOpacity !== undefined) setBackgroundOverlayOpacity(d.backgroundOverlayOpacity);
       }
     };
     loadSettings();
@@ -62,6 +66,8 @@ export const AdminAppearance: React.FC = () => {
       cardStyle,
       glowIntensity,
       allowUserCustomization,
+      backgroundBlur,
+      backgroundOverlayOpacity,
       assets: {
         logoUrl: logoUrl.trim(),
         faviconUrl: faviconUrl.trim(),
@@ -98,6 +104,8 @@ export const AdminAppearance: React.FC = () => {
     setCardStyle('rounded-2xl');
     setGlowIntensity('vibrant');
     setAllowUserCustomization(true);
+    setBackgroundBlur('none');
+    setBackgroundOverlayOpacity(75);
     setTheme('dark');
   };
 
@@ -306,6 +314,54 @@ export const AdminAppearance: React.FC = () => {
                   />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Background Styling Options */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-amber-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Background FX (Blur & Contrast)
+              </h3>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-zinc-300 font-medium mb-1.5">Background Blur Intensity</label>
+                <select
+                  value={backgroundBlur}
+                  onChange={(e) => setBackgroundBlur(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
+                >
+                  <option value="none">None (0px)</option>
+                  <option value="4px">Small (4px)</option>
+                  <option value="8px">Medium (8px)</option>
+                  <option value="12px">Large (12px)</option>
+                  <option value="20px">Extra Large (20px)</option>
+                  <option value="32px">Max (32px)</option>
+                  <option value="40px">Extreme (40px)</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-zinc-300 font-medium">Background Overlay Opacity</label>
+                  <span className="text-amber-400 font-mono font-bold">{backgroundOverlayOpacity}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="95"
+                  step="5"
+                  value={backgroundOverlayOpacity}
+                  onChange={(e) => setBackgroundOverlayOpacity(parseInt(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Adjusts the darkness of the tint layer sitting on top of your background wallpaper to guarantee text legibility.
+                </p>
+              </div>
             </div>
           </div>
 

@@ -1,32 +1,151 @@
 import { Node, Server, SftpConnectionInfo } from '../src/types';
 import { getDb } from './db';
+import { runNetworkDiagnostics, checkPortReachable, isPrivateIP } from './network/networkDetection';
+import { getNodePlayitStatus } from './playit/playitService';
+import { isInternalAddress, isValidFQDN, isValidIPv4, NO_EXTERNAL_ENDPOINT } from './network/endpointResolver';
 
-/**
- * Validates if an IP or Hostname is internal/loopback/unroutable to public clients.
- */
-export function isInternalAddress(addr?: string | null): boolean {
-  if (!addr) return true;
-  const trimmed = addr.trim().toLowerCase();
-  if (
-    trimmed === '127.0.0.1' ||
-    trimmed === 'localhost' ||
-    trimmed === '0.0.0.0' ||
-    trimmed === '::1' ||
-    trimmed === 'local-vps' ||
-    trimmed === 'local' ||
-    trimmed.startsWith('127.') ||
-    trimmed === '10.0.0.1'
-  ) {
-    return true;
-  }
-  return false;
+export { isInternalAddress };
+export const isInternalLoopback = isInternalAddress;
+
+export interface SftpResolutionDetails {
+  mode: 'DIRECT' | 'TUNNELED' | 'UNAVAILABLE' | 'direct' | 'playit' | 'unavailable';
+  status: 'online' | 'offline' | 'degraded' | 'unconfigured';
+  host: string;
+  port: number;
+  source: 'public_ipv4' | 'fqdn' | 'playit' | 'none';
+  reachable: boolean;
+  agent: {
+    installed: boolean;
+    claimed: boolean;
+    connected: boolean;
+  };
 }
 
-export const isInternalLoopback = isInternalAddress;
+/**
+ * Performs full, authoritative, real-time verification of node network & sftp availability.
+ */
+export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutionDetails> {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === nodeId);
+  
+  const sftpPort = node?.sftpPort || 2022;
+  const sftpDaemonOnline = await checkPortReachable('127.0.0.1', sftpPort, 1000);
+
+  // 1. Run real-time IP, NAT, and port reachability diagnostic checks
+  const netDiag = await runNetworkDiagnostics(sftpPort);
+  const playitStatus = await getNodePlayitStatus(nodeId);
+
+  const statusLower = String(playitStatus.status).toLowerCase();
+
+  const playitInstalled = !!playitStatus.isInstalled;
+  const playitClaimed = statusLower === 'connected' || statusLower === 'claiming' || statusLower === 'claimed' || statusLower === 'connecting' || statusLower === 'claim_required' || (!!playitStatus.sftpTunnelAddress && playitStatus.sftpTunnelAddress !== 'sftp-tunnel.playit.gg');
+  const playitConnected = statusLower === 'connected';
+
+  // SCENARIO A: Direct connection is possible (public IP exists and sftp port is reachable externally)
+  if (netDiag.publicIp && !netDiag.isBehindNat && netDiag.isPublicIpReachable && sftpDaemonOnline) {
+    return {
+      mode: 'DIRECT',
+      status: 'online',
+      host: netDiag.publicIp,
+      port: sftpPort,
+      source: 'public_ipv4',
+      reachable: true,
+      agent: {
+        installed: playitInstalled,
+        claimed: playitClaimed,
+        connected: playitConnected
+      }
+    };
+  }
+
+  // SCENARIO B: Configured FQDN exists and is valid
+  if (node?.sftpFqdn && isValidFQDN(node.sftpFqdn) && sftpDaemonOnline) {
+    return {
+      mode: 'DIRECT',
+      status: 'online',
+      host: node.sftpFqdn.trim(),
+      port: sftpPort,
+      source: 'fqdn',
+      reachable: true,
+      agent: {
+        installed: playitInstalled,
+        claimed: playitClaimed,
+        connected: playitConnected
+      }
+    };
+  }
+
+  if (node?.fqdn && isValidFQDN(node.fqdn) && sftpDaemonOnline) {
+    return {
+      mode: 'DIRECT',
+      status: 'online',
+      host: node.fqdn.trim(),
+      port: sftpPort,
+      source: 'fqdn',
+      reachable: true,
+      agent: {
+        installed: playitInstalled,
+        claimed: playitClaimed,
+        connected: playitConnected
+      }
+    };
+  }
+
+  // SCENARIO C: Playit fallback is active and fully configured
+  if (playitInstalled && playitClaimed && playitConnected && sftpDaemonOnline) {
+    const playitHost = playitStatus.sftpTunnelAddress || 'sftp-tunnel.playit.gg';
+    const playitPort = playitStatus.sftpTunnelPort || sftpPort;
+
+    return {
+      mode: 'TUNNELED',
+      status: 'online',
+      host: playitHost,
+      port: playitPort,
+      source: 'playit',
+      reachable: true,
+      agent: {
+        installed: playitInstalled,
+        claimed: playitClaimed,
+        connected: playitConnected
+      }
+    };
+  }
+
+  // SCENARIO D: SFTP is unconfigured, offline or degraded
+  let currentStatus: 'offline' | 'degraded' | 'unconfigured' = 'unconfigured';
+  if (!sftpDaemonOnline) {
+    currentStatus = 'offline'; // SFTP Daemon is not running locally
+  } else if (playitInstalled && !playitClaimed) {
+    currentStatus = 'unconfigured'; // Playit agent needs claiming
+  } else if (playitInstalled && !playitConnected) {
+    currentStatus = 'degraded'; // Playit disconnected
+  } else {
+    currentStatus = 'offline';
+  }
+
+  return {
+    mode: 'UNAVAILABLE',
+    status: currentStatus,
+    host: NO_EXTERNAL_ENDPOINT,
+    port: sftpPort,
+    source: 'none',
+    reachable: false,
+    agent: {
+      installed: playitInstalled,
+      claimed: playitClaimed,
+      connected: playitConnected
+    }
+  };
+}
 
 /**
  * Resolves the public, production-grade SFTP endpoint for any server.
  * GUARANTEE: NEVER returns 127.0.0.1:2022, localhost:2022, or 0.0.0.0:2022.
+ * Priority:
+ * 1. Direct SFTP endpoint (Public IPv4)
+ * 2. Configured SFTP FQDN or Node FQDN
+ * 3. Playit SFTP tunnel
+ * 4. NO_EXTERNAL_ENDPOINT
  */
 export async function resolveServerSftpInfo(
   serverId: string,
@@ -39,63 +158,56 @@ export async function resolveServerSftpInfo(
   const sftpUsername = server ? `srv_${server.id.substring(0, 10)}` : 'srv_default';
   const sftpPassword = (server as any)?.sftpPassword || '••••••••••••••••';
 
+  const nodeId = node?.id || 'node_local';
+  const modeDetails = await resolveNodeSftpMode(nodeId);
+
   let host = '';
-  let port = 2022;
+  let port = node?.sftpPort || 2022;
   let tunnelType: 'direct' | 'fqdn' | 'playit' = 'direct';
 
-  // 1. Check if node has a custom Playit SFTP tunnel address configured
-  if (node?.playitSftpAddress && !isInternalAddress(node.playitSftpAddress)) {
-    host = node.playitSftpAddress.trim();
-    port = node.playitSftpPort || 2022;
-    tunnelType = 'playit';
-  }
-  // 2. Check if node has an explicit sftpFqdn set
-  else if (node?.sftpFqdn && !isInternalAddress(node.sftpFqdn)) {
+  // 1. Explicit SFTP FQDN or Node FQDN
+  if (node?.sftpFqdn && isValidFQDN(node.sftpFqdn)) {
     host = node.sftpFqdn.trim();
     port = node.sftpPort || 2022;
     tunnelType = 'fqdn';
-  }
-  // 3. Check if node has a valid public FQDN
-  else if (node?.fqdn && !isInternalAddress(node.fqdn)) {
+  } else if (node?.fqdn && isValidFQDN(node.fqdn)) {
     host = node.fqdn.trim();
     port = node.sftpPort || 2022;
     tunnelType = 'fqdn';
-  }
-  // 4. Check if node has a valid public hostname
-  else if (node?.hostname && !isInternalAddress(node.hostname)) {
-    host = node.hostname.trim();
-    port = node.sftpPort || 2022;
-    tunnelType = 'fqdn';
-  }
-  // 5. Check if node has a valid public IP
-  else if (node?.ip && !isInternalAddress(node.ip)) {
-    host = node.ip.trim();
+  } else if (node?.publicIpv4 && isValidIPv4(node.publicIpv4)) {
+    host = node.publicIpv4.trim();
     port = node.sftpPort || 2022;
     tunnelType = 'direct';
-  }
-  // 6. If node is local or addresses are internal:
-  else {
-    // Check if clientHostHeader is a valid public domain (e.g., from req.get('host'))
-    let cleanHeader = clientHostHeader ? clientHostHeader.split(':')[0].trim() : '';
-    if (cleanHeader && !isInternalAddress(cleanHeader)) {
+  } else if (modeDetails.source === 'public_ipv4' && !isInternalAddress(modeDetails.host)) {
+    host = modeDetails.host;
+    port = modeDetails.port;
+    tunnelType = 'direct';
+  } else if (node?.playitSftpAddress && !isInternalAddress(node.playitSftpAddress)) {
+    host = node.playitSftpAddress.trim();
+    port = node.playitSftpPort || modeDetails.port || 2022;
+    tunnelType = 'playit';
+  } else if (modeDetails.source === 'playit' && !isInternalAddress(modeDetails.host)) {
+    host = modeDetails.host;
+    port = modeDetails.port;
+    tunnelType = 'playit';
+  } else {
+    // If clientHostHeader is a real public domain and not loopback, use sftp.<domain>
+    const cleanHeader = clientHostHeader ? clientHostHeader.split(':')[0].trim() : '';
+    if (cleanHeader && isValidFQDN(cleanHeader)) {
       host = `sftp.${cleanHeader}`;
       port = node?.sftpPort || 2022;
       tunnelType = 'fqdn';
     } else {
-      // Synthesize a structured production FQDN for the node / panel
-      const nodeSlug = node ? node.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'node1';
-      host = `sftp.${nodeSlug}.aetherpanel.com`;
-      port = node?.sftpPort || 2022;
-      tunnelType = 'fqdn';
+      host = NO_EXTERNAL_ENDPOINT;
     }
   }
 
-  // Safety fallback check to ensure absolutely no internal address leaks to the client
-  if (isInternalAddress(host)) {
-    host = `sftp.${node?.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'cloud'}.aetherpanel.com`;
+  // Safety fallback
+  if (isInternalAddress(host) && host !== NO_EXTERNAL_ENDPOINT) {
+    host = NO_EXTERNAL_ENDPOINT;
   }
 
-  const uri = `sftp://${sftpUsername}@${host}:${port}`;
+  const uri = host !== NO_EXTERNAL_ENDPOINT ? `sftp://${sftpUsername}@${host}:${port}` : `sftp://${sftpUsername}@${NO_EXTERNAL_ENDPOINT}:${port}`;
 
   return {
     host,
@@ -108,3 +220,4 @@ export async function resolveServerSftpInfo(
     nodeName: node?.name || 'Primary Node'
   };
 }
+

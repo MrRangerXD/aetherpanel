@@ -6,6 +6,8 @@ interface BrandingContextType {
   brandTagline: string;
   supportEmail: string;
   discordUrl: string;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
 }
@@ -19,6 +21,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [brandTagline, setBrandTagline] = useState<string>('Premium Minecraft & Discord Bot Hosting');
   const [supportEmail, setSupportEmail] = useState<string>('support@aetherpanel.com');
   const [discordUrl, setDiscordUrl] = useState<string>('https://discord.gg');
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>('AetherPanel is currently performing scheduled system upgrades.');
 
   const fetchBranding = useCallback(async () => {
     try {
@@ -31,6 +35,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (res.data.brandTagline) setBrandTagline(res.data.brandTagline);
         if (res.data.supportEmail) setSupportEmail(res.data.supportEmail);
         if (res.data.discordUrl) setDiscordUrl(res.data.discordUrl);
+        if (res.data.maintenanceMode !== undefined) setMaintenanceMode(res.data.maintenanceMode);
+        if (res.data.maintenanceMessage) setMaintenanceMessage(res.data.maintenanceMessage);
       }
     } catch (err) {
       console.error('[BrandingContext] Failed to load branding settings:', err);
@@ -64,6 +70,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         brandTagline,
         supportEmail,
         discordUrl,
+        maintenanceMode,
+        maintenanceMessage,
         refreshBranding: fetchBranding,
         updateBrandNameLocally
       }}

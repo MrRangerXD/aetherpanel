@@ -12,13 +12,14 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export function generateToken(user: User): string {
+  const version = user.tokenVersion !== undefined ? user.tokenVersion : 1;
   return jwt.sign(
     {
       id: user.id,
       username: user.username,
       email: user.email,
       role: user.role,
-      tokenVersion: user.tokenVersion || 1
+      tokenVersion: version
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -33,8 +34,9 @@ export async function verifyToken(token: string): Promise<User | null> {
     if (!user) return null;
 
     // Check token version for instant session revocation
-    if (user.tokenVersion !== undefined && decoded.tokenVersion !== undefined) {
-      if (decoded.tokenVersion !== user.tokenVersion) {
+    if (decoded.tokenVersion !== undefined) {
+      const dbVersion = user.tokenVersion !== undefined ? user.tokenVersion : 1;
+      if (decoded.tokenVersion !== dbVersion) {
         return null;
       }
     }
@@ -138,6 +140,20 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   }
 
   req.user = user;
+
+  const db = await getDb();
+  if (db.settings.maintenanceMode && user.role !== 'admin' && user.role !== 'super_admin') {
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method) || req.originalUrl.includes('/deploy') || req.originalUrl.includes('/billing')) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'PLATFORM_MAINTENANCE',
+          message: db.settings.maintenanceMessage || 'AetherPanel is currently undergoing scheduled maintenance. Please try again later.'
+        }
+      });
+    }
+  }
+
   next();
 }
 

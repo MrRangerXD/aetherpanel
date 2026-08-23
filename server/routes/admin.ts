@@ -8,9 +8,12 @@ import { ensureLocalNode } from '../nodeAgent';
 import {
   getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent
 } from '../playitService';
-import { stopServer, getServerDir } from '../provider';
+import { resolveNodeSftpMode } from '../sftpResolver';
+import { runNetworkDiagnostics } from '../network/networkDetection';
+import { stopServer, startServer, restartServer, getServerDir } from '../provider';
 import { clearConsoleBuffer, closeServerConsoleClients } from '../consoleWs';
 import { dispatchWebhookEvent } from '../webhookService';
+import { resolveServerType } from './serverTypes';
 
 const router = Router();
 
@@ -432,28 +435,78 @@ router.get('/nodes', async (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, data: db.nodes });
 });
 
+// GET /api/v1/admin/nodes/:id
+router.get('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const node = db.nodes.find(n => n.id === req.params.id);
+  if (!node) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
+
+  const nodeServers = db.servers.filter(s => s.nodeId === node.id);
+  const nodeAllocs = db.allocations.filter(a => a.nodeId === node.id);
+
+  res.json({
+    success: true,
+    data: {
+      ...node,
+      servers: nodeServers.map(s => ({
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        primaryPort: s.primaryPort,
+        ramMB: s.limits.ramMB,
+        cpuCores: s.limits.cpuCores,
+        diskGB: s.limits.diskGB,
+        userId: s.userId
+      })),
+      allocationsCount: {
+        total: nodeAllocs.length,
+        assigned: nodeAllocs.filter(a => a.isAssigned).length,
+        available: nodeAllocs.filter(a => !a.isAssigned).length
+      }
+    }
+  });
+});
+
 // POST /api/v1/admin/nodes
 router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
   const {
-    name, hostname, ip, fqdn, daemonPort, sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    name, description, hostname, ip, publicIpv4, publicIpv6, fqdn,
+    daemonPort, daemonListenIp, daemonScheme, daemonSslEnabled,
+    sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
     location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB,
     ramOverallocatePercent, cpuOverallocatePercent, diskOverallocatePercent,
-    maxServers, allowedProducts
+    maxServers, allowedProducts, tags
   } = req.body;
 
+  if (!name || !hostname || !ip) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Node name, hostname, and primary IP are required.' }
+    });
+  }
+
   const db = await getDb();
+
+  const rawFqdn = fqdn ? fqdn.trim() : (hostname.includes('.') ? hostname.trim() : `${hostname.trim()}.local`);
+  const rawIp = ip.trim();
 
   const newNode: Node = {
     id: `node_${Date.now()}`,
     name: name.trim(),
+    description: description ? description.trim() : undefined,
     hostname: hostname.trim(),
-    ip: ip.trim(),
-    fqdn: fqdn ? fqdn.trim() : hostname.trim(),
-    sftpFqdn: sftpFqdn ? sftpFqdn.trim() : undefined,
+    ip: rawIp,
+    publicIpv4: publicIpv4 ? publicIpv4.trim() : (rawIp !== '127.0.0.1' ? rawIp : undefined),
+    publicIpv6: publicIpv6 ? publicIpv6.trim() : undefined,
+    fqdn: rawFqdn,
+    sftpFqdn: sftpFqdn ? sftpFqdn.trim() : (rawFqdn ? `sftp.${rawFqdn}` : undefined),
     playitSftpAddress: playitSftpAddress ? playitSftpAddress.trim() : undefined,
     playitSftpPort: playitSftpPort ? parseInt(playitSftpPort) : undefined,
     daemonPort: parseInt(daemonPort) || 8080,
+    daemonListenIp: daemonListenIp ? daemonListenIp.trim() : '0.0.0.0',
+    daemonScheme: daemonScheme === 'https' ? 'https' : 'http',
+    daemonSslEnabled: Boolean(daemonSslEnabled),
     sftpPort: parseInt(sftpPort) || 2022,
     location: location || 'us-east',
     locationName: locationName || 'Default Region',
@@ -469,6 +522,7 @@ router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
     diskOverallocatePercent: parseInt(diskOverallocatePercent) || 0,
     maxServers: parseInt(maxServers) || 100,
     allowedProducts: Array.isArray(allowedProducts) ? allowedProducts : ['prod_minecraft', 'prod_bot'],
+    tags: Array.isArray(tags) ? tags : ['compute', 'production'],
     status: 'offline', // status becomes 'online' when daemon connects/enrolls
     isMaintenanceMode: false,
     serverCount: 0,
@@ -477,22 +531,26 @@ router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
 
   db.nodes.push(newNode);
 
-  // Generate initial allocations pool
+  // Generate initial allocations pool safely avoiding reserved infrastructure ports
+  const reservedPorts = new Set([22, 80, 443, 2022, 3000, 8080, 8443, newNode.daemonPort, newNode.sftpPort]);
   for (let p = 25565; p <= 25575; p++) {
-    db.allocations.push({
-      id: `alloc_${Date.now()}_${p}`,
-      nodeId: newNode.id,
-      ip: newNode.ip,
-      port: p,
-      isAssigned: false
-    });
+    if (!reservedPorts.has(p)) {
+      db.allocations.push({
+        id: `alloc_${Date.now()}_${p}`,
+        nodeId: newNode.id,
+        ip: newNode.ip,
+        port: p,
+        isAssigned: false,
+        createdAt: new Date().toISOString()
+      });
+    }
   }
 
   saveDbSync();
 
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'CREATE_NODE', newNode.id, `Created node ${newNode.name} (${newNode.ip})`);
 
-  res.json({ success: true, data: newNode });
+  res.json({ success: true, data: newNode, message: `Node '${newNode.name}' created successfully.` });
 });
 
 // POST /api/v1/admin/nodes/:id/install-token - Generate installation token for AetherNode installer
@@ -554,7 +612,7 @@ router.post('/nodes/:id/repair', async (req: AuthenticatedRequest, res: Response
   const serverCount = db.servers.filter(s => s.nodeId === node.id).length;
   node.serverCount = serverCount;
   const isRecent = node.lastHeartbeatAt && (Date.now() - new Date(node.lastHeartbeatAt).getTime() < 300000);
-  if (isRecent && node.status !== 'maintenance') {
+  if (isRecent && !node.isMaintenanceMode && node.status !== 'maintenance') {
     node.status = 'online';
   }
   saveDbSync();
@@ -574,38 +632,56 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (!node) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
 
   const {
-    name, hostname, ip, fqdn, daemonPort, sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    name, description, hostname, ip, publicIpv4, publicIpv6, fqdn,
+    daemonPort, daemonListenIp, daemonScheme, daemonSslEnabled,
+    sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
     location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB, ramOverallocatePercent, cpuOverallocatePercent,
-    diskOverallocatePercent, maxServers, allowedProducts, isMaintenanceMode, status
+    diskOverallocatePercent, maxServers, allowedProducts, tags, isMaintenanceMode, status
   } = req.body;
 
-  if (name) node.name = name;
-  if (hostname) node.hostname = hostname;
-  if (ip) node.ip = ip;
-  if (fqdn !== undefined) node.fqdn = fqdn;
-  if (sftpFqdn !== undefined) node.sftpFqdn = sftpFqdn;
-  if (playitSftpAddress !== undefined) node.playitSftpAddress = playitSftpAddress;
+  if (name !== undefined) node.name = name.trim();
+  if (description !== undefined) node.description = description.trim();
+  if (hostname !== undefined) node.hostname = hostname.trim();
+  if (ip !== undefined) node.ip = ip.trim();
+  if (publicIpv4 !== undefined) node.publicIpv4 = publicIpv4 ? publicIpv4.trim() : undefined;
+  if (publicIpv6 !== undefined) node.publicIpv6 = publicIpv6 ? publicIpv6.trim() : undefined;
+  if (fqdn !== undefined) node.fqdn = fqdn ? fqdn.trim() : undefined;
+  if (sftpFqdn !== undefined) node.sftpFqdn = sftpFqdn ? sftpFqdn.trim() : undefined;
+  if (playitSftpAddress !== undefined) node.playitSftpAddress = playitSftpAddress ? playitSftpAddress.trim() : undefined;
   if (playitSftpPort !== undefined) node.playitSftpPort = playitSftpPort ? parseInt(playitSftpPort) : undefined;
-  if (daemonPort) node.daemonPort = parseInt(daemonPort);
-  if (sftpPort) node.sftpPort = parseInt(sftpPort);
-  if (location) node.location = location;
-  if (locationName) node.locationName = locationName;
-  if (flagCode) node.flagCode = flagCode;
-  if (totalRamMB) node.totalRamMB = parseInt(totalRamMB);
-  if (totalCpuCores) node.totalCpuCores = parseFloat(totalCpuCores);
-  if (totalDiskGB) node.totalDiskGB = parseInt(totalDiskGB);
+  if (daemonPort !== undefined) node.daemonPort = parseInt(daemonPort);
+  if (daemonListenIp !== undefined) node.daemonListenIp = daemonListenIp.trim();
+  if (daemonScheme !== undefined) node.daemonScheme = daemonScheme === 'https' ? 'https' : 'http';
+  if (daemonSslEnabled !== undefined) node.daemonSslEnabled = Boolean(daemonSslEnabled);
+  if (sftpPort !== undefined) node.sftpPort = parseInt(sftpPort);
+  if (location !== undefined) node.location = location;
+  if (locationName !== undefined) node.locationName = locationName;
+  if (flagCode !== undefined) node.flagCode = flagCode;
+  if (totalRamMB !== undefined) node.totalRamMB = parseInt(totalRamMB);
+  if (totalCpuCores !== undefined) node.totalCpuCores = parseFloat(totalCpuCores);
+  if (totalDiskGB !== undefined) node.totalDiskGB = parseInt(totalDiskGB);
   if (typeof ramOverallocatePercent === 'number') node.ramOverallocatePercent = ramOverallocatePercent;
   if (typeof cpuOverallocatePercent === 'number') node.cpuOverallocatePercent = cpuOverallocatePercent;
   if (typeof diskOverallocatePercent === 'number') node.diskOverallocatePercent = diskOverallocatePercent;
   if (typeof maxServers === 'number') node.maxServers = maxServers;
   if (Array.isArray(allowedProducts)) node.allowedProducts = allowedProducts;
-  if (typeof isMaintenanceMode === 'boolean') node.isMaintenanceMode = isMaintenanceMode;
-  if (status) node.status = status;
+  if (Array.isArray(tags)) node.tags = tags;
+  if (typeof isMaintenanceMode === 'boolean') {
+    node.isMaintenanceMode = isMaintenanceMode;
+    if (isMaintenanceMode) {
+      node.status = 'maintenance';
+    } else if (node.status === 'maintenance') {
+      node.status = 'online';
+    }
+  }
+  if (status !== undefined) node.status = status;
 
   saveDbSync();
 
-  res.json({ success: true, data: node });
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_NODE', node.id, `Updated node configuration for '${node.name}'`);
+
+  res.json({ success: true, data: node, message: `Node '${node.name}' updated successfully.` });
 });
 
 // GET /api/v1/admin/nodes/:id/playit - Get node-level Playit tunnel status
@@ -656,80 +732,221 @@ router.delete('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => 
     });
   }
 
+  const deletedNode = db.nodes[nodeIndex];
   db.nodes.splice(nodeIndex, 1);
   db.allocations = db.allocations.filter(a => a.nodeId !== req.params.id);
   saveDbSync();
 
-  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'DELETE_NODE', req.params.id, `Deleted node ${req.params.id}`);
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'DELETE_NODE', req.params.id, `Deleted node '${deletedNode.name}' (${req.params.id})`);
 
-  res.json({ success: true, message: 'Node and unassigned allocations removed' });
+  res.json({ success: true, message: `Node '${deletedNode.name}' and all associated unassigned allocations removed.` });
 });
 
 // --- ALLOCATIONS MANAGEMENT ---
 // GET /api/v1/admin/nodes/:id/allocations
 router.get('/nodes/:id/allocations', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  const allocs = db.allocations.filter(a => a.nodeId === req.params.id);
-  res.json({ success: true, data: allocs });
+  const { status, search } = req.query;
+
+  let allocs = db.allocations.filter(a => a.nodeId === req.params.id);
+
+  if (status === 'assigned') {
+    allocs = allocs.filter(a => a.isAssigned);
+  } else if (status === 'available') {
+    allocs = allocs.filter(a => !a.isAssigned);
+  }
+
+  if (search && typeof search === 'string') {
+    const q = search.toLowerCase().trim();
+    allocs = allocs.filter(a => 
+      a.ip.includes(q) || 
+      a.port.toString().includes(q) || 
+      (a.alias && a.alias.toLowerCase().includes(q))
+    );
+  }
+
+  // Enrich with server metadata
+  const enriched = allocs.map(a => {
+    const srv = a.serverId ? db.servers.find(s => s.id === a.serverId) : null;
+    return {
+      ...a,
+      serverName: srv?.name,
+      serverStatus: srv?.status
+    };
+  });
+
+  res.json({ success: true, data: enriched });
 });
 
-// POST /api/v1/admin/nodes/:id/allocations - Range creation
+// POST /api/v1/admin/nodes/:id/allocations - Single or Range creation with reserved port checks
 router.post('/nodes/:id/allocations', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const node = db.nodes.find(n => n.id === req.params.id);
   if (!node) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
 
-  const { ip, startPort, endPort } = req.body;
-  const targetIp = (ip || node.ip).trim();
+  const { ip, startPort, endPort, alias, notes } = req.body;
+  const targetIp = (ip || node.ip || '127.0.0.1').trim();
   const startP = parseInt(startPort);
   const endP = parseInt(endPort) || startP;
 
   if (!startP || startP < 1 || endP > 65535 || startP > endP) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_PORT_RANGE', message: 'Invalid port range specified (1-65535)' } });
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PORT_RANGE', message: 'Invalid port range specified (must be between 1 and 65535).' }
+    });
   }
 
+  const rangeSpan = endP - startP + 1;
+  if (rangeSpan > 500) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'RANGE_TOO_LARGE', message: 'A maximum of 500 allocation ports can be generated in a single request.' }
+    });
+  }
+
+  const reservedPorts = new Set([22, 80, 443, 2022, 3000, 8080, 8443, node.daemonPort, node.sftpPort]);
   const created: Allocation[] = [];
+  const skippedReserved: number[] = [];
+  const skippedExisting: number[] = [];
+
   for (let p = startP; p <= endP; p++) {
-    const existing = db.allocations.find(a => a.nodeId === node.id && a.ip === targetIp && a.port === p);
-    if (!existing) {
-      const newAlloc: Allocation = {
-        id: `alloc_${Date.now()}_${p}_${Math.random().toString(36).substring(2, 6)}`,
-        nodeId: node.id,
-        ip: targetIp,
-        port: p,
-        isAssigned: false
-      };
-      db.allocations.push(newAlloc);
-      created.push(newAlloc);
+    if (reservedPorts.has(p)) {
+      skippedReserved.push(p);
+      continue;
     }
+
+    const existing = db.allocations.find(a => a.nodeId === node.id && a.ip === targetIp && a.port === p);
+    if (existing) {
+      skippedExisting.push(p);
+      continue;
+    }
+
+    const newAlloc: Allocation = {
+      id: `alloc_${Date.now()}_${p}_${Math.random().toString(36).substring(2, 6)}`,
+      nodeId: node.id,
+      ip: targetIp,
+      port: p,
+      alias: alias ? alias.trim() : undefined,
+      notes: notes ? notes.trim() : undefined,
+      isAssigned: false,
+      createdAt: new Date().toISOString()
+    };
+    db.allocations.push(newAlloc);
+    created.push(newAlloc);
   }
 
   saveDbSync();
 
-  res.json({ success: true, data: created, message: `Generated ${created.length} new allocation port(s)` });
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'CREATE_ALLOCATIONS', node.id,
+    `Added ${created.length} port allocation(s) [${startP}-${endP}] to node '${node.name}'`
+  );
+
+  let msg = `Created ${created.length} new port allocation(s).`;
+  if (skippedReserved.length > 0) {
+    msg += ` (Skipped ${skippedReserved.length} reserved system port${skippedReserved.length === 1 ? '' : 's'}: ${skippedReserved.slice(0, 5).join(', ')}${skippedReserved.length > 5 ? '...' : ''})`;
+  }
+  if (skippedExisting.length > 0) {
+    msg += ` (${skippedExisting.length} port${skippedExisting.length === 1 ? '' : 's'} already existed)`;
+  }
+
+  res.json({
+    success: true,
+    data: created,
+    message: msg,
+    summary: {
+      created: created.length,
+      skippedReserved: skippedReserved.length,
+      skippedExisting: skippedExisting.length
+    }
+  });
 });
 
-// DELETE /api/v1/admin/allocations/:allocId
+// PATCH /api/v1/admin/allocations/:allocId - Update allocation alias or notes
+router.patch('/allocations/:allocId', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const alloc = db.allocations.find(a => a.id === req.params.allocId);
+  if (!alloc) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Allocation not found' } });
+
+  const { alias, notes } = req.body;
+  if (alias !== undefined) alloc.alias = alias ? alias.trim() : undefined;
+  if (notes !== undefined) alloc.notes = notes ? notes.trim() : undefined;
+
+  saveDbSync();
+
+  res.json({ success: true, data: alloc, message: 'Allocation updated.' });
+});
+
+// DELETE /api/v1/admin/allocations/:allocId - Delete single unassigned allocation
 router.delete('/allocations/:allocId', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const alloc = db.allocations.find(a => a.id === req.params.allocId);
   if (!alloc) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Allocation not found' } });
 
   if (alloc.isAssigned) {
-    return res.status(400).json({ success: false, error: { code: 'ALLOCATION_ASSIGNED', message: 'Cannot delete an allocation currently assigned to an active server' } });
+    return res.status(400).json({
+      success: false,
+      error: { code: 'ALLOCATION_ASSIGNED', message: 'Cannot delete an allocation currently assigned to an active server.' }
+    });
   }
 
   db.allocations = db.allocations.filter(a => a.id !== req.params.allocId);
   saveDbSync();
 
-  res.json({ success: true, message: 'Allocation deleted' });
+  res.json({ success: true, message: `Allocation ${alloc.ip}:${alloc.port} deleted.` });
+});
+
+// POST /api/v1/admin/nodes/:id/allocations/bulk-delete - Delete unassigned allocations
+router.post('/nodes/:id/allocations/bulk-delete', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const { allocationIds, deleteAllUnassigned } = req.body;
+
+  let toDeleteIds: string[] = [];
+  if (deleteAllUnassigned) {
+    toDeleteIds = db.allocations
+      .filter(a => a.nodeId === req.params.id && !a.isAssigned)
+      .map(a => a.id);
+  } else if (Array.isArray(allocationIds)) {
+    toDeleteIds = allocationIds.filter(id => {
+      const a = db.allocations.find(item => item.id === id && item.nodeId === req.params.id);
+      return a && !a.isAssigned;
+    });
+  }
+
+  if (toDeleteIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NO_DELETABLE_ALLOCATIONS', message: 'No unassigned allocations matched for deletion.' }
+    });
+  }
+
+  const deleteSet = new Set(toDeleteIds);
+  db.allocations = db.allocations.filter(a => !deleteSet.has(a.id));
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'BULK_DELETE_ALLOCATIONS', req.params.id,
+    `Bulk deleted ${toDeleteIds.length} unassigned allocations from node ${req.params.id}`
+  );
+
+  res.json({
+    success: true,
+    deletedCount: toDeleteIds.length,
+    message: `Successfully deleted ${toDeleteIds.length} unassigned allocation(s).`
+  });
 });
 
 // --- ALL SERVERS ---
 // GET /api/v1/admin/servers
 router.get('/servers', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  res.json({ success: true, data: db.servers });
+  const enrichedServers = db.servers.map(srv => ({
+    ...srv,
+    serverType: resolveServerType(srv, db.serverTypes || [])
+  }));
+  res.json({ success: true, data: enrichedServers });
 });
 
 // DELETE /api/v1/admin/servers/:id - Forcible admin deletion of a server container
@@ -791,6 +1008,194 @@ router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) =
   }, server.userId).catch(() => {});
 
   res.json({ success: true, message: `Server '${server.name}' deleted successfully.` });
+});
+
+// POST /api/v1/admin/servers/bulk-restart - Bulk restart selected servers
+router.post('/servers/bulk-restart', async (req: AuthenticatedRequest, res: Response) => {
+  const { serverIds } = req.body;
+  if (!Array.isArray(serverIds) || serverIds.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'serverIds array is required.' } });
+  }
+
+  const db = await getDb();
+  const results: Array<{ serverId: string; name: string; success: boolean; error?: string }> = [];
+
+  for (const id of serverIds) {
+    const server = db.servers.find(s => s.id === id);
+    if (!server) {
+      results.push({ serverId: id, name: id, success: false, error: 'Server not found' });
+      continue;
+    }
+
+    try {
+      const ok = await restartServer(server.id);
+      results.push({ serverId: server.id, name: server.name, success: ok, error: ok ? undefined : 'Failed to restart process' });
+    } catch (err: any) {
+      results.push({ serverId: server.id, name: server.name, success: false, error: err.message || 'Restart error' });
+    }
+  }
+
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.length - succeeded;
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_BULK_RESTART_SERVERS',
+    'bulk_restart',
+    `Bulk restarted ${serverIds.length} servers (${succeeded} succeeded, ${failed} failed)`
+  );
+
+  res.json({
+    success: true,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+    message: failed === 0
+      ? `${succeeded} server(s) restarted successfully.`
+      : `${succeeded} restarted successfully, ${failed} failed.`
+  });
+});
+
+// POST /api/v1/admin/servers/bulk-stop - Bulk stop selected servers
+router.post('/servers/bulk-stop', async (req: AuthenticatedRequest, res: Response) => {
+  const { serverIds } = req.body;
+  if (!Array.isArray(serverIds) || serverIds.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'serverIds array is required.' } });
+  }
+
+  const db = await getDb();
+  const results: Array<{ serverId: string; name: string; success: boolean; error?: string }> = [];
+
+  for (const id of serverIds) {
+    const server = db.servers.find(s => s.id === id);
+    if (!server) {
+      results.push({ serverId: id, name: id, success: false, error: 'Server not found' });
+      continue;
+    }
+
+    try {
+      const ok = await stopServer(server.id);
+      results.push({ serverId: server.id, name: server.name, success: ok, error: ok ? undefined : 'Failed to stop process' });
+    } catch (err: any) {
+      results.push({ serverId: server.id, name: server.name, success: false, error: err.message || 'Stop error' });
+    }
+  }
+
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.length - succeeded;
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_BULK_STOP_SERVERS',
+    'bulk_stop',
+    `Bulk stopped ${serverIds.length} servers (${succeeded} succeeded, ${failed} failed)`
+  );
+
+  res.json({
+    success: true,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+    message: failed === 0
+      ? `${succeeded} server(s) stopped successfully.`
+      : `${succeeded} stopped successfully, ${failed} failed.`
+  });
+});
+
+// POST /api/v1/admin/servers/bulk-delete - Bulk delete selected servers
+router.post('/servers/bulk-delete', async (req: AuthenticatedRequest, res: Response) => {
+  const { serverIds } = req.body;
+  if (!Array.isArray(serverIds) || serverIds.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'serverIds array is required.' } });
+  }
+
+  const db = await getDb();
+  const results: Array<{ serverId: string; name: string; success: boolean; error?: string }> = [];
+
+  for (const id of serverIds) {
+    const server = db.servers.find(s => s.id === id);
+    if (!server) {
+      results.push({ serverId: id, name: id, success: false, error: 'Server not found' });
+      continue;
+    }
+
+    try {
+      // 1. Terminate running process if any
+      try {
+        await stopServer(server.id);
+      } catch (e) {}
+
+      // 2. Clear console logs buffer & disconnect clients
+      clearConsoleBuffer(server.id);
+      closeServerConsoleClients(server.id, `Server '${server.name}' deleted by administrator.`);
+
+      // 3. Remove filesystem directory recursively
+      const serverDir = getServerDir(server.id);
+      if (fs.existsSync(serverDir)) {
+        try {
+          fs.rmSync(serverDir, { recursive: true, force: true });
+        } catch (e) {}
+      }
+
+      // 4. Free allocations
+      db.allocations.filter(a => a.serverId === server.id).forEach(a => {
+        a.serverId = undefined;
+        a.isAssigned = false;
+      });
+
+      // 5. Remove associated databases, backups, and schedules
+      db.backups = db.backups.filter(b => b.serverId !== server.id);
+      db.databases = db.databases.filter(d => d.serverId !== server.id);
+      db.schedules = db.schedules.filter(sc => sc.serverId !== server.id);
+
+      // 6. Remove from servers list
+      db.servers = db.servers.filter(s => s.id !== server.id);
+
+      // Webhook dispatch
+      dispatchWebhookEvent('server.deleted', {
+        serverId: server.id,
+        serverName: server.name,
+        userId: server.userId,
+        deletedBy: req.user!.email,
+        adminForced: true
+      }, server.userId).catch(() => {});
+
+      results.push({ serverId: server.id, name: server.name, success: true });
+    } catch (err: any) {
+      results.push({ serverId: server.id, name: server.name, success: false, error: err.message || 'Deletion error' });
+    }
+  }
+
+  saveDbSync();
+
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.length - succeeded;
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_BULK_DELETE_SERVERS',
+    'bulk_delete',
+    `Bulk deleted ${serverIds.length} servers (${succeeded} succeeded, ${failed} failed)`
+  );
+
+  res.json({
+    success: true,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+    message: failed === 0
+      ? `${succeeded} server(s) permanently deleted.`
+      : `${succeeded} deleted successfully, ${failed} failed.`
+  });
 });
 
 // --- COUPONS ---
@@ -1507,20 +1912,34 @@ router.post('/anti-abuse/test', async (req: AuthenticatedRequest, res: Response)
   res.json({ success: true, data: result });
 });
 
+// GET /api/v1/admin/network/sftp - Dynamic network detection and unified connection info
+router.get('/network/sftp', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const details = await resolveNodeSftpMode('node_local');
+    res.json({
+      success: true,
+      data: details
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'NETWORK_RESOLVE_FAILED', message: err.message } });
+  }
+});
+
 // GET /api/v1/admin/sftp/status - Get SFTP Subsystem status & config
 router.get('/sftp/status', async (req: AuthenticatedRequest, res: Response) => {
   const sftpPort = parseInt(process.env.SFTP_PORT || '2022', 10);
   const sftpHost = process.env.SFTP_HOST || '0.0.0.0';
+  const details = await resolveNodeSftpMode('node_local');
 
   res.json({
     success: true,
     data: {
-      status: 'ONLINE',
+      status: details.status === 'online' ? 'ONLINE' : 'OFFLINE',
       bindHost: sftpHost,
       configuredPort: sftpPort,
       activeConnections: 0,
       filesystemIsolation: 'ENFORCED_SERVER_ROOT',
-      externalReachability: 'BLOCKED — HOST NETWORK DOES NOT PROVIDE INBOUND SFTP PORT',
+      externalReachability: details.mode === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : (details.mode === 'playit' ? 'PLAYIT TUNNEL ACTIVE' : 'UNREACHABLE / DEGRADED'),
       requiredConfig: [
         `SFTP_HOST=<public-ip-or-domain>`,
         `SFTP_PORT=${sftpPort}`
@@ -1549,8 +1968,14 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
   const botToken = process.env.DISCORD_BOT_TOKEN || (db.settings as any).discordBot?.botToken || '';
   const isBotConfigured = Boolean(botToken);
 
-  // 3. SFTP
+  // 3. SFTP & Playit diagnostics
   const sftpPort = parseInt(process.env.SFTP_PORT || '2022', 10);
+  const details = await resolveNodeSftpMode('node_local');
+  const netDiag = await runNetworkDiagnostics(sftpPort);
+  const playitStatus = await getNodePlayitStatus('node_local');
+
+  const modeLower = details.mode.toLowerCase();
+  const statusLower = playitStatus.status.toLowerCase();
 
   const timestamp = new Date().toISOString();
 
@@ -1582,13 +2007,23 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
         commandsRegistered: ['/server status', '/server start', '/server stop', '/server restart', '/server console', '/server backup']
       },
       sftp: {
-        status: 'ONLINE',
+        status: details.status === 'online' ? 'ONLINE' : 'OFFLINE',
         bindHost: '0.0.0.0',
         configuredPort: sftpPort,
         activeConnections: 0,
         filesystemIsolation: 'ENFORCED_SERVER_ROOT',
-        externalReachability: 'BLOCKED — HOST NETWORK DOES NOT PROVIDE INBOUND SFTP PORT',
-        requiredConfig: [`SFTP_HOST=<public-ip-or-domain>`, `SFTP_PORT=${sftpPort}`]
+        externalReachability: modeLower === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : (modeLower === 'playit' || modeLower === 'tunneled' ? 'PLAYIT TUNNEL ACTIVE' : 'UNREACHABLE / DEGRADED'),
+        requiredConfig: [`SFTP_HOST=<public-ip-or-domain>`, `SFTP_PORT=${sftpPort}`],
+        networkMode: details.mode,
+        publicIpv4: netDiag.publicIp || 'UNAVAILABLE',
+        isBehindNat: netDiag.isBehindNat,
+        ipv4Reachability: netDiag.isPublicIpReachable ? 'ONLINE' : 'UNREACHABLE',
+        playitBinary: playitStatus.isInstalled ? 'ONLINE' : 'NOT_INSTALLED',
+        playitAgent: playitStatus.isRunning ? 'ONLINE' : 'OFFLINE',
+        playitClaim: statusLower === 'connected' || statusLower === 'claiming' || statusLower === 'claimed' || statusLower === 'connecting' ? 'CLAIMED' : 'UNCLAIMED',
+        playitConnection: statusLower === 'connected' ? 'CONNECTED' : 'DISCONNECTED',
+        playitTunnel: statusLower === 'connected' ? 'ONLINE' : 'NOT_ACTIVE',
+        playitEndpoint: playitStatus.sftpTunnelAddress ? `${playitStatus.sftpTunnelAddress}:${playitStatus.sftpTunnelPort}` : 'NOT_CONFIGURED'
       },
       runtime: {
         database: { status: 'ONLINE', type: 'JSON DB / File State', userCount: db.users.length, serverCount: db.servers.length },
@@ -1620,7 +2055,8 @@ const handleAdminPasswordReset = async (req: AuthenticatedRequest, res: Response
   const bcrypt = await import('bcryptjs');
   db.passwords[user.id] = await bcrypt.default.hash(newPassword, 10);
   user.mustChangePassword = false;
-  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  const currentVer = user.tokenVersion !== undefined ? user.tokenVersion : 1;
+  user.tokenVersion = currentVer + 1;
   user.updatedAt = new Date().toISOString();
   saveDbSync();
 
@@ -1652,6 +2088,8 @@ router.get('/theme-settings', async (req: AuthenticatedRequest, res: Response) =
     cardStyle: 'rounded-2xl',
     glowIntensity: 'vibrant',
     allowUserCustomization: true,
+    backgroundBlur: 'none',
+    backgroundOverlayOpacity: 75,
     assets: {
       logoUrl: '',
       faviconUrl: '',
@@ -1663,7 +2101,11 @@ router.get('/theme-settings', async (req: AuthenticatedRequest, res: Response) =
 
   res.json({
     success: true,
-    data: themeSettings
+    data: {
+      backgroundBlur: 'none',
+      backgroundOverlayOpacity: 75,
+      ...themeSettings
+    }
   });
 });
 
@@ -1686,7 +2128,7 @@ router.put('/theme-settings', async (req: AuthenticatedRequest, res: Response) =
     req.user!.role,
     'ADMIN_UPDATE_THEME_SETTINGS',
     'APPEARANCE',
-    `Updated global theme settings (Theme: ${db.settings.themeSettings.activeThemeId}, Font: ${db.settings.themeSettings.activeFontId})`
+    `Updated global theme settings (Theme: ${db.settings.themeSettings.activeThemeId}, Font: ${db.settings.themeSettings.activeFontId}, Blur: ${db.settings.themeSettings.backgroundBlur})`
   );
 
   res.json({

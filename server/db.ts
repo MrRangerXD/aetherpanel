@@ -10,7 +10,8 @@ import {
   AdItem, AdEvent, AfkSession, RewardTransaction, AfkSettings, ServerTemplate,
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
-  AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage
+  AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage,
+  ServerType, ServerTypeTheme
 } from '../src/types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -23,6 +24,7 @@ export interface DatabaseSchema {
   products: Product[];
   plans: Plan[];
   servers: Server[];
+  serverTypes: ServerType[];
   templates: ServerTemplate[];
   locations: Location[];
   nodes: Node[];
@@ -237,7 +239,7 @@ const defaultTemplates: ServerTemplate[] = [
     defaultVersion: 'Node 20',
     startupCommand: 'node index.js',
     environmentVars: { NODE_ENV: 'production', PORT: '{PORT}' },
-    defaultPort: 3000,
+    defaultPort: 8080,
     recommendedRamMB: 1024,
     recommendedCpuCores: 1,
     recommendedDiskGB: 5,
@@ -258,7 +260,7 @@ const defaultTemplates: ServerTemplate[] = [
     defaultVersion: 'Node 20',
     startupCommand: 'npm start',
     environmentVars: { DISCORD_TOKEN: '', CLIENT_ID: '', NODE_ENV: 'production' },
-    defaultPort: 3000,
+    defaultPort: 8080,
     recommendedRamMB: 1024,
     recommendedCpuCores: 1,
     recommendedDiskGB: 5,
@@ -619,6 +621,176 @@ You may NOT use AetherPanel infrastructure for:
   }
 ];
 
+export const defaultServerTypes: ServerType[] = [
+  {
+    id: 'st_minecraft_java',
+    name: 'Minecraft Java',
+    slug: 'minecraft-java',
+    category: 'Minecraft',
+    runtime: 'Java',
+    description: 'High performance Minecraft Java Edition server runtime with Paper, Purpur, Spigot, Fabric, Forge support.',
+    icon: 'Gamepad2',
+    enabled: true,
+    sortOrder: 1,
+    defaultPort: 25565,
+    defaultStartupCommand: 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} nogui',
+    defaultEnvVars: {
+      SERVER_JARFILE: 'paper.jar',
+      BUILD_NUMBER: 'latest'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    theme: {
+      id: 'stt_minecraft_java',
+      serverTypeId: 'st_minecraft_java',
+      backgroundUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1200&q=80',
+      iconUrl: '',
+      accentColor: '#22C55E',
+      overlayOpacity: 0.6,
+      gradientEnabled: true,
+      cardStyle: 'default',
+      badgeStyle: 'glow',
+      statusStyle: 'pill',
+      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  },
+  {
+    id: 'st_minecraft_bedrock',
+    name: 'Minecraft Bedrock',
+    slug: 'minecraft-bedrock',
+    category: 'Minecraft',
+    runtime: 'Bedrock',
+    description: 'Minecraft Bedrock Dedicated Server (BDS) & PocketMine-MP for cross-platform mobile, console, and Windows gaming.',
+    icon: 'Boxes',
+    enabled: true,
+    sortOrder: 2,
+    defaultPort: 19132,
+    defaultStartupCommand: './bedrock_server',
+    defaultEnvVars: {
+      GAMEMODE: 'survival',
+      DIFFICULTY: 'easy'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    theme: {
+      id: 'stt_minecraft_bedrock',
+      serverTypeId: 'st_minecraft_bedrock',
+      backgroundUrl: 'https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?auto=format&fit=crop&w=1200&q=80',
+      iconUrl: '',
+      accentColor: '#10B981',
+      overlayOpacity: 0.6,
+      gradientEnabled: true,
+      cardStyle: 'default',
+      badgeStyle: 'solid',
+      statusStyle: 'pill',
+      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  },
+  {
+    id: 'st_nodejs',
+    name: 'Node.js Bot',
+    slug: 'nodejs',
+    category: 'Bot Hosting',
+    runtime: 'Node.js',
+    description: 'Enterprise Node.js runtime environment supporting Discord.js, Eris, Express, webhooks, and npm/pnpm package managers.',
+    icon: 'Bot',
+    enabled: true,
+    sortOrder: 3,
+    defaultPort: 3000,
+    defaultStartupCommand: 'node index.js',
+    defaultEnvVars: {
+      NODE_ENV: 'production'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    theme: {
+      id: 'stt_nodejs',
+      serverTypeId: 'st_nodejs',
+      backgroundUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80',
+      iconUrl: '',
+      accentColor: '#68A063',
+      overlayOpacity: 0.65,
+      gradientEnabled: true,
+      cardStyle: 'default',
+      badgeStyle: 'glow',
+      statusStyle: 'pill',
+      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  },
+  {
+    id: 'st_bun',
+    name: 'Bun Bot',
+    slug: 'bun',
+    category: 'Bot Hosting',
+    runtime: 'Bun',
+    description: 'Ultra-fast Bun runtime with native TypeScript support, fast startup times, and integrated package manager.',
+    icon: 'Zap',
+    enabled: true,
+    sortOrder: 4,
+    defaultPort: 3000,
+    defaultStartupCommand: 'bun run index.ts',
+    defaultEnvVars: {
+      BUN_ENV: 'production'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    theme: {
+      id: 'stt_bun',
+      serverTypeId: 'st_bun',
+      backgroundUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80',
+      iconUrl: '',
+      accentColor: '#F472B6',
+      overlayOpacity: 0.65,
+      gradientEnabled: true,
+      cardStyle: 'default',
+      badgeStyle: 'glow',
+      statusStyle: 'pill',
+      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  },
+  {
+    id: 'st_python',
+    name: 'Python Bot',
+    slug: 'python',
+    category: 'Bot Hosting',
+    runtime: 'Python',
+    description: 'Python 3.11/3.12 runtime optimized for discord.py, Pycord, disnake, Flask, and automated scripts with pip support.',
+    icon: 'Terminal',
+    enabled: true,
+    sortOrder: 5,
+    defaultPort: 8080,
+    defaultStartupCommand: 'python3 main.py',
+    defaultEnvVars: {
+      PYTHONUNBUFFERED: '1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    theme: {
+      id: 'stt_python',
+      serverTypeId: 'st_python',
+      backgroundUrl: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1200&q=80',
+      iconUrl: '',
+      accentColor: '#38BDF8',
+      overlayOpacity: 0.65,
+      gradientEnabled: true,
+      cardStyle: 'default',
+      badgeStyle: 'glow',
+      statusStyle: 'pill',
+      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  }
+];
+
 let dbCache: DatabaseSchema | null = null;
 let isWriting = false;
 let pendingSave: Promise<void> | null = null;
@@ -644,6 +816,30 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
       }
       if (!dbCache!.templates || dbCache!.templates.length === 0) {
         dbCache!.templates = defaultTemplates;
+      }
+      if (!dbCache!.serverTypes || dbCache!.serverTypes.length === 0) {
+        dbCache!.serverTypes = defaultServerTypes;
+      }
+
+      // Auto-migrate existing servers to ensure every server has a valid serverTypeId
+      if (dbCache!.servers && dbCache!.servers.length > 0) {
+        dbCache!.servers.forEach(srv => {
+          if (!srv.serverTypeId) {
+            const sw = (srv.software || '').toLowerCase();
+            const botRt = (srv.startup?.botRuntime || '').toLowerCase();
+            if (sw.includes('bedrock')) {
+              srv.serverTypeId = 'st_minecraft_bedrock';
+            } else if (sw.includes('node') || botRt === 'nodejs') {
+              srv.serverTypeId = 'st_nodejs';
+            } else if (sw.includes('bun') || botRt === 'bun') {
+              srv.serverTypeId = 'st_bun';
+            } else if (sw.includes('python') || botRt === 'python') {
+              srv.serverTypeId = 'st_python';
+            } else {
+              srv.serverTypeId = 'st_minecraft_java';
+            }
+          }
+        });
       }
       if (!dbCache!.nodeInstallTokens) {
         dbCache!.nodeInstallTokens = [];
@@ -1271,7 +1467,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     { id: 'alloc_1', nodeId: 'node_local', ip: '127.0.0.1', port: 25565, isAssigned: false, installationId: currentInstId },
     { id: 'alloc_2', nodeId: 'node_local', ip: '127.0.0.1', port: 25566, isAssigned: false, installationId: currentInstId },
     { id: 'alloc_3', nodeId: 'node_local', ip: '127.0.0.1', port: 25567, isAssigned: false, installationId: currentInstId },
-    { id: 'alloc_4', nodeId: 'node_local', ip: '127.0.0.1', port: 3000, isAssigned: false, installationId: currentInstId },
+    { id: 'alloc_4', nodeId: 'node_local', ip: '127.0.0.1', port: 8080, isAssigned: false, installationId: currentInstId },
     { id: 'alloc_5', nodeId: 'node_local', ip: '127.0.0.1', port: 3001, isAssigned: false, installationId: currentInstId }
   ];
 
@@ -1393,6 +1589,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     products,
     plans,
     servers: [],
+    serverTypes: defaultServerTypes,
     templates: [],
     locations: defaultLocations,
     nodes,

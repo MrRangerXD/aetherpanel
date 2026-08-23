@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Server as ServerIcon, PlusCircle, Play, Square, RotateCw, Cpu, Activity, HardDrive, Copy, Check, Search, Filter } from 'lucide-react';
+import { Server as ServerIcon, PlusCircle, Activity, Search } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import { ServerCard } from '../../components/server/ServerCard';
 
 interface ServersListProps {
   onNavigate: (page: string, params?: any) => void;
@@ -127,107 +128,14 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredServers.map((s) => {
-            const isRunning = s.status === 'running';
-            const fullIp = `${s.primaryIp}:${s.primaryPort}`;
-
-            return (
-              <div
-                key={s.id}
-                onClick={() => onNavigate('server-manage', { serverId: s.id })}
-                className="group p-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-violet-500/50 hover:shadow-xl hover:shadow-violet-500/5 transition-all cursor-pointer flex flex-col justify-between space-y-4"
-              >
-                {/* Top Title & Status */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                      isRunning
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
-                      <span className="capitalize">{s.status}</span>
-                    </span>
-
-                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
-                      {s.location}
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-bold text-white group-hover:text-violet-400 transition-colors">
-                    {s.name}
-                  </h3>
-                  <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                    {s.software} ({s.version})
-                  </p>
-                </div>
-
-                {/* Resource Stats */}
-                <div className="grid grid-cols-3 gap-2 bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 text-[11px] font-mono">
-                  <div>
-                    <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                      <Cpu className="h-3 w-3 text-violet-400" /> CPU
-                    </div>
-                    <div className="text-white font-bold">{isRunning ? `${s.cpuUsage}%` : '0%'}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                      <Activity className="h-3 w-3 text-cyan-400" /> RAM
-                    </div>
-                    <div className="text-white font-bold">{isRunning ? `${(s.ramUsageMB / 1024).toFixed(1)}G` : '0G'}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                      <HardDrive className="h-3 w-3 text-emerald-400" /> Disk
-                    </div>
-                    <div className="text-white font-bold">{(s.diskUsageMB / 1024).toFixed(1)}G</div>
-                  </div>
-                </div>
-
-                {/* IP Copy & Quick Actions */}
-                <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80">
-                  <button
-                    onClick={(e) => handleCopy(e, fullIp, s.id)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 hover:text-white"
-                  >
-                    <span>{fullIp}</span>
-                    {copiedId === s.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3 text-zinc-400" />}
-                  </button>
-
-                  <div className="flex items-center gap-1">
-                    {!isRunning ? (
-                      <button
-                        onClick={(e) => handlePower(e, s.id, 'start')}
-                        className="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white transition-colors"
-                        title="Start Server"
-                      >
-                        <Play className="h-3.5 w-3.5" />
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={(e) => handlePower(e, s.id, 'restart')}
-                          className="p-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white transition-colors"
-                          title="Restart Server"
-                        >
-                          <RotateCw className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => handlePower(e, s.id, 'stop')}
-                          className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white transition-colors"
-                          title="Stop Server"
-                        >
-                          <Square className="h-3.5 w-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {filteredServers.map((s) => (
+            <ServerCard
+              key={s.id}
+              server={s}
+              onNavigate={onNavigate}
+              onPower={handlePower}
+            />
+          ))}
         </div>
       )}
 

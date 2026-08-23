@@ -16,6 +16,7 @@ import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
+import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
 import { buildBotStartupCommand } from '../../lib/startup';
 
 function getRecommendedJava(version?: string): number {
@@ -1121,17 +1122,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           <div className="absolute top-0 right-0 w-80 h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
         )}
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-2">
             <button
               onClick={() => onNavigate('dashboard')}
-              className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 mb-2 font-medium"
+              className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium cursor-pointer"
             >
               <ArrowLeft className="h-3.5 w-3.5 text-amber-400" /> Back to Dashboard
             </button>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-extrabold text-white font-sans tracking-tight">{server.name}</h1>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white font-sans tracking-tight break-words">{server.name}</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-semibold border ${
                 server.status === 'running'
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : 'bg-zinc-800 text-zinc-400 border-zinc-700'
@@ -1146,10 +1147,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
                   : 'bg-zinc-800 text-zinc-300 border-zinc-700'
               }`}>
-                {isMinecraft ? 'MINECRAFT SERVER' : isPython ? 'PYTHON BOT' : 'NODE.JS BOT'}
+                {isMinecraft ? 'MINECRAFT' : isPython ? 'PYTHON BOT' : 'NODE.JS BOT'}
               </span>
             </div>
-            <p className="text-xs text-zinc-400 mt-1.5 flex items-center gap-2">
+            <p className="text-xs text-zinc-400 flex flex-wrap items-center gap-2">
               <span className="font-medium text-zinc-300">{server.software} ({server.version})</span>
               <span>•</span>
               <span className="font-mono text-zinc-400">Node: {server.location}</span>
@@ -1157,23 +1158,23 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           </div>
 
           {/* IP & Power Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/90 border border-zinc-800 text-xs font-mono text-zinc-300 shadow-inner">
-              <span>IP: <strong className="text-white">{fullIp}</strong></span>
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-950/90 border border-zinc-800 text-xs font-mono text-zinc-300 shadow-inner max-w-full truncate">
+              <span className="truncate">IP: <strong className="text-white font-mono">{fullIp}</strong></span>
               <button
                 onClick={() => handleCopy(fullIp)}
-                className="p-1 hover:text-white text-zinc-400 transition-colors"
+                className="p-1 hover:text-white text-zinc-400 transition-colors shrink-0"
                 title="Copy Server IP"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {!isRunning ? (
                 <button
                   onClick={() => handlePowerAction('start')}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer active:scale-95"
                 >
                   <Play className="h-3.5 w-3.5 fill-white" />
                   <span>Start Server</span>
@@ -1182,14 +1183,14 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 <>
                   <button
                     onClick={() => handlePowerAction('restart')}
-                    className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5"
+                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   >
                     <RotateCw className="h-3.5 w-3.5" />
                     <span>Restart</span>
                   </button>
                   <button
                     onClick={() => handlePowerAction('stop')}
-                    className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-rose-500/20"
+                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-rose-500/20 cursor-pointer active:scale-95"
                   >
                     <Square className="h-3.5 w-3.5 fill-white" />
                     <span>Stop</span>
@@ -1197,7 +1198,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   <button
                     onClick={() => handlePowerAction('kill')}
                     title="Kill Process Immediately"
-                    className="p-2 rounded-xl bg-zinc-900 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-all"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-zinc-900 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-all cursor-pointer"
                   >
                     <Skull className="h-3.5 w-3.5" />
                   </button>
@@ -1208,25 +1209,25 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </div>
       </div>
 
-      {/* Resource Metrics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
+      {/* Resource Metrics Strip - responsive 2 to 4 cols */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
           <div className="text-[11px] text-zinc-400 flex items-center justify-between">
             <span>CPU Load</span>
             <Cpu className="h-3.5 w-3.5 text-violet-400" />
           </div>
-          <div className="text-base font-bold text-white font-mono">{isRunning ? `${server.cpuUsage}%` : '0%'}</div>
+          <div className="text-sm sm:text-base font-bold text-white font-mono">{isRunning ? `${server.cpuUsage}%` : '0%'}</div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
             <div className="h-full bg-violet-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, server.cpuUsage * 2) : 0}%` }} />
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
+        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
           <div className="text-[11px] text-zinc-400 flex items-center justify-between">
             <span>RAM Memory</span>
             <Activity className="h-3.5 w-3.5 text-cyan-400" />
           </div>
-          <div className="text-base font-bold text-white font-mono">
+          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
             {isRunning ? `${(server.ramUsageMB / 1024).toFixed(1)}GB` : '0GB'} / {(server.limits.ramMB / 1024).toFixed(0)}GB
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
@@ -1234,12 +1235,12 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
+        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
           <div className="text-[11px] text-zinc-400 flex items-center justify-between">
             <span>NVMe Disk</span>
             <HardDrive className="h-3.5 w-3.5 text-emerald-400" />
           </div>
-          <div className="text-base font-bold text-white font-mono">
+          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
             {(server.diskUsageMB / 1024).toFixed(1)}GB / {server.limits.diskGB}GB
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
@@ -1247,155 +1248,182 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
+        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
           <div className="text-[11px] text-zinc-400 flex items-center justify-between">
             <span>Container Uptime</span>
             <Clock className="h-3.5 w-3.5 text-amber-400" />
           </div>
-          <div className="text-base font-bold text-white font-mono">
+          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
             {isRunning ? `${Math.floor(server.uptimeSeconds / 3600)}h ${Math.floor((server.uptimeSeconds % 3600) / 60)}m` : 'Offline'}
           </div>
           <span className="text-[10px] text-zinc-500">Auto-watchdog active</span>
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-zinc-800 overflow-x-auto pb-2 text-xs">
-        <button
-          onClick={() => handleTabSelect('console')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'console' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <TerminalIcon className="h-4 w-4" />
-          <span>Console Logs</span>
-        </button>
+      {/* Tabs Navigation - Responsive Mobile Dropdown + Touch Horizontal Scroll Bar */}
+      <div className="space-y-2">
+        {/* Mobile / Tablet Quick Select Dropdown (< lg screens) */}
+        <div className="lg:hidden">
+          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Select Management View</label>
+          <select
+            value={activeTab}
+            onChange={(e) => handleTabSelect(e.target.value as any)}
+            className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
+          >
+            <option value="console">💻 Console Logs</option>
+            <option value="monitoring">📊 Monitoring & Metrics</option>
+            <option value="network">🌐 Network, SFTP & Playit</option>
+            <option value="files">📁 File Manager</option>
+            {isMinecraft && <option value="plugins">🧩 Plugins Manager</option>}
+            {isMinecraft && <option value="properties">⚙️ Server Properties</option>}
+            {isBot && <option value="env">🔑 Environment Variables</option>}
+            <option value="backups">💾 Backups ({backups.length})</option>
+            <option value="databases">🗄️ Databases ({databases.length})</option>
+            <option value="schedules">⏱️ Schedules ({schedules.length})</option>
+            <option value="discord">💬 Discord Bot & Alerts</option>
+            <option value="settings">⚡ Startup & Settings</option>
+            <option value="activity">📋 Audit Log</option>
+          </select>
+        </div>
 
-        <button
-          onClick={() => handleTabSelect('monitoring')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'monitoring' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <Activity className="h-4 w-4 text-amber-400" />
-          <span>Monitoring & Metrics</span>
-        </button>
-
-        <button
-          onClick={() => handleTabSelect('network')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <Globe className="h-4 w-4 text-amber-400" />
-          <span>Network, SFTP & Playit</span>
-        </button>
-
-        <button
-          onClick={() => handleTabSelect('files')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <Folder className="h-4 w-4" />
-          <span>File Manager</span>
-        </button>
-
-        {isMinecraft && (
+        {/* Scrollable Tabs Bar for lg+ screens */}
+        <div className="hidden lg:flex items-center gap-1.5 border-b border-zinc-800 overflow-x-auto pb-2 text-xs touch-scroll">
           <button
-            onClick={() => handleTabSelect('plugins')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-              activeTab === 'plugins' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            onClick={() => handleTabSelect('console')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'console' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
             }`}
           >
-            <Box className="h-4 w-4" />
-            <span>Plugins Manager</span>
+            <TerminalIcon className="h-4 w-4" />
+            <span>Console Logs</span>
           </button>
-        )}
 
-        {isMinecraft && (
           <button
-            onClick={() => handleTabSelect('properties')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-              activeTab === 'properties' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            onClick={() => handleTabSelect('monitoring')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'monitoring' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
             }`}
           >
-            <Sliders className="h-4 w-4 text-amber-400" />
-            <span>Server Properties</span>
+            <Activity className="h-4 w-4" />
+            <span>Monitoring & Metrics</span>
           </button>
-        )}
 
-        {isBot && (
           <button
-            onClick={() => handleTabSelect('env')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-              activeTab === 'env' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            onClick={() => handleTabSelect('network')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
             }`}
           >
-            <Key className="h-4 w-4" />
-            <span>Environment Variables</span>
+            <Globe className="h-4 w-4" />
+            <span>Network, SFTP & Playit</span>
           </button>
-        )}
 
-        <button
-          onClick={() => handleTabSelect('backups')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'backups' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <HardDrive className="h-4 w-4" />
-          <span>Backups ({backups.length})</span>
-        </button>
+          <button
+            onClick={() => handleTabSelect('files')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <Folder className="h-4 w-4" />
+            <span>File Manager</span>
+          </button>
 
-        <button
-          onClick={() => handleTabSelect('databases')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'databases' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <Database className="h-4 w-4" />
-          <span>Databases ({databases.length})</span>
-        </button>
+          {isMinecraft && (
+            <button
+              onClick={() => handleTabSelect('plugins')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'plugins' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Box className="h-4 w-4" />
+              <span>Plugins Manager</span>
+            </button>
+          )}
 
-        <button
-          onClick={() => handleTabSelect('schedules')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'schedules' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <Clock className="h-4 w-4" />
-          <span>Schedules ({schedules.length})</span>
-        </button>
+          {isMinecraft && (
+            <button
+              onClick={() => handleTabSelect('properties')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'properties' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Sliders className="h-4 w-4" />
+              <span>Server Properties</span>
+            </button>
+          )}
 
-        <button
-          onClick={() => handleTabSelect('discord')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'discord' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <MessageSquare className="h-4 w-4 text-indigo-400" />
-          <span>Discord Bot & Alerts</span>
-        </button>
+          {isBot && (
+            <button
+              onClick={() => handleTabSelect('env')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'env' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Key className="h-4 w-4" />
+              <span>Environment Variables</span>
+            </button>
+          )}
 
-        <button
-          onClick={() => handleTabSelect('settings')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'settings' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <SettingsIcon className="h-4 w-4" />
-          <span>Startup & Settings</span>
-        </button>
+          <button
+            onClick={() => handleTabSelect('backups')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'backups' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <HardDrive className="h-4 w-4" />
+            <span>Backups ({backups.length})</span>
+          </button>
 
-        <button
-          onClick={() => handleTabSelect('activity')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-            activeTab === 'activity' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          <span>Audit Log</span>
-        </button>
+          <button
+            onClick={() => handleTabSelect('databases')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'databases' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <Database className="h-4 w-4" />
+            <span>Databases ({databases.length})</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('schedules')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'schedules' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <Clock className="h-4 w-4" />
+            <span>Schedules ({schedules.length})</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('discord')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'discord' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span>Discord Bot</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('settings')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'settings' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <SettingsIcon className="h-4 w-4" />
+            <span>Startup & Settings</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('activity')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+              activeTab === 'activity' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            <span>Audit Log</span>
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: CONSOLE LOGS */}
@@ -1419,191 +1447,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
       {/* TAB 2: FILE MANAGER */}
       {activeTab === 'files' && (
-
-        <div className="space-y-4">
-          {isEditingFile ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2 text-xs font-mono text-violet-400">
-                  <FileText className="h-4 w-4" />
-                  <span>Editing: {selectedFile?.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsEditingFile(false)}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-900 text-xs text-zinc-300 hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveFile}
-                    className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white flex items-center gap-1.5"
-                  >
-                    <Save className="h-3.5 w-3.5" /> Save File
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                value={fileContent}
-                onChange={(e) => setFileContent(e.target.value)}
-                rows={18}
-                className="w-full rounded-2xl bg-black border border-zinc-800 p-4 font-mono text-xs text-emerald-400 focus:outline-none focus:border-violet-500 leading-relaxed"
-              />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Path Breadcrumbs & Actions Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs font-mono">
-                <div className="flex items-center gap-1 text-zinc-300">
-                  <span className="text-zinc-500">Directory:</span>
-                  <button onClick={() => setCurrentPath('/')} className="hover:underline text-violet-400 font-bold">
-                    root
-                  </button>
-                  {currentPath !== '/' && <span>{currentPath}</span>}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    multiple
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold flex items-center gap-1.5 shadow-md"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                    <span>{isUploading ? 'Uploading...' : 'Upload Files'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowNewFolderModal(true)}
-                    className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold flex items-center gap-1"
-                  >
-                    <Folder className="h-3.5 w-3.5 text-amber-400" /> New Folder
-                  </button>
-
-                  <button
-                    onClick={() => setShowNewFileModal(true)}
-                    className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold flex items-center gap-1"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-cyan-400" /> New File
-                  </button>
-
-                  <button
-                    onClick={() => fetchFiles(currentPath)}
-                    className="p-2 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Upload Progress Bar */}
-              {isUploading && (
-                <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl space-y-1.5">
-                  <div className="flex justify-between text-xs text-violet-300 font-semibold">
-                    <span>Uploading server files...</span>
-                    <span>{uploadProgress}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Files Table */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[640px]">
-                  <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
-                    <tr>
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Size</th>
-                      <th className="p-3">Last Modified</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
-                    {files.map((file, i) => (
-                      <tr key={i} className="hover:bg-zinc-900/40 transition-colors">
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleOpenFile(file)}
-                            className="flex items-center gap-2 font-mono text-zinc-200 hover:text-violet-400 transition-colors text-left"
-                          >
-                            {file.isDir ? (
-                              <Folder className="h-4 w-4 text-amber-400 fill-amber-400/10 shrink-0" />
-                            ) : file.name.endsWith('.zip') || file.name.endsWith('.tar.gz') ? (
-                              <FileArchive className="h-4 w-4 text-rose-400 shrink-0" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-cyan-400 shrink-0" />
-                            )}
-                            <span className="font-semibold break-all">{file.name}</span>
-                          </button>
-                        </td>
-                        <td className="p-3 font-mono text-zinc-400 whitespace-nowrap">
-                          {file.isDir ? 'DIR' : `${(file.size / 1024).toFixed(1)} KB`}
-                        </td>
-                        <td className="p-3 text-zinc-500 whitespace-nowrap">{file.updatedAt}</td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {!file.isDir && (
-                              <a
-                                href={`/api/v1/servers/${serverId}/files/download?path=${encodeURIComponent(currentPath === '/' ? file.name : `${currentPath}/${file.name}`)}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/50 transition-colors shrink-0"
-                                title="Download File"
-                                aria-label={`Download ${file.name}`}
-                              >
-                                <Download className="h-4 w-4" />
-                              </a>
-                            )}
-                            {file.name.endsWith('.zip') && (
-                              <button
-                                onClick={() => handleDecompress(file.name)}
-                                className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-amber-400 hover:bg-zinc-800/50 transition-colors shrink-0"
-                                title="Extract ZIP"
-                                aria-label={`Extract zip file ${file.name}`}
-                              >
-                                <Zap className="h-4 w-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                const oldP = currentPath === '/' ? file.name : `${currentPath}/${file.name}`;
-                                setRenameOldPath(oldP);
-                                setRenameNewPath(oldP);
-                                setShowRenameModal(true);
-                              }}
-                              className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-violet-400 hover:bg-zinc-800/50 transition-colors shrink-0"
-                              title="Rename Item"
-                              aria-label={`Rename ${file.name}`}
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFile(file.name)}
-                              className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/50 transition-colors shrink-0"
-                              title="Delete Item"
-                              aria-label={`Delete ${file.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <ServerFileManagerTab serverId={serverId} />
       )}
 
       {/* TAB 3: MINECRAFT PLUGINS MANAGER */}

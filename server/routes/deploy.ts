@@ -5,6 +5,7 @@ import { initializeServerFiles, appendConsoleLog, startServer } from '../provide
 import { downloadMinecraftServerJar, writeMinecraftEula, writeServerProperties } from '../minecraftService';
 import { Server, Order, Allocation } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
+import { RESERVED_SYSTEM_PORTS, isPortReserved, resolveNodePublicEndpoint, resolveServerPublicEndpoint } from '../network/endpointResolver';
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
     try {
       const {
         name, planId, templateId, nodeId, location, software, version,
-        billingCycle, couponCode, paymentMethod, environmentVars
+        billingCycle, couponCode, paymentMethod, environmentVars, serverTypeId
       } = req.body;
 
       if (!name || !planId) {
@@ -199,20 +200,33 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       }
     }
 
-    // Port allocation
-    let alloc = db.allocations.find(a => a.nodeId === targetNode!.id && !a.isAssigned);
-    let assignedPort = alloc ? alloc.port : (template?.defaultPort || Math.floor(Math.random() * 400) + 25565);
+    // Port allocation with atomic assignment and system port protection
+    let alloc = db.allocations.find(a => a.nodeId === targetNode!.id && !a.isAssigned && !isPortReserved(a.port, targetNode!));
+    
+    let assignedPort: number;
+    if (alloc) {
+      assignedPort = alloc.port;
+    } else {
+      let candidate = template?.defaultPort || 25565;
+      while (isPortReserved(candidate, targetNode!) || db.allocations.some(a => a.nodeId === targetNode!.id && a.port === candidate)) {
+        candidate = Math.floor(Math.random() * 4000) + 25565;
+      }
+      assignedPort = candidate;
+    }
 
     const serverId = `srv_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const nodeEndpoint = resolveNodePublicEndpoint(targetNode!);
+    const effectiveIp = nodeEndpoint.host;
 
     if (!alloc) {
       alloc = {
-        id: `alloc_${Date.now()}`,
+        id: `alloc_${Date.now()}_${assignedPort}`,
         nodeId: targetNode.id,
         ip: targetNode.ip,
         port: assignedPort,
         serverId,
-        isAssigned: true
+        isAssigned: true,
+        createdAt: new Date().toISOString()
       };
       db.allocations.push(alloc);
     } else {
@@ -225,6 +239,22 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
     const selectedSoftware = template?.name || software || (prod?.category === 'minecraft' ? 'Paper' : 'Node.js');
     const selectedVersion = version || template?.defaultVersion || (prod?.category === 'minecraft' ? '1.20.4' : 'Node 20');
 
+    let resolvedServerTypeId = serverTypeId;
+    if (!resolvedServerTypeId) {
+      const swLower = (selectedSoftware || '').toLowerCase();
+      if (swLower.includes('bedrock')) {
+        resolvedServerTypeId = 'st_minecraft_bedrock';
+      } else if (swLower.includes('node')) {
+        resolvedServerTypeId = 'st_nodejs';
+      } else if (swLower.includes('bun')) {
+        resolvedServerTypeId = 'st_bun';
+      } else if (swLower.includes('python')) {
+        resolvedServerTypeId = 'st_python';
+      } else {
+        resolvedServerTypeId = 'st_minecraft_java';
+      }
+    }
+
     const newServer: Server = {
       id: serverId,
       name: name.trim(),
@@ -233,9 +263,10 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       planId: plan.id,
       nodeId: targetNode.id,
       templateId: template?.id,
+      serverTypeId: resolvedServerTypeId,
       deploymentState: 'READY',
       status: 'running',
-      primaryIp: targetNode.ip,
+      primaryIp: effectiveIp,
       primaryPort: assignedPort,
       location: targetNode.locationName,
       software: selectedSoftware,

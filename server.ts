@@ -19,11 +19,13 @@ import statusRoutes from './server/routes/status';
 import monitoringRoutes from './server/routes/monitoring';
 import apiKeysRoutes from './server/routes/apiKeys';
 import minecraftRoutes from './server/routes/minecraft';
+import serverTypesRoutes from './server/routes/serverTypes';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
 import { startSftpDaemon } from './server/sftpServer';
 import { reconcileServerStatesOnBoot } from './server/provider';
+import { initializePlayitOnBoot } from './server/playitService';
 
 dotenv.config();
 
@@ -73,6 +75,7 @@ async function startServer() {
   app.use('/api/v1/monitoring', monitoringRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
   app.use('/api/v1/minecraft', minecraftRoutes);
+  app.use('/api/v1/server-types', serverTypesRoutes);
 
   // Vite Integration for SPA Development and Production Serving
   if (process.env.NODE_ENV !== 'production') {
@@ -143,6 +146,12 @@ async function startServer() {
       reconcileServerStatesOnBoot();
     } catch (e) {
       console.warn('[AetherPanel] Lifecycle boot reconciliation init notice:', e);
+    }
+
+    try {
+      initializePlayitOnBoot();
+    } catch (e) {
+      console.warn('[AetherPanel] Playit auto-recovery boot notice:', e);
     }
   });
 

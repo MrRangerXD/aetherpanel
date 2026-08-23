@@ -125,6 +125,8 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [serverTypes, setServerTypes] = useState<any[]>([]);
+  const [selectedServerTypeId, setSelectedServerTypeId] = useState<string>('st_minecraft_java');
 
   // Selection States
   const [selectedProductCategory, setSelectedProductCategory] = useState<'minecraft' | 'bot'>(
@@ -178,6 +180,15 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       }
       if (res.data.nodes) setNodes(res.data.nodes);
     }
+
+    try {
+      const stRes = await apiRequest('/server-types');
+      if (stRes.success && stRes.data) {
+        setServerTypes(stRes.data);
+      }
+    } catch (e) {
+      // Ignore fallback
+    }
   };
 
   const loadMinecraftVersions = async (softwareName: string) => {
@@ -202,6 +213,20 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     setSelectedSoftware(software);
     setSelectedVersion(software.defaultVersion);
     setDynamicVersions(software.versions);
+
+    // Auto-map software to serverTypeId
+    const nameLower = software.name.toLowerCase();
+    if (nameLower.includes('bedrock')) {
+      setSelectedServerTypeId('st_minecraft_bedrock');
+    } else if (nameLower.includes('node')) {
+      setSelectedServerTypeId('st_nodejs');
+    } else if (nameLower.includes('bun')) {
+      setSelectedServerTypeId('st_bun');
+    } else if (nameLower.includes('python')) {
+      setSelectedServerTypeId('st_python');
+    } else {
+      setSelectedServerTypeId('st_minecraft_java');
+    }
 
     if (software.category === 'minecraft') {
       loadMinecraftVersions(software.name);
@@ -293,6 +318,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         planId: selectedPlan?.id || selectedPlanId,
         nodeId: selectedNodeId === 'auto' ? undefined : selectedNodeId,
         location: selectedLocation === 'auto' ? undefined : selectedLocation,
+        serverTypeId: selectedServerTypeId,
         software: selectedSoftware.name,
         version: selectedVersion,
         billingCycle,

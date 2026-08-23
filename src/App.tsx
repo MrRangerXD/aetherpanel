@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
-import { BrandingProvider } from './lib/BrandingContext';
+import { BrandingProvider, useBranding } from './lib/BrandingContext';
+import { ToastProvider } from './lib/ToastContext';
+import { ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
 import { apiRequest } from './lib/api';
 import { Server } from './types';
 import { parseUrlToRoute, routeToUrl } from './lib/routing';
@@ -44,6 +46,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminServers } from './pages/admin/AdminServers';
 import { AdminProducts } from './pages/admin/AdminProducts';
+import { AdminServerTypesPage } from './pages/admin/AdminServerTypes';
 import { AdminNodes } from './pages/admin/AdminNodes';
 import { AdminBilling } from './pages/admin/AdminBilling';
 import { AdminCoupons } from './pages/admin/AdminCoupons';
@@ -62,7 +65,10 @@ import { AdminDiagnostics } from './pages/admin/AdminDiagnostics';
 
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const { brandName, maintenanceMode, maintenanceMessage, refreshBranding } = useBranding();
+  
+  const [checkingMaintenance, setCheckingMaintenance] = useState(false);
   
   // Parse initial route directly from current browser URL
   const initialRoute = parseUrlToRoute(window.location.pathname, window.location.search);
@@ -170,8 +176,68 @@ function AppContent() {
   const isAdminPage = currentPage.startsWith('admin-');
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
+  if (maintenanceMode && user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (isCustomerPage) {
+      return (
+        <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative font-sans select-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
+          
+          <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800/80 p-8 rounded-3xl backdrop-blur-md text-center space-y-6 relative shadow-2xl">
+            <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center animate-pulse">
+              <ShieldAlert className="h-8 w-8 text-amber-500" />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl font-bold tracking-tight text-white uppercase font-mono">System Maintenance</h1>
+              <p className="text-xs text-zinc-400 font-mono">Platform Upgrades In Progress</p>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-950/80 p-4 rounded-2xl border border-zinc-800/50 max-h-[150px] overflow-y-auto scrollbar-thin">
+              {maintenanceMessage || 'AetherPanel is currently performing scheduled system upgrades. We will return online shortly.'}
+            </p>
+
+            <div className="pt-2 flex flex-col gap-2.5">
+              <button
+                onClick={async () => {
+                  setCheckingMaintenance(true);
+                  await refreshBranding();
+                  setTimeout(() => setCheckingMaintenance(false), 800);
+                }}
+                disabled={checkingMaintenance}
+                className="w-full min-h-[44px] rounded-xl text-xs font-semibold text-zinc-900 bg-amber-400 hover:bg-amber-300 disabled:opacity-55 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-400/10"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${checkingMaintenance ? 'animate-spin' : ''}`} />
+                <span>{checkingMaintenance ? 'Checking status...' : 'Check if completed'}</span>
+              </button>
+
+              <button
+                onClick={() => logout()}
+                className="w-full min-h-[44px] rounded-xl text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-950/40 border border-zinc-800/50 hover:border-zinc-800 hover:bg-zinc-900/30 transition-all flex items-center justify-center gap-2"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out of Account</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 text-[11px] text-zinc-600 font-mono uppercase tracking-widest">
+            {brandName || 'AetherPanel'} Control Plane
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+      {/* Maintenance Mode Warning Banner for Public Pages */}
+      {maintenanceMode && isPublicPage && (
+        <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <span>PLATFORM UNDER MAINTENANCE: Server deployment, billing, and write operations are temporarily frozen.</span>
+        </div>
+      )}
+
       {/* Custom GPU Cursor */}
       <CustomCursor />
 
@@ -187,10 +253,13 @@ function AppContent() {
         currentPage={currentPage}
         onNavigate={handleNavigate}
         onOpenSearch={() => setIsSearchOpen(true)}
+        userServers={userServers}
+        currentServerId={pageParams?.serverId}
+        onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
       />
 
       {/* Main Body Layout */}
-      <div className="flex-1 flex flex-col md:flex-row">
+      <div className="flex-1 flex flex-col lg:flex-row">
         
         {/* Customer Sidebar */}
         {isCustomerPage && user && (
@@ -212,7 +281,7 @@ function AppContent() {
         )}
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 md:p-6">
+        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
           <div>
           {/* Public Views */}
           {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
@@ -270,6 +339,7 @@ function AppContent() {
           {currentPage === 'admin-users' && <AdminUsers />}
           {currentPage === 'admin-servers' && <AdminServers />}
           {currentPage === 'admin-products' && <AdminProducts />}
+          {currentPage === 'admin-server-types' && <AdminServerTypesPage />}
           {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
           {currentPage === 'admin-nodes' && <AdminNodes />}
           {currentPage === 'admin-monitoring' && <AdminMonitoring />}
@@ -310,7 +380,9 @@ export default function App() {
     <ThemeProvider>
       <BrandingProvider>
         <AuthProvider>
-          <AppContent />
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
         </AuthProvider>
       </BrandingProvider>
     </ThemeProvider>

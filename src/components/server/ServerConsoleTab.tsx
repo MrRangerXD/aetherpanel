@@ -326,17 +326,17 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   return (
     <div id="server-console-tab" className="space-y-4">
       {/* Console Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
-            <span className="text-zinc-500">Live Transport:</span>
+            <span className="text-zinc-500">Transport:</span>
             {wsStatus === 'connected' && (
               <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                WebSocket Active
+                Live WS
               </span>
             )}
             {wsStatus === 'connecting' && (
@@ -360,28 +360,28 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
             {wsStatus === 'disconnected' && (
               <span className="flex items-center gap-1.5 text-zinc-500">
                 <WifiOff className="h-3 w-3" />
-                Disconnected
+                Offline
               </span>
             )}
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
             <span className="text-zinc-500">Buffer:</span>
             <span className="text-zinc-300 font-bold">{logs.length}</span>
-            <span className="text-zinc-600">/ 1500 lines</span>
+            <span className="text-zinc-600 hidden xs:inline">/ 1500 lines</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Search/Filter Bar */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
             <input
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Search console..."
-              className="pl-8 pr-3 py-1.5 rounded-xl bg-black/50 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 w-36 sm:w-48 transition-all"
+              placeholder="Search..."
+              className="w-full sm:w-44 pl-8 pr-3 py-2 sm:py-1.5 rounded-xl bg-black/50 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-all"
             />
           </div>
 
@@ -389,7 +389,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <button
             onClick={handleCopyLogs}
             title="Copy Console Output"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-all shadow-sm"
+            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             <span className="hidden md:inline">{copied ? 'Copied!' : 'Copy'}</span>
@@ -399,7 +399,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <button
             onClick={handleClearLogs}
             title="Clear Console View"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 hover:border-rose-800 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-rose-400 transition-all shadow-sm"
+            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 hover:border-rose-800 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-rose-400 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Clear</span>
@@ -409,7 +409,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <button
             onClick={fetchConsoleLogs}
             title="Refresh Backlog"
-            className="p-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all"
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
           >
             <RotateCw className="h-3.5 w-3.5" />
           </button>
@@ -421,7 +421,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         <div
           ref={consoleContainerRef}
           onScroll={handleScroll}
-          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-4 font-mono text-xs text-zinc-300 h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white"
+          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-3 sm:p-4 font-mono text-xs text-zinc-300 h-[380px] sm:h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white touch-scroll"
           tabIndex={0}
         >
           {filteredLogs.length === 0 ? (
@@ -446,7 +446,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
                   {onPowerAction && (
                     <button
                       onClick={() => onPowerAction('start')}
-                      className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg transition-all"
+                      className="mt-2 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg transition-all cursor-pointer"
                     >
                       <Play className="h-3.5 w-3.5" />
                       Start Server Now
@@ -475,7 +475,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         {!isAutoScroll && unreadCount > 0 && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-xl animate-bounce transition-all z-10"
+            className="absolute bottom-4 right-4 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-xl animate-bounce transition-all z-10 cursor-pointer"
           >
             <ArrowDown className="h-3.5 w-3.5" />
             <span>{unreadCount} new line{unreadCount > 1 ? 's' : ''} ↓</span>
@@ -487,7 +487,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
       <form onSubmit={(e) => handleSendCommand(e)} className="space-y-2">
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1">
-            <span className="absolute left-3.5 top-3 font-mono text-amber-400 text-xs font-bold select-none">&gt;</span>
+            <span className="absolute left-3.5 top-3.5 sm:top-3 font-mono text-amber-400 text-xs font-bold select-none">&gt;</span>
             <input
               type="text"
               value={command}
@@ -496,19 +496,19 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               disabled={!isRunning && !isStarting}
               placeholder={
                 isRunning
-                  ? `Type ${isMinecraft ? 'Minecraft command (e.g. list, help, tps, op)' : 'bot command'} and press Enter...`
+                  ? `Type ${isMinecraft ? 'command (e.g. list, help, tps)' : 'bot command'}...`
                   : isStarting
-                  ? 'Server is starting up... command will be queued'
-                  : 'Server is offline. Start the server to interact via console.'
+                  ? 'Server starting... queued'
+                  : 'Server is offline.'
               }
-              className={`w-full rounded-xl bg-zinc-950 border pl-8 pr-24 py-2.5 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition-all ${
+              className={`w-full rounded-xl bg-zinc-950 border pl-8 pr-16 sm:pr-24 py-3 sm:py-2.5 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition-all ${
                 isRunning
                   ? 'border-zinc-800 focus:border-amber-500'
                   : 'border-zinc-800/60 bg-zinc-950/60 opacity-70 cursor-not-allowed'
               }`}
             />
             {lastAck && (
-              <span className="absolute right-3 top-2.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded">
+              <span className="absolute right-3 top-3 sm:top-2.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded hidden xs:inline">
                 ✓ {lastAck}
               </span>
             )}
@@ -517,9 +517,9 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <button
             type="submit"
             disabled={!command.trim() || (!isRunning && !isStarting) || isSubmitting}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md ${
+            className={`min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md shrink-0 cursor-pointer ${
               command.trim() && (isRunning || isStarting)
-                ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 cursor-pointer shadow-amber-500/20'
+                ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20 active:scale-95'
                 : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
             }`}
           >
@@ -528,14 +528,14 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
             ) : (
               <Send className="h-3.5 w-3.5" />
             )}
-            <span>Send</span>
+            <span className="hidden xs:inline">Send</span>
           </button>
         </div>
 
         {/* Quick Command Suggestions & Status Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-zinc-500 font-mono text-[11px] mr-1">Quick Actions:</span>
+            <span className="text-zinc-500 font-mono text-[11px] mr-1">Quick:</span>
             {quickCommands.map((q) => (
               <button
                 key={q.cmd}
@@ -543,9 +543,9 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
                 disabled={!isRunning}
                 onClick={() => handleSendCommand(undefined, q.cmd)}
                 title={q.desc}
-                className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all ${
+                className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all flex items-center ${
                   isRunning
-                    ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-amber-400 hover:border-amber-500/50 hover:bg-zinc-850 cursor-pointer'
+                    ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-amber-400 hover:border-amber-500/50 hover:bg-zinc-850 cursor-pointer active:scale-95'
                     : 'bg-zinc-900/40 border-zinc-850 text-zinc-600 cursor-not-allowed'
                 }`}
               >
@@ -557,7 +557,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
             <span>↑↓ history</span>
             <span>•</span>
-            <span>stdin sandbox isolation active</span>
+            <span>sandbox active</span>
           </div>
         </div>
       </form>

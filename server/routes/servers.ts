@@ -10,8 +10,8 @@ import {
   startServer, stopServer, restartServer, reinstallServer, killServer,
   validateServerPreflight,
   getServerConsoleLogs, sendServerCommand, listServerFiles,
-  readServerFile, writeServerFile, deleteServerItem, createServerDirectory,
-  renameServerItem, compressServerItem, decompressServerItem,
+  readServerFile, writeServerFile, deleteServerItem, deleteServerItems, createServerDirectory,
+  renameServerItem, moveServerItems, copyServerItems, compressServerItem, compressServerItems, decompressServerItem,
   readServerEnv, writeServerEnv, recordServerActivity,
   listMinecraftPlugins, toggleMinecraftPlugin, getServerDir,
   installServerDependencies, clearConsoleBuffer
@@ -26,6 +26,9 @@ import { calculateNextRunAt } from '../scheduler';
 import { ServerBackup, ServerDatabase, ServerSchedule, ServerActivity } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerSftpInfo } from '../sftpResolver';
+import { resolveServerPublicEndpoint } from '../network/endpointResolver';
+import { getNodePlayitStatus } from '../playit/playitService';
+import { resolveServerType } from './serverTypes';
 
 const router = Router();
 
@@ -81,7 +84,10 @@ async function checkServerAccess(req: AuthenticatedRequest, res: Response, serve
 // GET /api/v1/servers - List user's servers
 router.get('/', authMiddleware, requireApiKeyScope('servers:read'), async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  const userServers = db.servers.filter(s => s.userId === req.user!.id);
+  const userServers = db.servers.filter(s => s.userId === req.user!.id).map(srv => ({
+    ...srv,
+    serverType: resolveServerType(srv, db.serverTypes || [])
+  }));
   res.json({ success: true, data: userServers });
 });
 
@@ -96,14 +102,34 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
   const plan = db.plans.find(p => p.id === server.planId);
   const sftp = await resolveServerSftpInfo(server.id, req.get('host'));
 
+  const playitStatus = node ? await getNodePlayitStatus(node.id).catch(() => null) : null;
+  const publicEndpoint = resolveServerPublicEndpoint(server, node, playitStatus);
+
   res.json({
     success: true,
     data: {
-      server,
-      node: node ? { id: node.id, name: node.name, locationName: node.locationName, flagCode: node.flagCode } : null,
+      server: {
+        ...server,
+        serverType: resolveServerType(server, db.serverTypes || []),
+        resolvedPublicEndpoint: publicEndpoint.endpoint,
+        endpointSource: publicEndpoint.source,
+        isExternallyReachable: publicEndpoint.isExternallyReachable
+      },
+      node: node ? {
+        id: node.id,
+        name: node.name,
+        locationName: node.locationName,
+        flagCode: node.flagCode,
+        fqdn: node.fqdn,
+        publicIpv4: node.publicIpv4,
+        publicIpv6: node.publicIpv6,
+        daemonPort: node.daemonPort,
+        sftpPort: node.sftpPort
+      } : null,
       product,
       plan,
-      sftp
+      sftp,
+      publicEndpoint
     }
   });
 });
@@ -285,19 +311,130 @@ router.post('/:id/files/content', authMiddleware, requireApiKeyScope('files:writ
   }
 });
 
-// DELETE /api/v1/servers/:id/files - Delete file or folder
+// DELETE /api/v1/servers/:id/files - Delete file or folder (single or multiple)
 router.delete('/:id/files', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
   const filePath = req.query.path as string;
+  const paths = req.body?.paths as string[];
+
+  if (paths && Array.isArray(paths) && paths.length > 0) {
+    try {
+      const result = deleteServerItems(req.params.id, paths);
+      await recordServerActivity(
+        req.params.id, req.user!.id, req.user!.username,
+        'FILE_DELETE', `Deleted ${result.succeeded.length} files/folders.`
+      );
+      return res.json({
+        success: result.failed.length === 0,
+        message: `Deleted ${result.succeeded.length} items.`,
+        data: result
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: { code: 'FILE_ERROR', message: err.message } });
+    }
+  }
+
   if (!filePath) return res.status(400).json({ success: false, error: { code: 'PATH_REQUIRED', message: 'Path required' } });
 
   try {
     deleteServerItem(req.params.id, filePath);
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_DELETE', `Deleted: ${filePath}`
+    );
     res.json({ success: true, message: 'Item deleted successfully.' });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'FILE_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/files/bulk-delete - Explicit bulk delete
+router.post('/:id/files/bulk-delete', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { paths } = req.body;
+  if (!paths || !Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'PATHS_REQUIRED', message: 'Array of paths required' } });
+  }
+
+  try {
+    const result = deleteServerItems(req.params.id, paths);
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_DELETE', `Bulk deleted ${result.succeeded.length} items.`
+    );
+    res.json({
+      success: result.failed.length === 0,
+      message: `Deleted ${result.succeeded.length} items.${result.failed.length > 0 ? ` (${result.failed.length} failed)` : ''}`,
+      data: result
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'BULK_DELETE_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/files/move - Move file(s) or folder(s)
+router.post('/:id/files/move', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { sources, destinationDir, conflictStrategy } = req.body;
+  const sourceList = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+
+  if (sourceList.length === 0 || typeof destinationDir !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'sources array and destinationDir string are required.' }
+    });
+  }
+
+  try {
+    const result = moveServerItems(req.params.id, sourceList, destinationDir, conflictStrategy || 'replace');
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_MOVE', `Moved ${result.moved.length} items into ${destinationDir}`
+    );
+    res.json({
+      success: result.errors.length === 0,
+      message: `Moved ${result.moved.length} items into ${destinationDir || '/'}.`,
+      data: result
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'MOVE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/files/copy - Copy file(s) or folder(s)
+router.post('/:id/files/copy', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { sources, destinationDir, conflictStrategy } = req.body;
+  const sourceList = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+
+  if (sourceList.length === 0 || typeof destinationDir !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'sources array and destinationDir string are required.' }
+    });
+  }
+
+  try {
+    const result = copyServerItems(req.params.id, sourceList, destinationDir, conflictStrategy || 'replace');
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_COPY', `Copied ${result.copied.length} items into ${destinationDir}`
+    );
+    res.json({
+      success: result.errors.length === 0,
+      message: `Copied ${result.copied.length} items into ${destinationDir || '/'}.`,
+      data: result
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'COPY_FAILED', message: err.message } });
   }
 });
 
@@ -322,7 +459,7 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  upload.array('files', 10)(req, res, async (err: any) => {
+  upload.array('files', 20)(req, res, async (err: any) => {
     if (err) {
       return res.status(400).json({ success: false, error: { code: 'UPLOAD_ERROR', message: err.message || 'File upload failed.' } });
     }
@@ -382,14 +519,24 @@ router.get('/:id/files/download', authMiddleware, async (req: AuthenticatedReque
   res.download(targetPath, path.basename(targetPath));
 });
 
-// POST /api/v1/servers/:id/files/compress - Create ZIP archive
+// POST /api/v1/servers/:id/files/compress - Create ZIP archive (single or multiple items)
 router.post('/:id/files/compress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const { path: relPath } = req.body;
+  const { path: relPath, paths, outputName, currentDir } = req.body;
+  const targetPaths = Array.isArray(paths) && paths.length > 0 ? paths : (relPath ? [relPath] : []);
+
+  if (targetPaths.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'PATHS_REQUIRED', message: 'Paths to compress required.' } });
+  }
+
   try {
-    const zipRel = compressServerItem(req.params.id, relPath || '/');
+    const zipRel = compressServerItems(req.params.id, targetPaths, outputName, currentDir || '/');
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_COMPRESS', `Compressed ${targetPaths.length} items into ${zipRel}`
+    );
     res.json({ success: true, message: 'Compressed into ZIP archive.', data: { zipPath: zipRel } });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'COMPRESS_FAILED', message: err.message } });
@@ -401,9 +548,17 @@ router.post('/:id/files/decompress', authMiddleware, async (req: AuthenticatedRe
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const { path: zipRelPath } = req.body;
+  const { path: zipRelPath, destinationDir } = req.body;
+  if (!zipRelPath) {
+    return res.status(400).json({ success: false, error: { code: 'PATH_REQUIRED', message: 'ZIP file path required.' } });
+  }
+
   try {
-    decompressServerItem(req.params.id, zipRelPath);
+    decompressServerItem(req.params.id, zipRelPath, destinationDir);
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_DECOMPRESS', `Extracted archive ${zipRelPath}`
+    );
     res.json({ success: true, message: 'Extracted ZIP archive successfully.' });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'DECOMPRESS_FAILED', message: err.message } });

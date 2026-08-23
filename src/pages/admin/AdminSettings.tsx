@@ -10,7 +10,7 @@ import { useBranding } from '../../lib/BrandingContext';
 import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp'>('general');
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -106,6 +106,57 @@ export const AdminSettings: React.FC = () => {
 
   const [saved, setSaved] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+
+  // Network & SFTP Tab States
+  const [networkSftpDetails, setNetworkSftpDetails] = useState<any>(null);
+  const [playitAgentStatus, setPlayitAgentStatus] = useState<any>(null);
+  const [fetchingNetwork, setFetchingNetwork] = useState(false);
+  const [togglingPlayit, setTogglingPlayit] = useState(false);
+  const [installingPlayit, setInstallingPlayit] = useState(false);
+
+  const fetchNetworkSftpData = async () => {
+    setFetchingNetwork(true);
+    try {
+      const sftpRes = await apiRequest('/admin/network/sftp');
+      if (sftpRes.success) {
+        setNetworkSftpDetails(sftpRes.data);
+      }
+      const playitRes = await apiRequest('/admin/nodes/node_local/playit');
+      if (playitRes.success) {
+        setPlayitAgentStatus(playitRes.data);
+      }
+    } catch {}
+    setFetchingNetwork(false);
+  };
+
+  const handleTogglePlayit = async (enable: boolean) => {
+    setTogglingPlayit(true);
+    const res = await apiRequest('/admin/nodes/node_local/playit/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ enable })
+    });
+    setTogglingPlayit(false);
+    if (res.success) {
+      setPlayitAgentStatus(res.data);
+      fetchNetworkSftpData();
+    } else {
+      alert(res.error?.message || 'Failed to toggle Playit agent');
+    }
+  };
+
+  const handleInstallPlayit = async () => {
+    setInstallingPlayit(true);
+    const res = await apiRequest('/admin/nodes/node_local/playit/install', {
+      method: 'POST'
+    });
+    setInstallingPlayit(false);
+    if (res.success) {
+      setPlayitAgentStatus(res.data);
+      fetchNetworkSftpData();
+    } else {
+      alert(res.error?.message || 'Failed to install Playit agent');
+    }
+  };
 
   const fetchSettings = async () => {
     const res = await apiRequest('/admin/settings');
@@ -368,6 +419,12 @@ export const AdminSettings: React.FC = () => {
                 {pendingOrders.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => { setActiveTab('network_sftp'); fetchNetworkSftpData(); }}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'network_sftp' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <Globe className="h-3.5 w-3.5" /> Network & SFTP
           </button>
           <button
             onClick={() => { setActiveTab('updates'); fetchVersionInfo(); pollUpdateStatus(); }}
@@ -1235,6 +1292,226 @@ export const AdminSettings: React.FC = () => {
                 )}
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: Network & SFTP */}
+      {activeTab === 'network_sftp' && (
+        <div className="space-y-6">
+          {fetchingNetwork ? (
+            <div className="flex flex-col items-center justify-center p-12 bg-zinc-900 border border-zinc-800 rounded-3xl space-y-3">
+              <Loader2 className="h-8 w-8 text-amber-500 animate-spin" />
+              <p className="text-xs text-zinc-400">Performing real-time network diagnostics and checking Playit agent...</p>
+            </div>
+          ) : (
+            <>
+              {/* Core Status Header & Badges */}
+              <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-zinc-800 pb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-amber-400" /> Network Connectivity & Routing Mode
+                    </h2>
+                    <p className="text-xs text-zinc-400 mt-0.5">Autorouting selects direct high-speed SFTP if publicly reachable, with seamless Playit.GG tunnel fallback.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchNetworkSftpData}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Refresh Status
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Mode */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Active Routing Mode</div>
+                    <div className="text-base font-bold text-white flex items-center gap-2">
+                      {networkSftpDetails?.mode === 'direct' ? (
+                        <>
+                          <span className="text-emerald-400 font-bold uppercase tracking-wide">Direct SFTP</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">DIRECT</span>
+                        </>
+                      ) : networkSftpDetails?.mode === 'playit' ? (
+                        <>
+                          <span className="text-cyan-400 font-bold uppercase tracking-wide">Playit.GG Tunnel</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">TUNNELED</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-rose-400 font-bold uppercase tracking-wide">Unavailable</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">OFFLINE</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reachability */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">External Reachability</div>
+                    <div className="text-base font-bold flex items-center gap-2">
+                      {networkSftpDetails?.reachable ? (
+                        <span className="text-emerald-400 flex items-center gap-1.5 text-xs font-semibold">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" /> REACHABLE FROM INTERNET
+                        </span>
+                      ) : (
+                        <span className="text-rose-400 flex items-center gap-1.5 text-xs font-semibold">
+                          <XCircle className="h-4 w-4 text-rose-400" /> UNREACHABLE DIRECTLY
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SFTP Address */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Dynamic SFTP Endpoint</div>
+                    <div className="text-xs font-mono font-bold text-amber-400">
+                      {networkSftpDetails?.host ? `${networkSftpDetails.host}:${networkSftpDetails.port}` : 'Unavailable'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Playit Integration Panel */}
+              <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-400" /> Playit.GG Tunnel Agent
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">Enables absolute zero port-forwarding secure SFTP access. Essential for systems behind CGNAT or local NAT firewalls.</p>
+                </div>
+
+                {!playitAgentStatus?.isInstalled ? (
+                  <div className="p-6 rounded-2xl bg-zinc-950/60 border border-zinc-800 flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="p-3 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                      <Globe className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Playit Agent Not Initialized</h3>
+                      <p className="text-[11px] text-zinc-400 max-w-md mt-1">Configure and start the Playit daemon locally on this node to bypass complex NAT/Firewall systems automatically.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={installingPlayit}
+                      onClick={handleInstallPlayit}
+                      className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5"
+                    >
+                      {installingPlayit ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Initializing Agent...
+                        </>
+                      ) : (
+                        <>
+                          Initialize Playit Agent
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Controls */}
+                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-[10px] font-mono uppercase text-zinc-500">Agent Process status</div>
+                            <div className="text-xs font-bold text-white mt-1">
+                              {playitAgentStatus?.isRunning ? (
+                                <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> RUNNING (PID {playitAgentStatus?.pid})</span>
+                              ) : (
+                                <span className="text-zinc-500 flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> STOPPED</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={togglingPlayit}
+                            onClick={() => handleTogglePlayit(!playitAgentStatus?.isRunning)}
+                            className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                              playitAgentStatus?.isRunning
+                                ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20'
+                                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                            }`}
+                          >
+                            {togglingPlayit ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : playitAgentStatus?.isRunning ? (
+                              'Stop Agent'
+                            ) : (
+                              'Start Agent'
+                            )}
+                          </button>
+                        </div>
+
+                        {playitAgentStatus?.errorReason && (
+                          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] font-mono text-rose-400">
+                            <strong>Agent Error:</strong> {playitAgentStatus.errorReason}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Claim and Tunnels */}
+                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
+                        <div>
+                          <div className="text-[10px] font-mono uppercase text-zinc-500">Claiming Status</div>
+                          <div className="text-xs font-bold text-white mt-1">
+                            {playitAgentStatus?.status === 'connected' ? (
+                              <span className="text-emerald-400 font-bold uppercase tracking-wide">CLAIMED & ACTIVE</span>
+                            ) : playitAgentStatus?.status === 'claiming' || playitAgentStatus?.claimUrl ? (
+                              <span className="text-amber-400 font-bold uppercase tracking-wide animate-pulse">WAITING FOR CLAIM</span>
+                            ) : (
+                              <span className="text-zinc-500 font-bold uppercase tracking-wide">UNCONFIGURED</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {playitAgentStatus?.claimUrl && playitAgentStatus?.status !== 'connected' && (
+                          <div className="flex flex-col gap-2 pt-1 border-t border-zinc-900">
+                            <p className="text-[11px] text-zinc-400">To route your SFTP through Playit.GG, click below to claim this agent instance on your Playit account:</p>
+                            <a
+                              href={playitAgentStatus.claimUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs text-center flex items-center justify-center gap-1"
+                            >
+                              Claim Agent on Playit.GG <ExternalLink className="h-3 w-3" />
+                            </a>
+                            {playitAgentStatus?.claimCode && (
+                              <div className="text-center">
+                                <span className="text-[10px] text-zinc-500 font-mono">Claim Code: </span>
+                                <span className="text-xs font-bold text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{playitAgentStatus.claimCode}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Agent Tail logs console block */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider font-mono">Playit Agent Console Logs</h3>
+                        <span className="text-[10px] font-mono text-zinc-600">Tail logs (15 lines)</span>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-[11px] text-zinc-300 max-h-60 overflow-y-auto space-y-1">
+                        {!playitAgentStatus?.logs || playitAgentStatus.logs.length === 0 ? (
+                          <div className="text-zinc-600 italic">No logs generated yet. Ensure the agent is running.</div>
+                        ) : (
+                          playitAgentStatus.logs.map((line: string, idx: number) => (
+                            <div key={idx} className="whitespace-pre-wrap leading-relaxed select-text hover:bg-zinc-900 px-1 py-0.5 rounded transition-all">
+                              {line}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}

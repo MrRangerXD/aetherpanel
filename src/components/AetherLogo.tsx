@@ -36,10 +36,10 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
     return (
       <div 
         onClick={onClick} 
-        className={`inline-flex items-center cursor-pointer select-none group ${className}`}
+        className={`inline-flex items-center cursor-pointer select-none group shrink-0 ${className}`}
       >
-        <div className="relative flex items-center justify-center p-1.5 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.15)] transition-all">
-          <svg className="w-7 h-7" viewBox="0 0 60 60" fill="none">
+        <div className="relative flex items-center justify-center p-1.5 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.15)] transition-all shrink-0">
+          <svg className="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 60 60" fill="none">
             <defs>
               <linearGradient id="compactLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#fef08a" />
@@ -60,11 +60,11 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
   return (
     <div 
       onClick={onClick} 
-      className={`inline-flex items-center gap-2.5 cursor-pointer select-none group ${className}`}
+      className={`inline-flex items-center gap-2 cursor-pointer select-none group shrink-0 ${className}`}
       style={{ height: typeof height === 'number' ? `${height}px` : height }}
     >
-      <div className="relative flex items-center justify-center p-1.5 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all">
-        <svg className="w-7 h-7" viewBox="0 0 60 60" fill="none">
+      <div className="relative flex items-center justify-center p-1.5 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all shrink-0">
+        <svg className="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 60 60" fill="none">
           <defs>
             <linearGradient id="fullLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#fef08a" />
@@ -78,8 +78,8 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
           <circle cx="30" cy="30" r="4" fill="#09090b" />
         </svg>
       </div>
-      <div className="flex flex-col leading-none">
-        <span className="text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-0.5">
+      <div className="flex flex-col leading-none truncate">
+        <span className="text-base sm:text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-0.5">
           {prefix}
           {suffix && (
             <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
@@ -87,7 +87,7 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
             </span>
           )}
         </span>
-        <span className="text-[9px] font-bold tracking-widest text-zinc-400 uppercase mt-0.5 font-mono">
+        <span className="text-[8px] sm:text-[9px] font-bold tracking-widest text-zinc-400 uppercase mt-0.5 font-mono hidden min-[380px]:block">
           CLOUD INFRASTRUCTURE
         </span>
       </div>

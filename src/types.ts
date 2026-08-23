@@ -76,6 +76,44 @@ export type ServerDeploymentState =
   | 'FAILED' 
   | 'CANCELLED';
 
+export interface ServerTypeTheme {
+  id: string;
+  serverTypeId: string;
+  backgroundUrl: string;
+  iconUrl?: string;
+  accentColor: string;
+  overlayOpacity: number; // 0 to 1
+  gradientEnabled: boolean;
+  cardStyle?: 'default' | 'compact' | 'glass';
+  badgeStyle?: 'solid' | 'outline' | 'glow';
+  statusStyle?: 'default' | 'pill' | 'dot';
+  defaultResourceLabels?: {
+    cpu?: string;
+    ram?: string;
+    disk?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServerType {
+  id: string;
+  name: string;
+  slug: string;
+  category: 'Minecraft' | 'Bot Hosting' | 'Other' | string;
+  runtime: 'Java' | 'Bedrock' | 'Node.js' | 'Bun' | 'Python' | string;
+  description: string;
+  icon: string;
+  enabled: boolean;
+  sortOrder: number;
+  theme: ServerTypeTheme;
+  defaultPort?: number;
+  defaultStartupCommand?: string;
+  defaultEnvVars?: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ServerTemplate {
   id: string;
   name: string;
@@ -176,6 +214,8 @@ export interface Server {
   planId: string;
   nodeId: string;
   templateId?: string;
+  serverTypeId?: string;
+  serverType?: ServerType;
   deploymentState?: ServerDeploymentState;
   status: ServerStatus;
   primaryIp: string;
@@ -208,13 +248,23 @@ export interface Location {
 
 export interface Node {
   id: string;
+  uuid?: string;
   installationId?: string;
   name: string;
+  description?: string;
   hostname: string;
-  ip: string;
+  ip: string; // Internal or primary IP
+  publicIpv4?: string; // Optional!
+  publicIpv6?: string; // Optional!
   fqdn?: string;
-  daemonPort: number;
-  sftpPort: number;
+  bindAddress?: string; // Internal bind address (e.g. 0.0.0.0)
+  daemonListenIp?: string; // Alias for bindAddress
+  daemonPort: number; // Default 8443 (SSL) or 8080 (Internal API)
+  daemonScheme?: 'http' | 'https';
+  scheme?: 'http' | 'https'; // Alias for daemonScheme
+  daemonSslEnabled?: boolean;
+  sslEnabled?: boolean; // Alias for daemonSslEnabled
+  sftpPort: number; // Default 2022
   location: string;
   locationName: string;
   flagCode: string; // ISO country code for UI flags
@@ -229,11 +279,15 @@ export interface Node {
   diskOverallocatePercent: number;
   maxServers: number;
   allowedProducts: string[];
-  status: 'online' | 'degraded' | 'maintenance' | 'offline';
+  tags?: string[];
+  status: 'online' | 'offline' | 'degraded' | 'maintenance' | 'installing' | 'pending' | 'error' | 'uninstalling';
   isMaintenanceMode: boolean;
   serverCount: number;
   daemonToken?: string;
+  installationToken?: string;
   lastHeartbeatAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
   isSecure?: boolean;
   isLocalNode?: boolean;
   reservedRamMB?: number;
@@ -274,9 +328,12 @@ export interface Allocation {
   nodeId: string;
   ip: string;
   port: number;
+  alias?: string;
+  notes?: string;
   serverId?: string;
   isAssigned: boolean;
   isReserved?: boolean;
+  createdAt?: string;
 }
 
 export interface ServerFile {
@@ -522,6 +579,8 @@ export interface CustomThemeSettings {
   cardStyle: 'rounded-xl' | 'rounded-2xl' | 'rounded-lg' | 'rounded-none';
   glowIntensity: 'none' | 'subtle' | 'vibrant';
   allowUserCustomization: boolean;
+  backgroundBlur?: 'none' | '4px' | '8px' | '12px' | '20px' | '32px' | '40px';
+  backgroundOverlayOpacity?: number; // 0 to 100 percentage
 }
 
 export interface AntiAbuseSettings {

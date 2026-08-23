@@ -7,6 +7,7 @@ import {
 
 export const AfkRewards: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [userCredits, setUserCredits] = useState(0);
   const [todayEarnedCredits, setTodayEarnedCredits] = useState(0);
   const [settings, setSettings] = useState<AfkSettings>({
@@ -32,6 +33,7 @@ export const AfkRewards: React.FC = () => {
   // Fetch AFK Status & Wallet Data
   const fetchData = useCallback(async () => {
     try {
+      setRefreshing(true);
       setErrorMsg(null);
       const [statusRes, walletRes]: any[] = await Promise.all([
         apiRequest('/afk/status'),
@@ -52,6 +54,7 @@ export const AfkRewards: React.FC = () => {
       setErrorMsg(err.message || 'Failed to load AFK reward wallet data.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -113,6 +116,7 @@ export const AfkRewards: React.FC = () => {
   const handleStartAfk = async () => {
     try {
       setLoading(true);
+      setRefreshing(true);
       setErrorMsg(null);
       const res: any = await apiRequest('/afk/start', { method: 'POST' });
 
@@ -126,6 +130,7 @@ export const AfkRewards: React.FC = () => {
       setErrorMsg(err.message || 'Failed to start AFK session.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -145,6 +150,7 @@ export const AfkRewards: React.FC = () => {
       setErrorMsg(err.message || 'Failed to stop AFK session.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -184,7 +190,7 @@ export const AfkRewards: React.FC = () => {
           onClick={fetchData}
           className="self-start sm:self-auto px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl border border-zinc-700/50 transition-all flex items-center gap-2"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
+          {refreshing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           Refresh
         </button>
       </div>

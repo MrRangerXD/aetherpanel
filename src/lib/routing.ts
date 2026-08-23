@@ -71,6 +71,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'users') return { page: 'admin-users', params: queryObj };
     if (sub === 'servers') return { page: 'admin-servers', params: queryObj };
     if (sub === 'products' || sub === 'plans') return { page: 'admin-products', params: queryObj };
+    if (sub === 'server-types' || sub === 'server-type' || sub === 'themes') return { page: 'admin-server-types', params: queryObj };
     if (sub === 'templates' || sub === 'template') return { page: 'admin-dashboard', params: queryObj };
     if (sub === 'backups' || sub === 'backup') return { page: 'admin-backups', params: queryObj };
     if (sub === 'nodes') return { page: 'admin-nodes', params: queryObj };
@@ -147,6 +148,7 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-users': return `/admin/users${formatQuery(params)}`;
     case 'admin-servers': return `/admin/servers${formatQuery(params)}`;
     case 'admin-products': return `/admin/products${formatQuery(params)}`;
+    case 'admin-server-types': return `/admin/server-types${formatQuery(params)}`;
     case 'admin-templates': return `/admin/templates${formatQuery(params)}`;
     case 'admin-backups': return `/admin/backups${formatQuery(params)}`;
     case 'admin-nodes': return `/admin/nodes${formatQuery(params)}`;

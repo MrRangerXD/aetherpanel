@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Plus, Shield, ShieldCheck, DollarSign, Ban, CheckCircle, Edit3, Trash2, X, RefreshCw, Key, Lock, Loader2 } from 'lucide-react';
+import { Users, Search, Plus, Shield, ShieldCheck, DollarSign, Ban, CheckCircle, Edit3, Trash2, X, RefreshCw, Key, Lock, Loader2, Cpu } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { User, UserRole } from '../../types';
 
@@ -20,6 +20,10 @@ export const AdminUsers: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Allocation Modal
+  const [showAllocationModal, setShowAllocationModal] = useState(false);
+  const [allocationLimit, setAllocationLimit] = useState<number>(1);
 
   // Create User Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -134,6 +138,23 @@ export const AdminUsers: React.FC = () => {
       fetchUsers();
     } else {
       showToast('error', res.error?.message || 'Failed to adjust credits');
+    }
+  };
+
+  const handleAdjustAllocation = async () => {
+    if (!selectedUser) return;
+    setActionLoading(true);
+    const res = await apiRequest(`/admin/users/${selectedUser.id}/allocation`, {
+      method: 'PATCH',
+      body: JSON.stringify({ serverLimit: allocationLimit })
+    });
+    setActionLoading(false);
+    if (res.success) {
+      showToast('success', 'User server quota limit successfully updated');
+      setShowAllocationModal(false);
+      fetchUsers();
+    } else {
+      showToast('error', res.error?.message || 'Failed to adjust server quota limit');
     }
   };
 
@@ -258,6 +279,7 @@ export const AdminUsers: React.FC = () => {
                 <th className="px-6 py-4">Provider</th>
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Balance</th>
+                <th className="px-6 py-4">Allocation Quota</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -298,6 +320,25 @@ export const AdminUsers: React.FC = () => {
 
                   <td className="px-6 py-4 font-mono font-bold text-emerald-400">
                     ${(u.credits ?? 0).toFixed(2)}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {u.serverLimit !== undefined ? u.serverLimit : 1} max
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setAllocationLimit(u.serverLimit !== undefined ? u.serverLimit : 1);
+                          setShowAllocationModal(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-zinc-850 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                        title="Edit Server Allocation"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
 
                   <td className="px-6 py-4">
@@ -420,6 +461,59 @@ export const AdminUsers: React.FC = () => {
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-semibold rounded-xl"
               >
                 {actionLoading ? 'Applying...' : 'Apply Credits'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Allocation Limit Modal */}
+      {showAllocationModal && selectedUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-2xl">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-amber-400" /> Server Allocation Quota
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">User: <strong className="text-white">{selectedUser.email}</strong></p>
+              </div>
+              <button onClick={() => setShowAllocationModal(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs text-zinc-300 mb-1">Max Server Allocation Count</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={allocationLimit}
+                onChange={(e) => setAllocationLimit(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[10px] text-zinc-500 mt-1.5 leading-relaxed">
+                Determines the maximum number of server instances this user is permitted to deploy simultaneously. Set to 0 to suspend deployments.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAllocationModal(false)}
+                className="px-4 py-2 bg-zinc-900 text-xs text-zinc-300 rounded-xl hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleAdjustAllocation}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-xs text-zinc-950 font-bold rounded-xl flex items-center gap-1.5"
+              >
+                {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{actionLoading ? 'Saving...' : 'Save Allocation'}</span>
               </button>
             </div>
           </div>
