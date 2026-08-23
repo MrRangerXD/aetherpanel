@@ -45,41 +45,93 @@ SHOW_MENU=true
 MODE=""
 INSTALL_TOKEN=""
 PANEL_URL=""
+ADMIN_EMAIL=""
+ADMIN_PASS=""
 AUTO_CONFIRM=false
 TEMP_DIR=""
+INSTALLED_COMMIT=""
+SERVER_IP=""
+NODE_ID=""
+NODE_NAME=""
+DAEMON_TOKEN=""
+DETECTED_IP=""
+OS_NAME=""
+OS_VER=""
+DISTRO=""
+ARCH=""
+RAM_TOTAL_MB=""
+RAM_FREE_MB=""
+DISK_FREE_GB=""
+NODE_MAJOR=""
+USER_PORT=""
+INPUT_ADMIN_EMAIL=""
+INPUT_ADMIN_PASS=""
+INPUT_CONFIRM_PASS=""
+EXIST_CHOICE=""
+CONFIRM=""
+UNINSTALL_CHOICE=""
+DESTRUCTIVE_CONFIRM=""
+CHOICE=""
+SESSION_SECRET=""
 
 # ==============================================================================
-# 2. LOGGING & TRAP CLEANUP
+# 2. LOGGING, CLEANUP & USER INPUT HELPERS
 # ==============================================================================
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 touch "$LOG_FILE" 2>/dev/null || true
 
 log_msg() {
-  local msg="$1"
+  local msg="${1:-}"
   local timestamp
-  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown-time")
   # Filter any potential secrets from log files
   local sanitized_msg
-  sanitized_msg=$(echo "$msg" | sed -E 's/(token|secret|password|key)=[A-Za-z0-9_-]+/\1=*******/gI' || echo "$msg")
-  echo "[$timestamp] $sanitized_msg" >> "$LOG_FILE" 2>/dev/null || true
+  sanitized_msg=$(echo "$msg" | sed -E 's/(token|secret|password|key)=[A-Za-z0-9_-]+/\1=*******/gI' 2>/dev/null || echo "$msg")
+  if [ -d "$(dirname "$LOG_FILE" 2>/dev/null || echo ".")" ]; then
+    echo "[$timestamp] $sanitized_msg" >> "$LOG_FILE" 2>/dev/null || true
+  fi
 }
 
 cleanup() {
   local exit_code=$?
-  if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+  if [ -n "${TEMP_DIR:-}" ] && [ -d "${TEMP_DIR:-}" ]; then
     rm -rf "$TEMP_DIR" 2>/dev/null || true
   fi
-  if [ $exit_code -ne 0 ]; then
+  if [ "$exit_code" -ne 0 ]; then
     log_msg "Installer exited with non-zero error code: $exit_code"
   fi
 }
 trap cleanup EXIT
 
+prompt_input() {
+  local prompt_text="${1:-}"
+  local is_secret="${2:-false}"
+  local result=""
+
+  if [ -t 0 ]; then
+    if [ "$is_secret" = true ]; then
+      read -r -s -p "$prompt_text" result || result=""
+      echo "" >&2
+    else
+      read -r -p "$prompt_text" result || result=""
+    fi
+  elif (exec < /dev/tty) 2>/dev/null; then
+    if [ "$is_secret" = true ]; then
+      read -r -s -p "$prompt_text" result < /dev/tty 2>/dev/null || result=""
+      echo "" >&2
+    else
+      read -r -p "$prompt_text" result < /dev/tty 2>/dev/null || result=""
+    fi
+  fi
+
+  echo "$result"
+}
+
 # ==============================================================================
 # 3. ASCII BRANDING & HEADER
 # ==============================================================================
 print_banner() {
-  clear
+  clear 2>/dev/null || true
   echo -e "${PURPLE}${BOLD}"
   echo '░█████╗░██████╗░░█████╗░███╗░░██╗███████╗██╗░░░░░'
   echo '██╔══██╗██╔══██╗██╔══██╗████╗░██║██╔════╝██║░░░░░'
@@ -90,7 +142,7 @@ print_banner() {
   echo -e "${NC}"
   echo -e "${CYAN}${BOLD}                         AETHERPANEL${NC}"
   echo -e "${WHITE}                    Premium Hosting Platform${NC}\n"
-  echo -e "${BLUE}                    DEFAULT PORT: ${BOLD}${PANEL_PORT}${NC}"
+  echo -e "${BLUE}                    DEFAULT PORT: ${BOLD}${PANEL_PORT:-3000}${NC}"
   echo -e "${PURPLE}                    Authoritative Source: ${BOLD}${REPO_URL}${NC}\n"
   echo -e "${CYAN}--------------------------------------------------------------------------------${NC}\n"
 }
@@ -99,7 +151,8 @@ print_banner() {
 # 4. PRIVILEGE & ENVIRONMENT AUDIT
 # ==============================================================================
 check_root() {
-  if [ "$EUID" -ne 0 ]; then
+  local current_euid="${EUID:-$(id -u 2>/dev/null || echo 1)}"
+  if [ "$current_euid" -ne 0 ]; then
     echo -e "${RED}[ERROR] AetherPanel installation requires root privileges.${NC}"
     echo -e "${YELLOW}Please re-run this script as root: ${BOLD}sudo bash install.sh${NC}\n"
     log_msg "ERROR: Execution attempted without root privileges"
@@ -108,18 +161,21 @@ check_root() {
 }
 
 detect_os() {
+  local os_release_name=""
+  local os_release_ver=""
+  local os_release_id=""
   if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
     . /etc/os-release
-    OS_NAME=${NAME:-"Linux"}
-    OS_VER=${VERSION_ID:-""}
-    DISTRO=${ID:-"unknown"}
-  else
-    OS_NAME=$(uname -s)
-    OS_VER=$(uname -r)
-    DISTRO="unknown"
+    os_release_name="${NAME:-}"
+    os_release_ver="${VERSION_ID:-}"
+    os_release_id="${ID:-}"
   fi
+  OS_NAME="${os_release_name:-$(uname -s 2>/dev/null || echo "Linux")}"
+  OS_VER="${os_release_ver:-$(uname -r 2>/dev/null || echo "")}"
+  DISTRO="${os_release_id:-unknown}"
 
-  ARCH=$(uname -m)
+  ARCH=$(uname -m 2>/dev/null || echo "unknown")
   echo -e "${GREEN}[✓] Detected OS:${NC} ${BOLD}${OS_NAME} ${OS_VER} (${ARCH})${NC}"
   log_msg "Detected OS: ${OS_NAME} ${OS_VER} (${ARCH}) - Distro: ${DISTRO}"
 
@@ -138,20 +194,23 @@ check_system_resources() {
   
   # RAM Check
   if command -v free &> /dev/null; then
-    RAM_TOTAL_MB=$(free -m | awk '/^Mem:/{print $2}')
-    RAM_FREE_MB=$(free -m | awk '/^Mem:/{print $4+$6}')
+    RAM_TOTAL_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}' || echo "0")
+    RAM_FREE_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $4+$6}' || echo "0")
+    RAM_TOTAL_MB="${RAM_TOTAL_MB:-0}"
+    RAM_FREE_MB="${RAM_FREE_MB:-0}"
     echo -e "${CYAN}    Memory:${NC} Total: ${RAM_TOTAL_MB}MB | Free/Available: ${RAM_FREE_MB}MB"
     log_msg "System RAM: Total ${RAM_TOTAL_MB}MB, Free ${RAM_FREE_MB}MB"
-    if [ "$RAM_TOTAL_MB" -lt 512 ]; then
+    if [ "$RAM_TOTAL_MB" -gt 0 ] 2>/dev/null && [ "$RAM_TOTAL_MB" -lt 512 ] 2>/dev/null; then
       echo -e "${YELLOW}[!] Warning: System has less than 512MB RAM. Performance may be degraded.${NC}"
     fi
   fi
 
   # Disk Space Check
-  DISK_FREE_GB=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//' 2>/dev/null || echo "10")
+  DISK_FREE_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//' 2>/dev/null || echo "10")
+  DISK_FREE_GB="${DISK_FREE_GB:-10}"
   echo -e "${CYAN}    Disk Storage:${NC} ${DISK_FREE_GB}GB Available on Root Partition"
   log_msg "System Disk: ${DISK_FREE_GB}GB available"
-  if [ "$DISK_FREE_GB" -lt 3 ]; then
+  if [ -n "$DISK_FREE_GB" ] && [ "$DISK_FREE_GB" -lt 3 ] 2>/dev/null; then
     echo -e "${RED}[ERROR] Insufficient disk space. Minimum 3GB required, found ${DISK_FREE_GB}GB.${NC}"
     log_msg "ERROR: Insufficient disk space (${DISK_FREE_GB}GB < 3GB)"
     exit 1
@@ -163,7 +222,10 @@ check_system_resources() {
 # 5. DEPENDENCY MANAGEMENT & PACKAGE INSTALLATION
 # ==============================================================================
 install_package() {
-  local pkg="$1"
+  local pkg="${1:-}"
+  if [ -z "$pkg" ]; then
+    return 0
+  fi
   log_msg "Installing missing package: $pkg"
   if command -v apt-get &> /dev/null; then
     DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >> "$LOG_FILE" 2>&1 || true
@@ -202,12 +264,15 @@ verify_and_install_dependencies() {
   # 4. Node.js (Node 20.x or higher)
   local need_node=false
   if command -v node &> /dev/null; then
-    NODE_MAJOR=$(node -v | cut -d'.' -f1 | sed 's/v//')
-    if [ "$NODE_MAJOR" -lt 18 ]; then
-      echo -e "${YELLOW}    Existing Node.js version $(node -v) is too old. Upgrading to Node 20.x...${NC}"
+    local node_ver
+    node_ver=$(node -v 2>/dev/null || echo "v0.0.0")
+    NODE_MAJOR=$(echo "$node_ver" | cut -d'.' -f1 | sed 's/v//' 2>/dev/null || echo "0")
+    NODE_MAJOR="${NODE_MAJOR:-0}"
+    if [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
+      echo -e "${YELLOW}    Existing Node.js version $node_ver is too old. Upgrading to Node 20.x...${NC}"
       need_node=true
     else
-      echo -e "${GREEN}[✓] Node.js runtime verified: $(node -v)${NC}"
+      echo -e "${GREEN}[✓] Node.js runtime verified: $node_ver${NC}"
     fi
   else
     need_node=true
@@ -235,23 +300,23 @@ verify_and_install_dependencies() {
 
 configure_firewall() {
   echo -e "${CYAN}    Auditing and configuring system firewall rules...${NC}"
-  if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
-    ufw allow "${PANEL_PORT}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
-    ufw allow "${DAEMON_PORT}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
-    ufw allow "${SFTP_PORT}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
+  if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "active"; then
+    ufw allow "${PANEL_PORT:-3000}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
+    ufw allow "${DAEMON_PORT:-8080}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
+    ufw allow "${SFTP_PORT:-2022}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
     ufw allow 25565:25600/tcp comment 'AetherPanel Allocations TCP' >> "$LOG_FILE" 2>&1 || true
     ufw allow 25565:25600/udp comment 'AetherPanel Allocations UDP' >> "$LOG_FILE" 2>&1 || true
-    echo -e "${GREEN}[✓] UFW firewall ports opened for AetherPanel (${PANEL_PORT}, ${DAEMON_PORT}, ${SFTP_PORT}, 25565-25600).${NC}"
+    echo -e "${GREEN}[✓] UFW firewall ports opened for AetherPanel (${PANEL_PORT:-3000}, ${DAEMON_PORT:-8080}, ${SFTP_PORT:-2022}, 25565-25600).${NC}"
   elif command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld 2>/dev/null; then
-    firewall-cmd --permanent --add-port="${PANEL_PORT}/tcp" >> "$LOG_FILE" 2>&1 || true
-    firewall-cmd --permanent --add-port="${DAEMON_PORT}/tcp" >> "$LOG_FILE" 2>&1 || true
-    firewall-cmd --permanent --add-port="${SFTP_PORT}/tcp" >> "$LOG_FILE" 2>&1 || true
+    firewall-cmd --permanent --add-port="${PANEL_PORT:-3000}/tcp" >> "$LOG_FILE" 2>&1 || true
+    firewall-cmd --permanent --add-port="${DAEMON_PORT:-8080}/tcp" >> "$LOG_FILE" 2>&1 || true
+    firewall-cmd --permanent --add-port="${SFTP_PORT:-2022}/tcp" >> "$LOG_FILE" 2>&1 || true
     firewall-cmd --permanent --add-port=25565-25600/tcp >> "$LOG_FILE" 2>&1 || true
     firewall-cmd --permanent --add-port=25565-25600/udp >> "$LOG_FILE" 2>&1 || true
     firewall-cmd --reload >> "$LOG_FILE" 2>&1 || true
     echo -e "${GREEN}[✓] Firewalld rules configured successfully.${NC}"
   else
-    echo -e "${BLUE}[INFO] No active UFW or Firewalld service found. Ports ${PANEL_PORT}, ${DAEMON_PORT}, ${SFTP_PORT} must be accessible.${NC}"
+    echo -e "${BLUE}[INFO] No active UFW or Firewalld service found. Ports ${PANEL_PORT:-3000}, ${DAEMON_PORT:-8080}, ${SFTP_PORT:-2022} must be accessible.${NC}"
   fi
 }
 
@@ -286,7 +351,8 @@ verify_github_connectivity() {
 
   # 2. Official GitHub Access Check
   local gh_status
-  gh_status=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "https://github.com/mrrangerxd/aetherpanel" || echo "000")
+  gh_status=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "https://github.com/mrrangerxd/aetherpanel" 2>/dev/null || echo "000")
+  gh_status="${gh_status:-000}"
 
   if [ "$gh_status" != "200" ] && [ "$gh_status" != "301" ] && [ "$gh_status" != "302" ]; then
     echo -e "${RED}[ERROR] Unable to access the official AetherPanel repository (${REPO_URL}).${NC}"
@@ -305,12 +371,12 @@ verify_github_connectivity() {
 }
 
 download_panel_source() {
-  local target_dir="$1"
-  local branch="$2"
+  local target_dir="${1:-$INSTALL_DIR}"
+  local branch="${2:-$REPO_BRANCH}"
   log_msg "Downloading AetherPanel source into $target_dir (branch: $branch)"
 
   mkdir -p "$target_dir"
-  TEMP_DIR=$(mktemp -d /tmp/aetherpanel_download_XXXXXX)
+  TEMP_DIR=$(mktemp -d /tmp/aetherpanel_download_XXXXXX 2>/dev/null || mktemp -d)
 
   local download_success=false
 
@@ -362,7 +428,7 @@ download_panel_source() {
 
   # Copy to target directory while protecting existing database and .env if present
   mkdir -p "$target_dir"
-  cp -r "$TEMP_DIR"/. "$target_dir"/ 2>/dev/null || cp -r "$TEMP_DIR"/* "$target_dir"/
+  cp -r "$TEMP_DIR"/. "$target_dir"/ 2>/dev/null || cp -r "$TEMP_DIR"/* "$target_dir"/ 2>/dev/null || true
 
   # Capture installed commit hash or release tag
   INSTALLED_COMMIT="unknown"
@@ -373,22 +439,30 @@ download_panel_source() {
   rm -rf "$TEMP_DIR"
   TEMP_DIR=""
 
-  log_msg "AetherPanel source successfully staged at $target_dir (Commit: $INSTALLED_COMMIT)"
+  log_msg "AetherPanel source successfully staged at $target_dir (Commit: ${INSTALLED_COMMIT:-unknown})"
   return 0
 }
 
 install_playit_binary() {
-  local target_bin="$1"
+  local target_bin="${1:-}"
+  if [ -z "$target_bin" ]; then
+    return 0
+  fi
   echo -e "${YELLOW}    Verifying Playit.GG background agent daemon binary...${NC}"
   
   local need_download=true
   if [ -f "$target_bin" ]; then
-    # Run validation test (ignoring exit status 2 because of missing arguments)
-    if file "$target_bin" | grep -q "corrupted" || ! "$target_bin" --help &>/dev/null && [ $? -ne 2 ]; then
-      echo -e "${YELLOW}    [!] Existing playit binary is corrupted or invalid. Overwriting...${NC}"
-    else
+    local is_corrupt=false
+    if command -v file &>/dev/null; then
+      if file "$target_bin" 2>/dev/null | grep -q "corrupted"; then
+        is_corrupt=true
+      fi
+    fi
+    if [ "$is_corrupt" = false ] && [ -x "$target_bin" ]; then
       echo -e "${GREEN}[✓] Playit.GG binary verified successfully.${NC}"
       need_download=false
+    elif [ "$is_corrupt" = true ]; then
+      echo -e "${YELLOW}    [!] Existing playit binary is corrupted or invalid. Overwriting...${NC}"
     fi
   fi
 
@@ -396,7 +470,7 @@ install_playit_binary() {
     echo -e "${CYAN}    Downloading uncorrupted official Playit.GG binary...${NC}"
     mkdir -p "$(dirname "$target_bin")"
     if curl -L -o "$target_bin" "https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64" >> "$LOG_FILE" 2>&1; then
-      chmod +x "$target_bin"
+      chmod +x "$target_bin" 2>/dev/null || true
       echo -e "${GREEN}[✓] Playit.GG binary downloaded and verified successfully.${NC}"
     else
       echo -e "${RED}[!] Warning: Failed to download Playit.GG binary. You can manually download it to $target_bin.${NC}"
@@ -417,8 +491,9 @@ install_panel() {
     echo -e "  ${CYAN}1)${NC} Update existing installation (Pull latest code from GitHub)"
     echo -e "  ${CYAN}2)${NC} Reinstall application (Preserve database and user files)"
     echo -e "  ${CYAN}3)${NC} Cancel installation and return\n"
-    read -p "Select option [1-3]: " EXIST_CHOICE
-    case "$EXIST_CHOICE" in
+    EXIST_CHOICE=$(prompt_input "Select option [1-3]: ")
+    EXIST_CHOICE="${EXIST_CHOICE:-1}"
+    case "${EXIST_CHOICE:-3}" in
       1)
         update_panel
         return
@@ -437,26 +512,20 @@ install_panel() {
   print_banner
   echo -e "${PURPLE}${BOLD}=== AETHERPANEL CONTROL PLANE INSTALLATION ===${NC}\n"
   
-  if [ -z "$PANEL_PORT" ]; then
-    read -p "Enter preferred Panel Web Port [Default: 3000]: " USER_PORT
-    if [ -n "$USER_PORT" ]; then
-      PANEL_PORT="$USER_PORT"
-    else
-      PANEL_PORT=3000
-    fi
+  if [ -z "${PANEL_PORT:-}" ]; then
+    USER_PORT=$(prompt_input "Enter preferred Panel Web Port [Default: 3000]: ")
+    PANEL_PORT="${USER_PORT:-3000}"
   fi
 
-  if [ -z "$ADMIN_EMAIL" ]; then
-    read -p "Enter Admin Email Address [Default: admin@aetherpanel.in]: " INPUT_ADMIN_EMAIL
+  if [ -z "${ADMIN_EMAIL:-}" ]; then
+    INPUT_ADMIN_EMAIL=$(prompt_input "Enter Admin Email Address [Default: admin@aetherpanel.in]: ")
     ADMIN_EMAIL="${INPUT_ADMIN_EMAIL:-admin@aetherpanel.in}"
   fi
 
-  if [ -z "$ADMIN_PASS" ]; then
-    read -s -p "Enter Admin Password [Default: adminopp]: " INPUT_ADMIN_PASS
-    echo ""
+  if [ -z "${ADMIN_PASS:-}" ]; then
+    INPUT_ADMIN_PASS=$(prompt_input "Enter Admin Password [Default: adminopp]: " true)
     if [ -n "$INPUT_ADMIN_PASS" ]; then
-      read -s -p "Confirm Admin Password: " INPUT_CONFIRM_PASS
-      echo ""
+      INPUT_CONFIRM_PASS=$(prompt_input "Confirm Admin Password: " true)
       if [ "$INPUT_ADMIN_PASS" != "$INPUT_CONFIRM_PASS" ]; then
         echo -e "${RED}[ERROR] Passwords do not match. Aborting installation.${NC}"
         return 1
@@ -508,31 +577,31 @@ install_panel() {
       cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
     else
       cat <<EOF > "$INSTALL_DIR/.env"
-PORT=${PANEL_PORT}
+PORT=${PANEL_PORT:-3000}
 NODE_ENV=production
 AETHER_STORAGE_PATH=${INSTALL_DIR}/data
 EOF
     fi
 
     # Save initial admin credentials if specified
-    if [ -n "$ADMIN_EMAIL" ]; then
+    if [ -n "${ADMIN_EMAIL:-}" ]; then
       echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
     fi
-    if [ -n "$ADMIN_PASS" ]; then
+    if [ -n "${ADMIN_PASS:-}" ]; then
       echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
     fi
 
     # Generate secure random secret if crypto/openssl is available
     if command -v openssl &> /dev/null; then
-      SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "aether_secret_$(date +%s)")
+      SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "aether_secret_$(date +%s 2>/dev/null || echo "random")")
       echo "JWT_SECRET=${SESSION_SECRET}" >> "$INSTALL_DIR/.env"
     fi
   else
     # Maintain or append admin credentials if missing
-    if [ -n "$ADMIN_EMAIL" ] && ! grep -q "AETHER_ADMIN_EMAIL" "$INSTALL_DIR/.env"; then
+    if [ -n "${ADMIN_EMAIL:-}" ] && ! grep -q "AETHER_ADMIN_EMAIL" "$INSTALL_DIR/.env" 2>/dev/null; then
       echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
     fi
-    if [ -n "$ADMIN_PASS" ] && ! grep -q "AETHER_ADMIN_PASSWORD" "$INSTALL_DIR/.env"; then
+    if [ -n "${ADMIN_PASS:-}" ] && ! grep -q "AETHER_ADMIN_PASSWORD" "$INSTALL_DIR/.env" 2>/dev/null; then
       echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
     fi
   fi
@@ -557,14 +626,14 @@ EOF
     "siteName": "AetherPanel",
     "theme": "dark",
     "allowRegistrations": true,
-    "panelPort": ${PANEL_PORT}
+    "panelPort": ${PANEL_PORT:-3000}
   },
   "nodeInstallTokens": [],
   "serverDiscordLinks": [],
   "discordLinks": {}
 }
 EOF
-    chmod 644 "$INSTALL_DIR/data/db.json"
+    chmod 644 "$INSTALL_DIR/data/db.json" 2>/dev/null || true
   fi
   echo -e "${GREEN}[✓] Step 6 complete: Database initialized safely without demo data.${NC}\n"
 
@@ -573,7 +642,7 @@ EOF
   cd "$INSTALL_DIR"
   log_msg "Installing npm packages in $INSTALL_DIR"
   echo -e "${CYAN}    Installing npm dependencies...${NC}"
-  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1
+  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1 || true
 
   echo -e "${CYAN}    Compiling frontend and backend bundles (npm run build)...${NC}"
   log_msg "Building production bundle via npm run build"
@@ -597,7 +666,7 @@ ExecStart=/usr/bin/env npm start
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=PORT=${PANEL_PORT}
+Environment=PORT=${PANEL_PORT:-3000}
 StandardOutput=append:/var/log/aetherpanel/panel.log
 StandardError=append:/var/log/aetherpanel/panel.log
 
@@ -624,7 +693,7 @@ EOF
     echo -e "${CYAN}    Waiting for service health response (Attempt ${attempts}/${max_attempts})...${NC}"
 
     local res
-    res=$(curl -s -m 4 "http://127.0.0.1:${PANEL_PORT}/api/health" || echo "")
+    res=$(curl -s -m 4 "http://127.0.0.1:${PANEL_PORT:-3000}/api/health" 2>/dev/null || echo "")
     if [[ "$res" == *"\"status\":\"ok\""* ]] || [[ "$res" == *"status"* ]]; then
       health_passed=true
       break
@@ -641,7 +710,8 @@ EOF
   echo -e "${GREEN}[✓] Step 8 complete: Health check verified (HTTP 200 OK).${NC}\n"
 
   # Final Verification Screen
-  SERVER_IP=$(curl -s -m 4 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}' || echo "localhost")
+  SERVER_IP=$(curl -s -m 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+  SERVER_IP="${SERVER_IP:-localhost}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
   echo -e "${GREEN}${BOLD}   🎉 AetherPanel Control Plane Installed Successfully from GitHub!${NC}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
@@ -649,7 +719,7 @@ EOF
   echo -e "Source:          ${BOLD}Official GitHub Repository${NC}"
   echo -e "Repository:      ${BOLD}${REPO_URL}${NC}"
   echo -e "Install Dir:     ${BOLD}${INSTALL_DIR}${NC}"
-  echo -e "Web Panel URL:   ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT}${NC}"
+  echo -e "Web Panel URL:   ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT:-3000}${NC}"
   echo -e "Admin Account:   ${BOLD}${ADMIN_EMAIL:-admin@aetherpanel.in}${NC}"
   echo -e "Admin Password:  ${BOLD}${ADMIN_PASS:-adminopp}${NC}"
   echo -e "Service Status:  ${GREEN}● active (running)${NC}"
@@ -676,19 +746,30 @@ install_node_daemon() {
 
   configure_firewall
 
-  if [ -z "$PANEL_URL" ]; then
-    echo -e "${CYAN}Please enter your central AetherPanel URL (e.g. http://104.22.45.10:${PANEL_PORT} or https://panel.yourdomain.com):${NC}"
-    read -r PANEL_URL
+  if [ -z "${PANEL_URL:-}" ]; then
+    echo -e "${CYAN}Please enter your central AetherPanel URL (e.g. http://104.22.45.10:${PANEL_PORT:-3000} or https://panel.yourdomain.com):${NC}"
+    PANEL_URL=$(prompt_input "Panel URL: ")
   fi
 
-  if [ -z "$INSTALL_TOKEN" ]; then
+  if [ -z "${PANEL_URL:-}" ]; then
+    echo -e "${RED}[ERROR] Panel URL is required for Node installation.${NC}"
+    return 1
+  fi
+
+  if [ -z "${INSTALL_TOKEN:-}" ]; then
     echo -e "${CYAN}Please enter your Node One-Time Installation Token:${NC}"
-    read -r INSTALL_TOKEN
+    INSTALL_TOKEN=$(prompt_input "Installation Token: ")
+  fi
+
+  if [ -z "${INSTALL_TOKEN:-}" ]; then
+    echo -e "${RED}[ERROR] Node Installation Token is required.${NC}"
+    return 1
   fi
 
   # Strip trailing slashes
   PANEL_URL=$(echo "$PANEL_URL" | sed 's:/*$::')
-  DETECTED_IP=$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}' || echo "127.0.0.1")
+  DETECTED_IP=$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+  DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
 
   echo -e "\n${YELLOW}[ENROLLING] Contacting Control Plane (${PANEL_URL}/api/v1/node/enroll)...${NC}"
   log_msg "Enrolling node with Control Plane at ${PANEL_URL}"
@@ -698,19 +779,20 @@ install_node_daemon() {
     -d "{
       \"token\": \"${INSTALL_TOKEN}\",
       \"ip\": \"${DETECTED_IP}\",
-      \"daemonPort\": ${DAEMON_PORT},
-      \"sftpPort\": ${SFTP_PORT}
-    }" || echo '{"success":false,"error":{"message":"Network connection failed"}}')
+      \"daemonPort\": ${DAEMON_PORT:-8080},
+      \"sftpPort\": ${SFTP_PORT:-2022}
+    }" 2>/dev/null || echo '{"success":false,"error":{"message":"Network connection failed"}}')
+  ENROLL_RESPONSE="${ENROLL_RESPONSE:-'{\"success\":false,\"error\":{\"message\":\"Empty response\"}}'}"
 
   if [[ "$ENROLL_RESPONSE" == *"\"success\":true"* ]]; then
-    DAEMON_TOKEN=$(echo "$ENROLL_RESPONSE" | grep -o '"daemonToken":"[^"]*' | grep -o '[^"]*$' || echo "")
-    NODE_ID=$(echo "$ENROLL_RESPONSE" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' || echo "")
-    NODE_NAME=$(echo "$ENROLL_RESPONSE" | grep -o '"nodeName":"[^"]*' | grep -o '[^"]*$' || echo "")
+    DAEMON_TOKEN=$(echo "$ENROLL_RESPONSE" | grep -o '"daemonToken":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+    NODE_ID=$(echo "$ENROLL_RESPONSE" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+    NODE_NAME=$(echo "$ENROLL_RESPONSE" | grep -o '"nodeName":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
     
     echo -e "${GREEN}[✓ SUCCESS] Node successfully enrolled with Control Plane!${NC}"
-    echo -e "    Node ID:   ${BOLD}${NODE_ID}${NC}"
-    echo -e "    Node Name: ${BOLD}${NODE_NAME}${NC}"
-    log_msg "Node successfully enrolled: ID ${NODE_ID} (${NODE_NAME})"
+    echo -e "    Node ID:   ${BOLD}${NODE_ID:-unknown}${NC}"
+    echo -e "    Node Name: ${BOLD}${NODE_NAME:-unknown}${NC}"
+    log_msg "Node successfully enrolled: ID ${NODE_ID:-unknown} (${NODE_NAME:-unknown})"
   else
     echo -e "${RED}[ERROR] Node pairing failed. Server response:${NC}"
     echo -e "${WHITE}$ENROLL_RESPONSE${NC}\n"
@@ -726,15 +808,15 @@ install_node_daemon() {
   cat <<EOF > /etc/aethernode/config.json
 {
   "panelUrl": "${PANEL_URL}",
-  "nodeId": "${NODE_ID}",
-  "daemonToken": "${DAEMON_TOKEN}",
-  "daemonPort": ${DAEMON_PORT},
-  "sftpPort": ${SFTP_PORT},
+  "nodeId": "${NODE_ID:-unknown}",
+  "daemonToken": "${DAEMON_TOKEN:-unknown}",
+  "daemonPort": ${DAEMON_PORT:-8080},
+  "sftpPort": ${SFTP_PORT:-2022},
   "storagePath": "/var/lib/aethernode/volumes",
   "logLevel": "info"
 }
 EOF
-  chmod 600 /etc/aethernode/config.json
+  chmod 600 /etc/aethernode/config.json 2>/dev/null || true
 
   echo -e "\n${YELLOW}[AGENT] Installing AetherNode Daemon Executable (/etc/aethernode/agent.js)...${NC}"
   cat <<'EOF' > /etc/aethernode/agent.js
@@ -844,11 +926,11 @@ EOF
   echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
   echo -e "${GREEN}${BOLD}   🎉 AetherNode Daemon v3.5 Installed & Enrolled Successfully!${NC}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
-  echo -e "Node ID:        ${BOLD}${NODE_ID}${NC}"
-  echo -e "Node Name:      ${BOLD}${NODE_NAME}${NC}"
+  echo -e "Node ID:        ${BOLD}${NODE_ID:-unknown}${NC}"
+  echo -e "Node Name:      ${BOLD}${NODE_NAME:-unknown}${NC}"
   echo -e "Control URL:    ${BOLD}${PANEL_URL}${NC}"
-  echo -e "Daemon Port:    ${BOLD}${DAEMON_PORT}/TCP (REST API)${NC}"
-  echo -e "SFTP Transport: ${BOLD}${SFTP_PORT}/TCP (Secure File Transport)${NC}"
+  echo -e "Daemon Port:    ${BOLD}${DAEMON_PORT:-8080}/TCP (REST API)${NC}"
+  echo -e "SFTP Transport: ${BOLD}${SFTP_PORT:-2022}/TCP (Secure File Transport)${NC}"
   echo -e "Agent Log:      ${BOLD}/var/log/aethernode/agent.log${NC}"
   echo -e "Status:         ${GREEN}● ONLINE & SYNCING TELEMETRY${NC}\n"
 }
@@ -882,7 +964,7 @@ update_panel() {
   echo -e "\n${YELLOW}[2/5] Creating safe configuration and database snapshot...${NC}"
   mkdir -p /var/backups
   local ts
-  ts=$(date +%Y%m%d_%H%M%S)
+  ts=$(date +%Y%m%d_%H%M%S 2>/dev/null || echo "backup")
   if [ -d "$target/data" ]; then
     cp -r "$target/data" "/var/backups/aetherpanel_data_backup_${ts}" 2>/dev/null || true
   fi
@@ -903,7 +985,7 @@ update_panel() {
   fi
 
   echo -e "\n${YELLOW}[4/5] Updating dependencies and compiling application bundle...${NC}"
-  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1
+  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1 || true
   npm run build >> "$LOG_FILE" 2>&1 || true
 
   echo -e "\n${YELLOW}[5/5] Restarting services and verifying health...${NC}"
@@ -932,15 +1014,21 @@ reinstall_panel() {
   echo -e "${YELLOW}WARNING:${NC} Reinstalling the panel will replace application files with fresh code from the official GitHub repository."
   echo -e "${GREEN}Your database, servers, and configuration data will be preserved.${NC}\n"
 
-  read -p "Are you sure you want to proceed with reinstallation? [y/N]: " CONFIRM
-  if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+  CONFIRM=""
+  if [ "${AUTO_CONFIRM:-false}" = true ]; then
+    CONFIRM="y"
+  else
+    CONFIRM=$(prompt_input "Are you sure you want to proceed with reinstallation? [y/N]: ")
+  fi
+
+  if [[ "${CONFIRM:-}" != "y" && "${CONFIRM:-}" != "Y" ]]; then
     echo -e "${BLUE}Reinstallation cancelled.${NC}\n"
     return
   fi
 
   echo -e "\n${YELLOW}[1/4] Preserving database and configuration data...${NC}"
   local ts
-  ts=$(date +%Y%m%d_%H%M%S)
+  ts=$(date +%Y%m%d_%H%M%S 2>/dev/null || echo "backup")
   mkdir -p /var/backups
   local backup_data="/var/backups/aetherpanel_data_reinstall_${ts}"
   local backup_env="/var/backups/aetherpanel_env_reinstall_${ts}"
@@ -968,7 +1056,7 @@ reinstall_panel() {
 
   echo -e "\n${YELLOW}[4/4] Building fresh bundle and restarting service...${NC}"
   cd "$INSTALL_DIR"
-  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1
+  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1 || true
   npm run build >> "$LOG_FILE" 2>&1 || true
 
   if command -v systemctl &> /dev/null; then
@@ -995,9 +1083,10 @@ uninstall_system() {
   echo -e "  ${RED}3)${NC} Complete Destructive Removal (Requires typing 'UNINSTALL AETHERPANEL')"
   echo -e "  ${GREEN}0)${NC} Cancel & Return to Main Menu\n"
 
-  read -p "Select option [0-3]: " UNINSTALL_CHOICE
+  UNINSTALL_CHOICE=$(prompt_input "Select option [0-3]: ")
+  UNINSTALL_CHOICE="${UNINSTALL_CHOICE:-0}"
 
-  case $UNINSTALL_CHOICE in
+  case "${UNINSTALL_CHOICE:-0}" in
     1)
       echo -e "\n${RED}[UNINSTALL] Stopping and removing AetherNode Agent...${NC}"
       if command -v systemctl &> /dev/null; then
@@ -1024,8 +1113,8 @@ uninstall_system() {
     3)
       echo -e "\n${RED}${BOLD}DANGER: DESTRUCTIVE UNINSTALLATION CONFIRMATION${NC}"
       echo -e "This will completely delete AetherPanel, database records, nodes, and backups."
-      read -p "Type exactly 'UNINSTALL AETHERPANEL' to confirm: " DESTRUCTIVE_CONFIRM
-      if [ "$DESTRUCTIVE_CONFIRM" = "UNINSTALL AETHERPANEL" ]; then
+      DESTRUCTIVE_CONFIRM=$(prompt_input "Type exactly 'UNINSTALL AETHERPANEL' to confirm: ")
+      if [ "${DESTRUCTIVE_CONFIRM:-}" = "UNINSTALL AETHERPANEL" ]; then
         if command -v systemctl &> /dev/null; then
           systemctl stop aetherpanel aethernode >> "$LOG_FILE" 2>&1 || true
           systemctl disable aetherpanel aethernode >> "$LOG_FILE" 2>&1 || true
@@ -1067,7 +1156,7 @@ show_tutorial() {
   echo -e "   • ${BOLD}Port 2022/TCP${NC} - AetherNode SFTP Transport File Manager"
   echo -e "   • ${BOLD}Port 25565-25600/TCP/UDP${NC} - Game & App Server Port Allocations\n"
 
-  read -p "Press Enter to return to the main menu..."
+  prompt_input "Press Enter to return to the main menu..." > /dev/null
 }
 
 # ==============================================================================
@@ -1083,7 +1172,9 @@ repair_and_health_check() {
     echo -e "${GREEN}[✓] Docker Engine is active and healthy.${NC}"
   else
     echo -e "${RED}[!] Docker Engine is inactive or unresponsive. Restarting...${NC}"
-    systemctl restart docker >> "$LOG_FILE" 2>&1 || true
+    if command -v systemctl &> /dev/null; then
+      systemctl restart docker >> "$LOG_FILE" 2>&1 || true
+    fi
   fi
 
   echo -e "\n${YELLOW}[2/5] Checking AetherPanel Service Status...${NC}"
@@ -1107,56 +1198,105 @@ repair_and_health_check() {
   check_system_resources
 
   echo -e "\n${GREEN}${BOLD}Diagnostics complete!${NC}\n"
-  read -p "Press Enter to return to the main menu..."
+  prompt_input "Press Enter to return to the main menu..." > /dev/null
 }
 
 # ==============================================================================
 # 14. CLI PARAMETER DISPATCHER (NON-INTERACTIVE)
 # ==============================================================================
 while [[ $# -gt 0 ]]; do
-  case $1 in
+  case "$1" in
     --node)
       MODE="node"
       SHOW_MENU=false
       shift
       ;;
     --panel)
-      MODE="panel"
-      SHOW_MENU=false
-      shift
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        PANEL_URL="$2"
+        shift 2
+      else
+        MODE="panel"
+        SHOW_MENU=false
+        shift
+      fi
+      ;;
+    --panel-url|--url)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        PANEL_URL="$2"
+        shift 2
+      else
+        PANEL_URL=""
+        shift
+      fi
       ;;
     --update)
       MODE="update"
       SHOW_MENU=false
       shift
       ;;
-    --token)
-      INSTALL_TOKEN="$2"
-      shift 2
+    --reinstall)
+      MODE="reinstall"
+      SHOW_MENU=false
+      shift
       ;;
-    --panel-url|--panel|--url)
-      PANEL_URL="$2"
-      shift 2
+    --uninstall)
+      MODE="uninstall"
+      SHOW_MENU=false
+      shift
+      ;;
+    --token)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        INSTALL_TOKEN="$2"
+        shift 2
+      else
+        INSTALL_TOKEN=""
+        shift
+      fi
       ;;
     --port)
-      PANEL_PORT="$2"
-      shift 2
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        PANEL_PORT="$2"
+        shift 2
+      else
+        PANEL_PORT="3000"
+        shift
+      fi
       ;;
-    --admin-email)
-      ADMIN_EMAIL="$2"
-      shift 2
+    --admin-email|--email)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        ADMIN_EMAIL="$2"
+        shift 2
+      else
+        ADMIN_EMAIL=""
+        shift
+      fi
       ;;
-    --admin-password|--admin-pass)
-      ADMIN_PASS="$2"
-      shift 2
+    --admin-password|--admin-pass|--password|--pass)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        ADMIN_PASS="$2"
+        shift 2
+      else
+        ADMIN_PASS=""
+        shift
+      fi
       ;;
     --branch)
-      REPO_BRANCH="$2"
-      shift 2
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        REPO_BRANCH="$2"
+        shift 2
+      else
+        REPO_BRANCH="main"
+        shift
+      fi
       ;;
     --repair)
       MODE="repair"
       SHOW_MENU=false
+      shift
+      ;;
+    --yes|-y|--auto-confirm)
+      AUTO_CONFIRM=true
       shift
       ;;
     --help|-h)
@@ -1175,7 +1315,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$SHOW_MENU" = false ]; then
-  case $MODE in
+  case "${MODE:-}" in
     node)
       install_node_daemon
       ;;
@@ -1184,6 +1324,12 @@ if [ "$SHOW_MENU" = false ]; then
       ;;
     update)
       update_panel
+      ;;
+    reinstall)
+      reinstall_panel
+      ;;
+    uninstall)
+      uninstall_system
       ;;
     repair)
       repair_and_health_check
@@ -1212,28 +1358,32 @@ while true; do
   echo -e "  ${GREEN}8)${NC} Create Admin User"
   echo -e "  ${RED}0)${NC} Exit\n"
   
-  read -p "Enter choice [0-8]: " CHOICE
+  if [ ! -t 0 ] && ! (exec < /dev/tty) 2>/dev/null; then
+    echo -e "${YELLOW}Non-interactive shell detected. Use --help to view CLI options.${NC}"
+    exit 0
+  fi
 
-  case $CHOICE in
+  CHOICE=$(prompt_input "Enter choice [0-8]: ")
+  case "${CHOICE:-0}" in
     1)
       install_panel
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     2)
       install_node_daemon
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     3)
       update_panel
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     4)
       reinstall_panel
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     5)
       uninstall_system
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     6)
       show_tutorial
@@ -1248,7 +1398,7 @@ while true; do
       else
         npx tsx server/scripts/create-admin.ts
       fi
-      read -p "Press Enter to return to menu..."
+      prompt_input "Press Enter to return to menu..." > /dev/null
       ;;
     0)
       echo -e "\n${CYAN}Thank you for choosing AetherPanel. Goodbye!${NC}\n"
