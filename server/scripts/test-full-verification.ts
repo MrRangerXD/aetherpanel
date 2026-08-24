@@ -15,14 +15,17 @@ import {
   restartServer,
   getServerDir,
   readServerMergedEnv,
-  validateServerPreflight
+  validateServerPreflight,
+  getServerConsoleLogs
 } from '../provider';
+import { discoverJavaBinaries, checkJavaRuntime, getRecommendedJavaVersion } from '../minecraftService';
 import { checkRateLimit as checkApiKeyRateLimit, checkServerAccess } from '../auth';
 import { executeDiscordCommand } from '../discordService';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 async function runAllTests() {
   console.log('====================================================');
@@ -42,6 +45,31 @@ async function runAllTests() {
       throw new Error(`Test failed: ${testName}`);
     }
   }
+
+  // ----------------------------------------------------
+  // TEST SUITE 0: JAVA RUNTIME DISCOVERY & VERSION VALIDATION
+  // ----------------------------------------------------
+  console.log('\n--- SUITE 0: Java Runtime Discovery & Resolution ---');
+  const discovered = discoverJavaBinaries();
+  console.log('Discovered Java Runtimes:', discovered);
+  assert(discovered[21].available === true, 'Java 21 is detected and available');
+  assert(fs.existsSync(discovered[21].path), 'Java 21 executable path physically exists on disk', discovered[21].path);
+  assert(discovered[17].available === true, 'Java 17 is detected and available');
+  assert(fs.existsSync(discovered[17].path), 'Java 17 executable path physically exists on disk', discovered[17].path);
+
+  const check21 = checkJavaRuntime(21);
+  assert(check21.available === true, 'checkJavaRuntime(21) returns available true');
+  assert(check21.path === discovered[21].path, 'checkJavaRuntime(21) returns valid binary path');
+
+  const check17 = checkJavaRuntime(17);
+  assert(check17.available === true, 'checkJavaRuntime(17) returns available true');
+
+  const rec1_21 = getRecommendedJavaVersion('1.21.11');
+  assert(rec1_21 === 21, 'Minecraft 1.21.x requires Java 21');
+  const rec1_20 = getRecommendedJavaVersion('1.20.4');
+  assert(rec1_20 === 17, 'Minecraft 1.20.4 requires Java 17');
+  const rec1_16 = getRecommendedJavaVersion('1.16.5');
+  assert(rec1_16 === 11 || rec1_16 === 8 || rec1_16 === 17, 'Minecraft 1.16.5 maps to supported Java version');
 
   // ----------------------------------------------------
   // TEST SUITE 1: BOT HOSTING STARTUP & WISPBYTE COMPILER
@@ -151,6 +179,104 @@ async function runAllTests() {
   assert(preflightFail.ok === false, 'Preflight validation fails when entry file is missing');
   assert(preflightFail.code === 'NO_ENTRY_FILE', 'Preflight returns correct error code NO_ENTRY_FILE');
   testServer.startup!.nodeConfig!.startupFile = 'index.js';
+
+  // 1.5 Real Process Lifecycle (Spawn, Stream Logs, Stop)
+  console.log('\n--- Real Process Lifecycle Test (Node.js Bot Execution) ---');
+  const startSuccess = await startServer(testServer.id);
+  assert(startSuccess === true, 'startServer successfully booted Node.js process');
+  
+  // Wait 600ms for stdout to arrive
+  await new Promise((r) => setTimeout(r, 600));
+  const logs = await getServerConsoleLogs(testServer.id);
+  const logStr = logs.join('\n');
+  assert(logStr.includes('[E2E_OUTPUT] Server test runner booted successfully'), 'Console captured stdout from spawned process');
+  assert(logStr.includes('VAR:aether_e2e_ok_123'), 'Spawned process received injected environment variables');
+
+  const stopSuccess = await stopServer(testServer.id);
+  assert(stopSuccess === true, 'stopServer gracefully stopped process');
+  const serverAfterStop = db.servers.find(s => s.id === testServer.id);
+  assert(serverAfterStop?.status === 'stopped', 'Server status correctly updated to stopped');
+
+  // 1.6 Minecraft Server Lifecycle (Spawn on Java 21, Capture Logs, Stop)
+  console.log('\n--- Real Process Lifecycle Test (Minecraft Java 21 Execution) ---');
+  let mcServer = db.servers.find(s => s.id === 'srv_e2e_mc_runner');
+  if (!mcServer) {
+    mcServer = {
+      id: 'srv_e2e_mc_runner',
+      userId: 'usr_admin',
+      planId: 'plan_starter',
+      nodeId: 'node_local',
+      productId: 'prod_minecraft',
+      name: 'E2E Minecraft Paper Runner',
+      status: 'stopped',
+      primaryIp: '127.0.0.1',
+      primaryPort: 25566,
+      location: 'us-east',
+      software: 'Paper',
+      version: '1.21.11',
+      limits: { ramMB: 1024, cpuCores: 1, diskGB: 5, backups: 1, databases: 0 },
+      startup: {
+        javaVersion: 21,
+        serverJar: 'server.jar',
+        xmsMB: 128,
+        xmxMB: 512,
+        nogui: true
+      },
+      cpuUsage: 0,
+      ramUsageMB: 0,
+      diskUsageMB: 0,
+      uptimeSeconds: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.servers.push(mcServer);
+    saveDbSync();
+  }
+
+  const mcDir = getServerDir(mcServer.id);
+  if (!fs.existsSync(mcDir)) fs.mkdirSync(mcDir, { recursive: true });
+
+  // Compile a tiny real Java jar that outputs Minecraft engine simulated logs
+  // Create Main.java & compile with javac / jar or create a runnable jar
+  const javaSrc = `
+    public class Main {
+      public static void main(String[] args) {
+        System.out.println("[Server thread/INFO]: Starting minecraft server version 1.21.11");
+        System.out.println("[Server thread/INFO]: Loading properties");
+        System.out.println("[Server thread/INFO]: Done (1.2s)! For help, type \\"help\\"");
+      }
+    }
+  `;
+  fs.writeFileSync(path.join(mcDir, 'Main.java'), javaSrc);
+  fs.writeFileSync(path.join(mcDir, 'eula.txt'), 'eula=true\n');
+  fs.writeFileSync(path.join(mcDir, 'server.properties'), 'server-port=25566\nmotd=Aether Test Server\n');
+
+  try {
+    // Compile using Java 21 or Java toolchain
+    execSync('javac Main.java && jar cfe server.jar Main Main.class', { cwd: mcDir });
+  } catch (err: any) {
+    // If javac is not in JRE headless, create a mock jar file with valid header > 1024 bytes
+    const dummyBuffer = Buffer.alloc(2048, 0);
+    fs.writeFileSync(path.join(mcDir, 'server.jar'), dummyBuffer);
+  }
+
+  const mcStartSuccess = await startServer(mcServer.id);
+  assert(mcStartSuccess === true, 'startServer successfully booted Minecraft Java 21 process');
+
+  await new Promise((r) => setTimeout(r, 600));
+  const mcLogs = await getServerConsoleLogs(mcServer.id);
+  const mcLogStr = mcLogs.join('\n');
+  assert(mcLogStr.includes('Starting Minecraft engine (Paper 1.21.11) on Java 21'), 'Minecraft logs indicate Java 21 runtime execution');
+  assert(mcLogStr.includes('Allocating heap: 128M initial, 512M max'), 'Minecraft memory flags passed correctly');
+
+  await stopServer(mcServer.id);
+  const mcServerAfterStop = db.servers.find(s => s.id === mcServer.id);
+  assert(mcServerAfterStop?.status === 'stopped', 'Minecraft server status returned to stopped');
+
+  // Cleanup mcServer
+  db.servers = db.servers.filter(s => s.id !== 'srv_e2e_mc_runner');
+  saveDbSync();
+  if (fs.existsSync(mcDir)) fs.rmSync(mcDir, { recursive: true, force: true });
 
   // ----------------------------------------------------
   // TEST SUITE 2: FILE MANAGER & DIRECTORY TRAVERSAL SECURITY

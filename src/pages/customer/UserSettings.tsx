@@ -42,16 +42,6 @@ export const UserSettings: React.FC = () => {
   const [connectingDiscord, setConnectingDiscord] = useState(false);
   const [discordNotice, setDiscordNotice] = useState<string | null>(null);
 
-  // API Keys State
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [loadingKeys, setLoadingKeys] = useState(false);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyExpiry, setNewKeyExpiry] = useState('30');
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(['server:read', 'server:write', 'server:control']);
-  const [generatingKey, setGeneratingKey] = useState(false);
-  const [revealedKey, setRevealedKey] = useState<{ name: string; key: string } | null>(null);
-  const [copiedKey, setCopiedKey] = useState(false);
-
   // Webhooks State
   const [webhooks, setWebhooks] = useState<WebhookSubscription[]>([]);
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
@@ -64,7 +54,6 @@ export const UserSettings: React.FC = () => {
 
   useEffect(() => {
     fetchDiscordStatus();
-    fetchApiKeys();
     fetchWebhooks();
   }, []);
 
@@ -82,20 +71,6 @@ export const UserSettings: React.FC = () => {
     }
   };
 
-  const fetchApiKeys = async () => {
-    setLoadingKeys(true);
-    try {
-      const res = await apiRequest<ApiKey[]>('/api-keys');
-      if (res.success && res.data) {
-        setApiKeys(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch API keys:', err);
-    } finally {
-      setLoadingKeys(false);
-    }
-  };
-
   const fetchWebhooks = async () => {
     setLoadingWebhooks(true);
     try {
@@ -107,54 +82,6 @@ export const UserSettings: React.FC = () => {
       console.error('Failed to fetch webhooks:', err);
     } finally {
       setLoadingWebhooks(false);
-    }
-  };
-
-  const handleCreateApiKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newKeyName.trim()) return;
-    setGeneratingKey(true);
-    try {
-      const res = await apiRequest<ApiKey & { apiKey: string }>('/api-keys', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: newKeyName.trim(),
-          expiresInDays: Number(newKeyExpiry),
-          scopes: selectedScopes
-        })
-      });
-      if (res.success && res.data) {
-        setRevealedKey({ name: res.data.name, key: res.data.apiKey });
-        setNewKeyName('');
-        fetchApiKeys();
-      }
-    } catch (err: any) {
-      alert(`Key generation failed: ${err.message}`);
-    } finally {
-      setGeneratingKey(false);
-    }
-  };
-
-  const handleDeleteApiKey = async (id: string) => {
-    if (!confirm('Are you sure you want to revoke and delete this API key? Applications using it will immediately lose access.')) return;
-    try {
-      const res = await apiRequest(`/api-keys/${id}`, { method: 'DELETE' });
-      if (res.success) {
-        fetchApiKeys();
-      }
-    } catch (err: any) {
-      alert(`Failed to delete key: ${err.message}`);
-    }
-  };
-
-  const handleRevokeApiKey = async (id: string) => {
-    try {
-      const res = await apiRequest(`/api-keys/${id}/revoke`, { method: 'POST' });
-      if (res.success) {
-        fetchApiKeys();
-      }
-    } catch (err: any) {
-      alert(`Failed to revoke key: ${err.message}`);
     }
   };
 
@@ -222,8 +149,8 @@ export const UserSettings: React.FC = () => {
       setConnectingDiscord(true);
       setDiscordNotice(null);
 
-      // Check if real Discord OAuth URL is configured
-      const urlRes = await apiRequest('/auth/discord/url');
+      // Fetch real Discord OAuth URL from server
+      const urlRes = await apiRequest<{ url: string }>('/auth/discord/url');
       if (urlRes.success && urlRes.data?.url) {
         const width = 500;
         const height = 750;
@@ -237,34 +164,38 @@ export const UserSettings: React.FC = () => {
         );
 
         if (popup) {
+          const checkTimer = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkTimer);
+              setConnectingDiscord(false);
+            }
+          }, 1000);
+
           const handleMsg = (event: MessageEvent) => {
             if (event.data?.type === 'DISCORD_AUTH_SUCCESS') {
+              clearInterval(checkTimer);
               window.removeEventListener('message', handleMsg);
               fetchDiscordStatus();
               refreshUser();
-              setDiscordNotice('Discord account authorized and connected successfully!');
+              setDiscordNotice('✅ Discord account authorized and linked successfully!');
+              setConnectingDiscord(false);
+            } else if (event.data?.type === 'DISCORD_AUTH_ERROR') {
+              clearInterval(checkTimer);
+              window.removeEventListener('message', handleMsg);
+              setDiscordNotice(`Authorization Cancelled or Failed: ${event.data.error || 'User declined access'}`);
+              setConnectingDiscord(false);
             }
           };
           window.addEventListener('message', handleMsg);
           return;
+        } else {
+          setDiscordNotice('OAuth Popup window was blocked by browser settings. Please allow popups for AetherPanel.');
         }
-      }
-
-      // Fallback direct linking
-      const res = await apiRequest<DiscordAccount>('/discord/user/connect', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: user ? `${user.username}#${Math.floor(1000 + Math.random() * 9000)}` : 'Gamer#1337',
-          globalName: user?.displayName || 'Aether Gamer'
-        })
-      });
-
-      if (res.success && res.data) {
-        setDiscordAccount(res.data);
-        setDiscordNotice('Discord account authorized and connected successfully!');
+      } else {
+        setDiscordNotice('Not Configured: Configure Discord OAuth in Platform Settings.');
       }
     } catch (err: any) {
-      setDiscordNotice(`Connection failed: ${err.message || 'Error linking Discord account.'}`);
+      setDiscordNotice(`Not Configured: ${err.message || 'Configure Discord OAuth in Platform Settings.'}`);
     } finally {
       setConnectingDiscord(false);
     }
@@ -326,12 +257,6 @@ export const UserSettings: React.FC = () => {
     } else {
       setPasswordMsg({ success: false, text: res.error?.message || 'Failed to update password.' });
     }
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2500);
   };
 
   return (
@@ -642,176 +567,6 @@ export const UserSettings: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-
-      {/* REST API KEYS */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Key className="h-4 w-4 text-amber-400" /> REST API Keys
-            </h3>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Authenticate programmatic API calls to the AetherPanel Control Plane via <code className="text-amber-400 font-mono">Authorization: Bearer aeth_sec_...</code>
-            </p>
-          </div>
-        </div>
-
-        {/* Revealed Key Alert */}
-        {revealedKey && (
-          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
-              <Sparkles className="h-4 w-4" /> New API Key Generated: {revealedKey.name}
-            </div>
-            <p className="text-[11px] text-amber-200/80">
-              Make sure to copy your API key now. For your security, this secret token will not be displayed again!
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <input
-                type="text"
-                readOnly
-                value={revealedKey.key}
-                className="flex-1 rounded-xl bg-zinc-950 border border-amber-500/40 px-3.5 py-2 text-xs font-mono text-amber-300 selection:bg-amber-500 selection:text-black"
-              />
-              <button
-                onClick={() => handleCopy(revealedKey.key)}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition"
-              >
-                {copiedKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copiedKey ? 'Copied!' : 'Copy Key'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Generate Key Form */}
-        <form onSubmit={handleCreateApiKey} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Key Description / Purpose</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. CI/CD Deployment Script, WHMCS Billing, CLI Tool"
-                value={newKeyName}
-                onChange={e => setNewKeyName(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Expiration Period</label>
-              <select
-                value={newKeyExpiry}
-                onChange={e => setNewKeyExpiry(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-              >
-                <option value="7">7 Days</option>
-                <option value="30">30 Days</option>
-                <option value="90">90 Days</option>
-                <option value="365">1 Year</option>
-                <option value="0">Never Expires</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">Scope Permissions</label>
-            <div className="flex flex-wrap gap-2 text-xs">
-              {[
-                { id: 'server:read', label: 'Read Servers' },
-                { id: 'server:write', label: 'Write / Edit Servers' },
-                { id: 'server:control', label: 'Power Controls (Start/Stop)' },
-                { id: 'files:read', label: 'File Manager Read' },
-                { id: 'files:write', label: 'File Manager Write' },
-                { id: 'backups:manage', label: 'Backups' }
-              ].map(scope => {
-                const isSelected = selectedScopes.includes(scope.id);
-                return (
-                  <button
-                    key={scope.id}
-                    type="button"
-                    onClick={() => setSelectedScopes(prev =>
-                      isSelected ? prev.filter(s => s !== scope.id) : [...prev, scope.id]
-                    )}
-                    className={`px-3 py-1 rounded-xl text-[11px] font-medium border transition-all ${
-                      isSelected
-                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {scope.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={generatingKey}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-xs font-bold text-zinc-950 flex items-center gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" /> Generate Key
-            </button>
-          </div>
-        </form>
-
-        {/* Keys List */}
-        <div className="space-y-2">
-          {loadingKeys ? (
-            <div className="text-xs text-zinc-500 py-3">Loading active API keys...</div>
-          ) : apiKeys.length === 0 ? (
-            <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl text-xs text-zinc-500">
-              No API keys generated yet. Create one above to start automating your hosting.
-            </div>
-          ) : (
-            apiKeys.map(k => (
-              <div key={k.id} className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">{k.name}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-amber-400">
-                      {k.keyPrefix}
-                    </span>
-                    <span className={`text-[9px] font-mono uppercase px-1.5 py-0.2 rounded ${
-                      k.status === 'revoked' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                    }`}>
-                      {k.status || 'active'}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                    <span>Created: {new Date(k.createdAt).toLocaleDateString()}</span>
-                    <span>•</span>
-                    <span>Expires: {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : 'Never'}</span>
-                    {k.lastUsedAt && (
-                      <>
-                        <span>•</span>
-                        <span>Last used: {new Date(k.lastUsedAt).toLocaleDateString()}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {k.status !== 'revoked' && (
-                    <button
-                      onClick={() => handleRevokeApiKey(k.id)}
-                      className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteApiKey(k.id)}
-                    className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1 transition"
-                  >
-                    <Trash2 className="h-3 w-3" /> Delete
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
       </div>
 
       {/* REAL WEBHOOKS INTEGRATION */}

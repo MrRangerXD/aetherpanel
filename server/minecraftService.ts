@@ -452,10 +452,15 @@ export function discoverJavaBinaries(): Record<number, { available: boolean; pat
   // Evaluate each candidate and cache real physical paths
   for (const c of candidates) {
     try {
+      if (!fs.existsSync(c)) continue;
+      // Check execute permission
+      fs.accessSync(c, fs.constants.X_OK);
       const real = fs.realpathSync(c);
+      if (!fs.existsSync(real)) continue;
+      fs.accessSync(real, fs.constants.X_OK);
+
       const out = execSync(`"${real}" -version 2>&1`, { env: process.env, encoding: 'utf8' });
       // Match both 1.8.x and major version structures (e.g. "21.0.1" or "1.8.0_292" or "openjdk 17.0.10")
-      // Robust regex that searches for e.g. "version "17.0.1"" or "openjdk 21.0.1"
       const match = out.match(/(?:openjdk|java)(?:\s+version\s+)?\s*"?(?:1\.)?(\d+)/i);
       if (match) {
         const major = parseInt(match[1], 10);
@@ -464,12 +469,6 @@ export function discoverJavaBinaries(): Record<number, { available: boolean; pat
         }
       }
     } catch {}
-  }
-
-  // Fallback for test/sandbox environment when no physical Java is pre-installed in the container
-  if (!Object.values(runtimes).some(r => r.available)) {
-    runtimes[21] = { available: true, path: '/usr/bin/java' };
-    runtimes[17] = { available: true, path: '/usr/lib/jvm/java-17-openjdk/bin/java' };
   }
 
   return runtimes;
@@ -800,6 +799,202 @@ export interface MinecraftProperties {
   levelName: string;
   levelSeed: string;
   [key: string]: any;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MINECRAFT SERVER LIST PING (SLP) QUERY OVER TCP
+// ─────────────────────────────────────────────────────────────────────────────
+
+import net from 'net';
+
+export interface MinecraftServerQueryStatus {
+  online: boolean;
+  version?: string;
+  protocol?: number;
+  players?: {
+    online: number;
+    max: number;
+    sample?: Array<{ name: string; id: string }>;
+  };
+  motd?: string;
+  latencyMs?: number;
+  favicon?: string;
+}
+
+/**
+ * Encodes a VarInt into a Buffer
+ */
+function encodeVarInt(val: number): Buffer {
+  const bytes: number[] = [];
+  let v = val;
+  while (true) {
+    if ((v & ~0x7f) === 0) {
+      bytes.push(v);
+      break;
+    }
+    bytes.push((v & 0x7f) | 0x80);
+    v >>>= 7;
+  }
+  return Buffer.from(bytes);
+}
+
+/**
+ * Decodes a VarInt from a Buffer
+ */
+function decodeVarInt(buf: Buffer, offset = 0): { value: number; bytesRead: number } {
+  let numRead = 0;
+  let result = 0;
+  let read: number;
+  do {
+    if (offset + numRead >= buf.length) {
+      throw new Error('VarInt buffer underflow');
+    }
+    read = buf[offset + numRead];
+    const value = read & 0x7f;
+    result |= value << (7 * numRead);
+    numRead++;
+    if (numRead > 5) {
+      throw new Error('VarInt is too big');
+    }
+  } while ((read & 0x80) !== 0);
+
+  return { value: result, bytesRead: numRead };
+}
+
+/**
+ * Performs a non-blocking Minecraft Server List Ping (SLP) handshake over TCP
+ * to query real-time player count, max slots, version, and motd.
+ */
+export async function queryMinecraftServerStatus(
+  host: string = '127.0.0.1',
+  port: number = 25565,
+  timeoutMs: number = 2000
+): Promise<MinecraftServerQueryStatus> {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const socket = new net.Socket();
+    let receivedData = Buffer.alloc(0);
+    let resolved = false;
+
+    const cleanup = () => {
+      socket.removeAllListeners();
+      socket.destroy();
+    };
+
+    const done = (status: MinecraftServerQueryStatus) => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        resolve(status);
+      }
+    };
+
+    socket.setTimeout(timeoutMs);
+
+    socket.on('timeout', () => {
+      done({ online: false });
+    });
+
+    socket.on('error', () => {
+      done({ online: false });
+    });
+
+    socket.connect(port, host, () => {
+      try {
+        // Construct Handshake Packet (ID: 0x00)
+        // Protocol Version: -1 (or 765 for 1.20.4), Host, Port, Next State: 1 (status)
+        const hostBuf = Buffer.from(host, 'utf8');
+        const hostLenVarInt = encodeVarInt(hostBuf.length);
+        const portBuf = Buffer.alloc(2);
+        portBuf.writeUInt16BE(port, 0);
+
+        const packetId = encodeVarInt(0x00);
+        const protocolVersion = encodeVarInt(765); // 1.20.4 protocol / compatible
+        const nextState = encodeVarInt(1); // 1 = status query
+
+        const handshakePayload = Buffer.concat([
+          packetId,
+          protocolVersion,
+          hostLenVarInt,
+          hostBuf,
+          portBuf,
+          nextState
+        ]);
+
+        const handshakePacket = Buffer.concat([
+          encodeVarInt(handshakePayload.length),
+          handshakePayload
+        ]);
+
+        // Construct Status Request Packet (ID: 0x00, empty payload)
+        const requestPayload = encodeVarInt(0x00);
+        const requestPacket = Buffer.concat([
+          encodeVarInt(requestPayload.length),
+          requestPayload
+        ]);
+
+        socket.write(handshakePacket);
+        socket.write(requestPacket);
+      } catch {
+        done({ online: false });
+      }
+    });
+
+    socket.on('data', (chunk) => {
+      receivedData = Buffer.concat([receivedData, chunk]);
+      try {
+        if (receivedData.length < 3) return;
+
+        let offset = 0;
+        const packetLen = decodeVarInt(receivedData, offset);
+        offset += packetLen.bytesRead;
+
+        const packetId = decodeVarInt(receivedData, offset);
+        offset += packetId.bytesRead;
+
+        if (packetId.value !== 0x00) return;
+
+        const jsonLen = decodeVarInt(receivedData, offset);
+        offset += jsonLen.bytesRead;
+
+        if (receivedData.length < offset + jsonLen.value) {
+          // Wait for more chunks to arrive
+          return;
+        }
+
+        const jsonString = receivedData.toString('utf8', offset, offset + jsonLen.value);
+        const latencyMs = Math.max(1, Date.now() - startTime);
+
+        const parsed = JSON.parse(jsonString);
+
+        // Parse MOTD description string or object
+        let motd = 'Aether Minecraft Server';
+        if (typeof parsed.description === 'string') {
+          motd = parsed.description;
+        } else if (parsed.description && typeof parsed.description.text === 'string') {
+          motd = parsed.description.text;
+        } else if (parsed.description && Array.isArray(parsed.description.extra)) {
+          motd = parsed.description.extra.map((e: any) => (typeof e === 'string' ? e : e.text || '')).join('');
+        }
+
+        done({
+          online: true,
+          version: parsed.version?.name || 'Minecraft Server',
+          protocol: parsed.version?.protocol,
+          players: {
+            online: typeof parsed.players?.online === 'number' ? parsed.players.online : 0,
+            max: typeof parsed.players?.max === 'number' ? parsed.players.max : 20,
+            sample: parsed.players?.sample || []
+          },
+          motd: motd.replace(/§[0-9a-fk-or]/gi, '').trim(),
+          latencyMs,
+          favicon: parsed.favicon
+        });
+      } catch {
+        // Continue waiting for valid buffer or timeout
+      }
+    });
+  });
 }
 
 export function readServerProperties(serverId: string): MinecraftProperties {

@@ -77,8 +77,9 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     setLoadError(null);
     try {
       const res = await apiRequest(`/servers/${serverId}/files?path=${encodeURIComponent(path)}`);
-      if (res.success && Array.isArray(res.data)) {
-        setFiles(res.data);
+      if (res.success) {
+        const fileList = Array.isArray(res.data) ? res.data : (res.data?.files || []);
+        setFiles(fileList);
       } else {
         setLoadError(res.error?.message || 'Failed to list directory contents.');
       }

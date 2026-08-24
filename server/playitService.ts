@@ -12,9 +12,12 @@ export {
   getPlayitStatus,
   installPlayitAgent,
   togglePlayitAgent,
+  provisionPlayitSecret,
   uninstallPlayitAgent,
   getNodePlayitStatus,
   installNodePlayitAgent,
   toggleNodePlayitAgent,
-  initializePlayitOnBoot
+  provisionNodePlayitSecret,
+  initializePlayitOnBoot,
+  queryIpc
 } from './playit/playitService';

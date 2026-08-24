@@ -5,7 +5,10 @@ import {
   dispatchDiscordNotification,
   executeDiscordCommand,
   buildDiscordEmbed,
-  runDiscordAcceptanceTestSuite
+  runDiscordAcceptanceTestSuite,
+  getDiscordBotStatusDetails,
+  restartDiscordBot,
+  stopDiscordBot
 } from '../discordService';
 import {
   DiscordAccount,
@@ -37,6 +40,15 @@ async function checkServerAccess(req: AuthenticatedRequest, res: Response, serve
   return { server, db };
 }
 
+// GET /api/v1/discord/bot-status - Real-time Bot Gateway connection status
+router.get('/bot-status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const statusDetails = await getDiscordBotStatusDetails();
+  res.json({
+    success: true,
+    data: statusDetails
+  });
+});
+
 // ==========================================
 // USER LEVEL DISCORD INTEGRATION ENDPOINTS
 // ==========================================
@@ -61,15 +73,25 @@ router.post('/user/connect', authMiddleware, async (req: AuthenticatedRequest, r
 
   const { discordId, username, globalName, avatar, email } = req.body;
 
-  const cleanDiscordId = (discordId || `${Math.floor(100000000000000000 + Math.random() * 900000000000000000)}`).trim();
-  const cleanUsername = (username || `${user.username}#${Math.floor(1000 + Math.random() * 9000)}`).trim();
+  if (!discordId || !discordId.trim() || !username || !username.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'DISCORD_OAUTH_REQUIRED',
+        message: 'Valid Discord ID and username from real Discord OAuth2 authorization are required.'
+      }
+    });
+  }
+
+  const cleanDiscordId = discordId.trim();
+  const cleanUsername = username.trim();
 
   if (!db.discordLinks) db.discordLinks = {};
 
   const discordAccount: DiscordAccount = {
     discordId: cleanDiscordId,
     username: cleanUsername,
-    globalName: globalName || user.displayName,
+    globalName: globalName || cleanUsername,
     avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
     email: email || user.email,
     linkedAt: new Date().toISOString()
@@ -133,7 +155,7 @@ router.get('/server/:serverId', authMiddleware, async (req: AuthenticatedRequest
     serverId: server.id,
     enabled: true,
     webhookUrl: '',
-    channelName: '#general',
+    channelName: '#server-alerts',
     enabledEvents: [
       'SERVER_STARTED',
       'SERVER_STOPPED',
@@ -156,37 +178,48 @@ router.get('/server/:serverId', authMiddleware, async (req: AuthenticatedRequest
   });
 });
 
-// PUT /api/v1/discord/server/:serverId - Update server discord link configuration
+// PUT /api/v1/discord/server/:serverId - Save server discord link configuration
 router.put('/server/:serverId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.serverId);
   if (!access) return;
 
   const { server, db } = access;
+  const {
+    enabled,
+    webhookUrl,
+    channelName,
+    enabledEvents,
+    mentionRoleId,
+    mentionUserId,
+    cooldownSeconds,
+    allowServerCommands
+  } = req.body;
+
+  if (webhookUrl && webhookUrl.trim()) {
+    const cleanUrl = webhookUrl.trim();
+    if (!cleanUrl.startsWith('https://discord.com/api/webhooks/') && !cleanUrl.startsWith('https://discordapp.com/api/webhooks/')) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_WEBHOOK_URL', message: 'Discord Webhook URL must start with https://discord.com/api/webhooks/' }
+      });
+    }
+  }
+
   if (!db.serverDiscordLinks) db.serverDiscordLinks = [];
 
   let link = db.serverDiscordLinks.find(l => l.serverId === server.id);
-  const {
-    enabled = true,
-    webhookUrl = '',
-    channelName = '',
-    enabledEvents = [],
-    mentionRoleId = '',
-    mentionUserId = '',
-    cooldownSeconds = 60,
-    allowServerCommands = true
-  } = req.body;
 
   if (!link) {
     link = {
       serverId: server.id,
-      enabled,
-      webhookUrl,
-      channelName,
-      enabledEvents,
-      mentionRoleId,
-      mentionUserId,
-      cooldownSeconds,
-      allowServerCommands,
+      enabled: enabled !== false,
+      webhookUrl: webhookUrl || '',
+      channelName: channelName || '#server-alerts',
+      enabledEvents: enabledEvents || [],
+      mentionRoleId: mentionRoleId || '',
+      mentionUserId: mentionUserId || '',
+      cooldownSeconds: cooldownSeconds || 60,
+      allowServerCommands: allowServerCommands !== false,
       updatedAt: new Date().toISOString()
     };
     db.serverDiscordLinks.push(link);
@@ -252,7 +285,7 @@ router.post('/command', authMiddleware, async (req: AuthenticatedRequest, res: R
   const discordUserId = req.body.discordUserId || userDiscordAccount?.discordId;
   
   if (!discordUserId) {
-    return res.status(400).json({ success: false, message: 'Discord user ID not found or not linked.' });
+    return res.status(400).json({ success: false, message: 'Your Discord account is not linked to AetherPanel. Link your Discord account in Profile Settings.' });
   }
   const commandStr = req.body.command || '/server status';
   const serverId = req.body.serverId;
@@ -272,7 +305,7 @@ router.post('/command', authMiddleware, async (req: AuthenticatedRequest, res: R
 // ADMIN LEVEL DISCORD CONTROLS
 // ==========================================
 
-// GET /api/v1/discord/admin/settings - Get global Discord bot settings
+// GET /api/v1/discord/admin/settings - Get global Discord bot settings with masked credentials
 router.get('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
     return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
@@ -292,10 +325,20 @@ router.get('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, 
   };
 
   const settings = db.settings?.discordSettings || defaultDiscordSettings;
+  const botTokenMasked = settings.botToken ? `••••••••${settings.botToken.slice(-4)}` : '';
+  const clientSecretMasked = settings.clientSecret ? `••••••••${settings.clientSecret.slice(-4)}` : '';
 
   res.json({
     success: true,
-    data: settings
+    data: {
+      ...settings,
+      botToken: botTokenMasked,
+      clientSecret: clientSecretMasked,
+      botTokenConfigured: !!settings.botToken,
+      clientSecretConfigured: !!settings.clientSecret,
+      botTokenMasked,
+      clientSecretMasked
+    }
   });
 });
 
@@ -306,11 +349,32 @@ router.put('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, 
   }
 
   const db = await getDb();
+  const currentSettings = (db.settings.discordSettings || {}) as any;
+  
+  let newBotToken = req.body.botToken;
+  if (!newBotToken || newBotToken.startsWith('••••')) {
+    newBotToken = currentSettings.botToken || '';
+  }
+
+  let newClientSecret = req.body.clientSecret;
+  if (!newClientSecret || newClientSecret.startsWith('••••')) {
+    newClientSecret = currentSettings.clientSecret || '';
+  }
+
   db.settings.discordSettings = {
-    ...db.settings.discordSettings,
-    ...req.body
+    ...currentSettings,
+    ...req.body,
+    botToken: newBotToken,
+    clientSecret: newClientSecret
   };
   saveDbSync();
+
+  // Trigger bot reconnect if enabled
+  if (db.settings.discordSettings.enabled && db.settings.discordSettings.botToken) {
+    restartDiscordBot().catch(() => {});
+  } else if (!db.settings.discordSettings.enabled) {
+    stopDiscordBot().catch(() => {});
+  }
 
   await createAuditLog(
     req.user!.id,
@@ -321,10 +385,32 @@ router.put('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, 
     'Updated global Discord bot and OAuth settings'
   );
 
+  const updatedMasked = {
+    ...db.settings.discordSettings,
+    botToken: db.settings.discordSettings.botToken ? `••••••••${db.settings.discordSettings.botToken.slice(-4)}` : '',
+    clientSecret: db.settings.discordSettings.clientSecret ? `••••••••${db.settings.discordSettings.clientSecret.slice(-4)}` : '',
+    botTokenConfigured: !!db.settings.discordSettings.botToken,
+    clientSecretConfigured: !!db.settings.discordSettings.clientSecret
+  };
+
   res.json({
     success: true,
     message: 'Global Discord integration settings updated.',
-    data: db.settings.discordSettings
+    data: updatedMasked
+  });
+});
+
+// POST /api/v1/discord/admin/bot-restart - Force restart Bot Gateway Client
+router.post('/admin/bot-restart', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  const details = await restartDiscordBot();
+  res.json({
+    success: details.status === 'CONNECTED' || details.status === 'CONNECTING',
+    message: `Bot gateway restart status: ${details.status}`,
+    data: details
   });
 });
 

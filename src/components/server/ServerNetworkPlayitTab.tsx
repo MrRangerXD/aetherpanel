@@ -30,6 +30,34 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const [installingPlayit, setInstallingPlayit] = useState<boolean>(false);
   const [togglingTunnel, setTogglingTunnel] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [secretInput, setSecretInput] = useState<string>('');
+  const [submittingSecret, setSubmittingSecret] = useState<boolean>(false);
+  const [secretMsg, setSecretMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleProvisionSecret = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!secretInput.trim()) return;
+    setSubmittingSecret(true);
+    setSecretMsg(null);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit/secret`, {
+        method: 'POST',
+        body: JSON.stringify({ secretKey: secretInput.trim() })
+      });
+      if (res.success && res.data) {
+        setPlayit(res.data);
+        setSecretMsg({ type: 'success', text: 'Playit secret applied successfully!' });
+        setSecretInput('');
+        fetchSftpInfo();
+      } else {
+        setSecretMsg({ type: 'error', text: res.error?.message || 'Failed to apply secret key.' });
+      }
+    } catch (err: any) {
+      setSecretMsg({ type: 'error', text: err.message || 'Error communicating with server.' });
+    } finally {
+      setSubmittingSecret(false);
+    }
+  };
 
   // SFTP state
   const [sftpInfo, setSftpInfo] = useState<SftpConnectionInfo | null>((server as any).sftp || null);
@@ -315,6 +343,13 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={fetchPlayitStatus}
+              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              title="Refresh Playit Status"
+            >
+              <RefreshCw className={`h-4 w-4 ${loadingPlayit ? 'animate-spin' : ''}`} />
+            </button>
             {playit?.isInstalled && (
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
                 playit.isRunning
@@ -425,6 +460,38 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
                 </a>
               </div>
             )}
+
+            {/* Secret Key Provisioning Box */}
+            <form onSubmit={handleProvisionSecret} className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <Key className="h-3.5 w-3.5 text-amber-400" /> Provision Playit Secret Key
+                </span>
+                <span className="text-[10px] text-zinc-500">Optional Manual Agent Configuration</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={secretInput}
+                  onChange={(e) => setSecretInput(e.target.value)}
+                  placeholder="Enter secret key from playit.gg..."
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={submittingSecret || !secretInput.trim()}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-lg transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                >
+                  {submittingSecret ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                  <span>Apply Key</span>
+                </button>
+              </div>
+              {secretMsg && (
+                <p className={`text-[11px] ${secretMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {secretMsg.text}
+                </p>
+              )}
+            </form>
           </div>
         )}
       </div>

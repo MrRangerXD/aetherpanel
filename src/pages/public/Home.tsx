@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Gamepad2, Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
   Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame
 } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { Plan } from '../../types';
 
 interface HomeProps {
   onNavigate: (page: string) => void;
@@ -11,6 +12,29 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { accentClasses } = useTheme();
+  const [plans, setPlans] = useState<Plan[]>([]);
+
+  useEffect(() => {
+    fetch('/api/v1/public/plans')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.data)) {
+          setPlans(data.data);
+        }
+      })
+      .catch(err => console.error('Failed to load plans on home:', err));
+  }, []);
+
+  const mcPlans = plans.filter(p => p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc_'));
+  const botPlans = plans.filter(p => p.productId === 'prod_bot' || p.id.startsWith('plan_bot_'));
+
+  const minMcPrice = mcPlans.length > 0
+    ? Math.min(...mcPlans.map(p => p.priceMonthly))
+    : 1.49;
+
+  const minBotPrice = botPlans.length > 0
+    ? Math.min(...botPlans.map(p => p.priceMonthly))
+    : 0.99;
 
   return (
     <div className="space-y-24 py-8">
@@ -156,7 +180,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 <Gamepad2 className="h-7 w-7" />
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Starts at $3.99/mo
+                Starts at ${minMcPrice.toFixed(2)}/mo
               </span>
             </div>
 
@@ -190,7 +214,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 <Bot className="h-7 w-7" />
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Starts at $1.99/mo
+                Starts at ${minBotPrice.toFixed(2)}/mo
               </span>
             </div>
 

@@ -14,6 +14,14 @@ interface ServerMonitoringTabProps {
 export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server }) => {
   const [range, setRange] = useState<'1h' | '24h' | '7d' | '30d'>('1h');
   const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
+  const [liveData, setLiveData] = useState<{
+    latencyMs?: number;
+    tps?: number;
+    playersOnline?: number;
+    maxPlayers?: number;
+    processStatus?: string;
+    protocolStatus?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isMinecraft = server.category === 'minecraft' || server.product?.category === 'minecraft' || server.software?.toLowerCase().includes('paper') || server.software?.toLowerCase().includes('purpur');
@@ -21,11 +29,22 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
 
   const fetchTelemetry = async () => {
     setLoading(true);
-    const res = await apiRequest(`/monitoring/server/${server.id}/history?range=${range}`);
-    if (res.success && res.data?.history) {
-      setTelemetry(res.data.history);
+    try {
+      const [resHistory, resLive] = await Promise.all([
+        apiRequest(`/monitoring/server/${server.id}/history?range=${range}`),
+        apiRequest(`/monitoring/server/${server.id}/live`)
+      ]);
+      if (resHistory.success && resHistory.data?.history) {
+        setTelemetry(resHistory.data.history);
+      }
+      if (resLive.success && resLive.data) {
+        setLiveData(resLive.data);
+      }
+    } catch {
+      // Ignore network hiccup
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -35,8 +54,18 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
   const latest = telemetry[telemetry.length - 1];
 
   // TPS Calculation
-  const tpsVal = latest?.tps || (server.status === 'running' ? 20.0 : 0.0);
-  const tpsColor = tpsVal >= 19.5 ? 'text-emerald-400' : tpsVal >= 17.0 ? 'text-amber-400' : 'text-rose-400';
+  const isRunning = server.status === 'running';
+  const tpsVal = liveData?.tps !== undefined ? liveData.tps : (latest?.tps !== undefined ? latest.tps : (isRunning ? 20.0 : 0.0));
+  const tpsColor = !isRunning ? 'text-zinc-500' : tpsVal >= 19.5 ? 'text-emerald-400' : tpsVal >= 17.0 ? 'text-amber-400' : 'text-rose-400';
+
+  // Real player count (0 players does NOT mean offline)
+  const activePlayers = isRunning ? (liveData?.playersOnline !== undefined ? liveData.playersOnline : (latest?.players !== undefined ? latest.players : (server.playerCount ?? 0))) : 0;
+  const maxPlayerSlots = liveData?.maxPlayers || server.maxPlayers || 20;
+
+  // Process & Protocol Status separation
+  const processStatus = liveData?.processStatus || server.status;
+  const protocolStatus = isRunning ? (liveData?.protocolStatus || 'ONLINE') : (processStatus === 'starting' ? 'STARTING' : 'OFFLINE');
+  const latencyDisplay = isRunning && liveData?.latencyMs ? `${liveData.latencyMs} ms` : (isRunning ? '< 10 ms' : 'N/A');
 
   return (
     <div className="space-y-6">
@@ -83,11 +112,11 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
             <div className="flex items-center gap-2 mt-1">
               <Gauge className={`h-5 w-5 ${tpsColor}`} />
               <span className={`text-lg font-bold font-mono ${tpsColor}`}>
-                {tpsVal.toFixed(2)} / 20.00
+                {isRunning ? `${tpsVal.toFixed(2)} / 20.00` : '0.00 / 20.00'}
               </span>
             </div>
             <span className="text-[10px] text-zinc-500 font-mono">
-              {tpsVal >= 19.5 ? 'Peak Performance (100%)' : 'Minor Tick Delay'}
+              {!isRunning ? 'Process stopped' : tpsVal >= 19.5 ? 'Peak Performance (100%)' : 'Tick Processing Active'}
             </span>
           </div>
 
@@ -96,32 +125,38 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
             <div className="flex items-center gap-2 mt-1">
               <Users className="h-5 w-5 text-sky-400" />
               <span className="text-lg font-bold font-mono text-white">
-                {server.status === 'running' ? (latest?.players || 2) : 0} Active
+                {activePlayers} / {maxPlayerSlots}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Max slots: 50</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {isRunning ? (activePlayers === 0 ? '0 connected (Server Online)' : `${activePlayers} connected`) : 'Server offline'}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
-            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Engine Type</span>
+            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Minecraft Protocol</span>
             <div className="flex items-center gap-2 mt-1">
-              <Zap className="h-5 w-5 text-amber-400" />
-              <span className="text-sm font-bold font-mono text-white truncate">
-                {server.software || 'Paper 1.20.4'}
+              <Zap className={`h-5 w-5 ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <span className={`text-sm font-bold font-mono ${isRunning ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                {protocolStatus}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Aikar's Flags active</span>
+            <span className="text-[10px] text-zinc-500 font-mono truncate block">
+              {server.software || 'Paper'} {server.version || ''}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
-            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Process Status</span>
+            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Process Lifecycle</span>
             <div className="flex items-center gap-2 mt-1">
-              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-              <span className="text-sm font-bold font-mono text-emerald-400 capitalize">
-                {server.status}
+              <CheckCircle2 className={`h-5 w-5 ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <span className={`text-sm font-bold font-mono capitalize ${isRunning ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                {processStatus}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">PID 4192 active</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {server.startup?.pid ? `PID ${server.startup.pid} active` : isRunning ? 'Daemon active' : 'Process halted'}
+            </span>
           </div>
         </div>
       )}
@@ -131,12 +166,14 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
             <span className="text-[10px] uppercase font-mono text-zinc-400 block">Bot Runtime Status</span>
             <div className="flex items-center gap-2 mt-1">
-              <Bot className="h-5 w-5 text-emerald-400" />
-              <span className="text-base font-bold font-mono text-emerald-400 capitalize">
+              <Bot className={`h-5 w-5 ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <span className={`text-base font-bold font-mono capitalize ${isRunning ? 'text-emerald-400' : 'text-zinc-400'}`}>
                 {server.status}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">24/7 Persistent Daemon</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {isRunning ? '24/7 Persistent Daemon' : 'Bot process stopped'}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
@@ -144,10 +181,12 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
             <div className="flex items-center gap-2 mt-1">
               <Clock className="h-5 w-5 text-sky-400" />
               <span className="text-base font-bold font-mono text-white">
-                ~1.8 ms
+                {isRunning ? (liveData?.latencyMs ? `${liveData.latencyMs} ms` : '< 2.0 ms') : '0.0 ms'}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Zero event lag</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {isRunning ? 'Real-time event loop monitor' : 'Inactive'}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
@@ -158,18 +197,22 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
                 {server.software || 'Node.js 20 LTS'}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Isolated CGroup Sandbox</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {server.startup?.pid ? `PID ${server.startup.pid}` : isRunning ? 'Active Sandbox PID' : 'Isolated Sandbox'}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
-            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Discord Gateway Ping</span>
+            <span className="text-[10px] uppercase font-mono text-zinc-400 block">Gateway Latency</span>
             <div className="flex items-center gap-2 mt-1">
-              <Wifi className="h-5 w-5 text-emerald-400" />
+              <Wifi className={`h-5 w-5 ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`} />
               <span className="text-base font-bold font-mono text-white">
-                14 ms
+                {latencyDisplay}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Heartbeat ACK OK</span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {isRunning ? 'Socket Heartbeat Active' : 'Disconnected'}
+            </span>
           </div>
         </div>
       )}

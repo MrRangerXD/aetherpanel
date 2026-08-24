@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { spawn, ChildProcess, execSync } from 'child_process';
 import { getDb, saveDbSync } from '../db';
 import { getServerDir, appendConsoleLog } from '../provider';
@@ -10,11 +11,13 @@ export type PlayitAgentState =
   | 'STOPPED'
   | 'STARTING'
   | 'RUNNING'
+  | 'WAITING_FOR_CONFIGURATION'
   | 'CLAIM_REQUIRED'
   | 'CLAIMING'
   | 'CLAIMED'
   | 'CONNECTING'
   | 'CONNECTED'
+  | 'DISCONNECTED'
   | 'ERROR';
 
 export interface PlayitStatus {
@@ -87,10 +90,74 @@ export function getNodePlayitDir(nodeId: string): string {
 function isPidRunning(pid?: number): boolean {
   if (!pid) return false;
   try {
-    return process.kill(pid, 0);
+    if (!process.kill(pid, 0)) return false;
+    const cmdlinePath = `/proc/${pid}/cmdline`;
+    if (fs.existsSync(cmdlinePath)) {
+      const cmd = fs.readFileSync(cmdlinePath, 'utf-8');
+      return cmd.includes('playit');
+    }
+    return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Sends a JSON-RPC-like IPC request to the Playit agent Unix domain socket.
+ */
+export function queryIpc(socketPath: string, req: any, timeoutMs = 3000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(socketPath)) {
+      return reject(new Error('IPC socket file does not exist'));
+    }
+
+    let client: net.Socket;
+    try {
+      client = net.createConnection(socketPath);
+    } catch (err) {
+      return reject(err);
+    }
+
+    let buffer = '';
+    const reqId = Math.floor(Math.random() * 1000000);
+
+    const timer = setTimeout(() => {
+      client.destroy();
+      reject(new Error('IPC query timeout'));
+    }, timeoutMs);
+
+    client.on('connect', () => {
+      const payload = JSON.stringify({
+        ipc_version: 2,
+        request_id: reqId,
+        request: req
+      }) + '\n';
+      client.write(payload);
+    });
+
+    client.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.message_kind === 'response' && parsed.data && parsed.data.request_id === reqId) {
+            clearTimeout(timer);
+            client.end();
+            return resolve(parsed.data.response);
+          }
+        } catch {}
+      }
+      buffer = lines[lines.length - 1];
+    });
+
+    client.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 /**
@@ -166,14 +233,34 @@ export function checkPlayitBinary(): { exists: boolean; runnable: boolean; reaso
 /**
  * Parses real-time claim urls, claim codes, or tunnel allocations from raw log chunks.
  */
-function parseLogsForMetadata(logText: string): { claimUrl?: string; claimCode?: string; tunnelAddress?: string; tunnelPort?: number } {
-  const result: { claimUrl?: string; claimCode?: string; tunnelAddress?: string; tunnelPort?: number } = {};
+function parseLogsForMetadata(logText: string): {
+  claimUrl?: string;
+  claimCode?: string;
+  tunnelAddress?: string;
+  tunnelPort?: number;
+  waitingForSecret?: boolean;
+} {
+  const result: {
+    claimUrl?: string;
+    claimCode?: string;
+    tunnelAddress?: string;
+    tunnelPort?: number;
+    waitingForSecret?: boolean;
+  } = {};
   
+  if (
+    logText.includes('Waiting for frontend secret provisioning') ||
+    logText.includes('secret_key required') ||
+    logText.includes('no secret found')
+  ) {
+    result.waitingForSecret = true;
+  }
+
   // Patterns for playit.gg claiming and tunnels
   const claimUrlRegex = /https?:\/\/(?:www\.)?playit\.gg\/claim\/([a-zA-Z0-9-]+)/i;
   const claimCodeRegex = /claim[ -_]code[:\s]+([a-zA-Z0-9-]+)/i;
   const tunnelRegex = /established.*at\s+([a-z0-9.-]+\.playit\.gg):(\d+)/i;
-  const generalAllocationRegex = /allocated\s+([a-z0-9.-]+):(\d+)/i;
+  const generalAllocationRegex = /allocated\s+([a-z0-9.-]+\.playit\.gg):(\d+)/i;
 
   const urlMatch = logText.match(claimUrlRegex);
   if (urlMatch) {
@@ -203,8 +290,8 @@ function isAgentSecretClaimed(secretFile: string): boolean {
   if (!fs.existsSync(secretFile)) return false;
   try {
     const content = fs.readFileSync(secretFile, 'utf-8');
-    // A claimed playit.toml has a non-empty key parameter
-    return content.includes('secret') && content.length > 40;
+    const hasSecretKey = content.includes('secret_key') && content.split('secret_key')[1].includes('"');
+    return hasSecretKey && content.length > 20;
   } catch {
     return false;
   }
@@ -218,7 +305,8 @@ function resolveLifecycleState(
   hasTunnelAllocated: boolean,
   hasError: boolean,
   hasConfig: boolean,
-  isStarting: boolean = false
+  isStarting: boolean = false,
+  waitingForSecret: boolean = false
 ): PlayitAgentState {
   if (!isInstalled) return 'NOT_INSTALLED';
   if (hasError) return 'ERROR';
@@ -227,13 +315,17 @@ function resolveLifecycleState(
   }
   if (isStarting) return 'STARTING';
   
+  if (waitingForSecret) {
+    return 'WAITING_FOR_CONFIGURATION';
+  }
+
   if (!isClaimed) {
     if (hasClaimUrl) return 'CLAIMING';
-    return 'CLAIM_REQUIRED';
+    return 'WAITING_FOR_CONFIGURATION';
   }
   
   if (!hasTunnelAllocated) {
-    return 'CONNECTING';
+    return 'CLAIM_REQUIRED';
   }
   return 'CONNECTED';
 }
@@ -246,6 +338,7 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
   const playitDir = getPlayitDir(serverId);
   const configFile = path.join(playitDir, 'playit.json');
   const secretFile = path.join(playitDir, 'playit.toml');
+  const socketFile = path.join(playitDir, 'playit.sock');
   const logFile = path.join(playitDir, 'playit.log');
 
   let logs: string[] = [];
@@ -291,12 +384,6 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
 
   try {
     const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-    if (serverId.startsWith('p6s')) {
-      data.claimUrl = 'https://playit.gg/claim/phase6test';
-      data.claimCode = 'PHASE6TEST';
-      data.tunnelAddress = 'p6.auto.playit.gg';
-      data.tunnelPort = 25565;
-    }
     const isClaimed = isAgentSecretClaimed(secretFile);
     
     // Validate if background process is active
@@ -304,25 +391,49 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
     const running = activeProc ? isPidRunning(activeProc.pid) : isPidRunning(data.pid);
 
     const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 4000) : false;
-    const hasTunnel = !!data.tunnelAddress && data.tunnelAddress.endsWith('.playit.gg');
+
+    let claimUrl = data.claimUrl;
+    let claimCode = data.claimCode;
+    let tunnelAddress = data.tunnelAddress;
+    let tunnelPort = data.tunnelPort;
+    let waitingForSecret = false;
+
+    // Parse logs for real-time claim Urls or secret provisioning state if present
+    if (fs.existsSync(logFile)) {
+      try {
+        const logContent = fs.readFileSync(logFile, 'utf-8');
+        const parsed = parseLogsForMetadata(logContent);
+        if (parsed.claimUrl) claimUrl = parsed.claimUrl;
+        if (parsed.claimCode) claimCode = parsed.claimCode;
+        if (parsed.tunnelAddress) {
+          tunnelAddress = parsed.tunnelAddress;
+          tunnelPort = parsed.tunnelPort;
+        }
+        if (parsed.waitingForSecret) {
+          waitingForSecret = true;
+        }
+      } catch {}
+    }
+
+    const hasTunnel = isClaimed && !!tunnelAddress && tunnelAddress.endsWith('.playit.gg');
     const hasError = !!data.errorReason || binCheck.runnable === false;
 
     const stateStatus = resolveLifecycleState(
       true,
       running,
       isClaimed,
-      !!data.claimUrl,
+      !!claimUrl,
       hasTunnel,
       hasError,
       true,
-      isStarting
+      isStarting,
+      waitingForSecret
     );
     
-    // If file says running, but process died, sync state
     const agentState = running ? 'ONLINE' : 'OFFLINE';
     const controlState = (running && isClaimed) ? 'CONNECTED' : 'DISCONNECTED';
     const claimState = isClaimed ? 'CLAIMED' : 'WAITING_FOR_CLAIM';
-    const tunnelState = (running && isClaimed) ? 'ONLINE' : 'NOT_ACTIVE';
+    const tunnelState = (running && isClaimed && hasTunnel) ? 'ONLINE' : 'NOT_ACTIVE';
 
     return {
       isInstalled: true,
@@ -332,10 +443,10 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
       claim: claimState,
       tunnel: tunnelState,
       status: stateStatus,
-      claimUrl: data.claimUrl,
-      claimCode: data.claimCode,
-      tunnelAddress: data.tunnelAddress,
-      tunnelPort: data.tunnelPort,
+      claimUrl,
+      claimCode,
+      tunnelAddress: isClaimed ? tunnelAddress : undefined,
+      tunnelPort: isClaimed ? tunnelPort : undefined,
       tunnelType: data.tunnelType || 'minecraft_java',
       lastCheckedAt: new Date().toISOString(),
       agentVersion: data.agentVersion || '1.0.10',
@@ -362,7 +473,7 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
 }
 
 /**
- * Spawns a playit background agent daemon with full retry management and capturing.
+ * Spawns a playit background agent daemon with clean socket handling.
  */
 function spawnAgentProcess(
   id: string,
@@ -375,6 +486,13 @@ function spawnAgentProcess(
   const binPath = path.join(process.cwd(), 'bin', 'playit');
   
   try {
+    // Clean socket file if orphaned
+    if (fs.existsSync(socketPath)) {
+      try {
+        fs.unlinkSync(socketPath);
+      } catch {}
+    }
+
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
     logStream.write(`\n[PLAYIT] Spawning agent process on ${new Date().toISOString()}\n`);
 
@@ -472,7 +590,6 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
         socketFile,
         logFile,
         (meta) => {
-          // Update credentials in the state file
           try {
             if (fs.existsSync(configFile)) {
               const fileData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
@@ -488,15 +605,13 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
           activePlayitProcesses.delete(serverId);
           appendConsoleLog(serverId, `[Playit/Agent]: Process exited with code ${code}.`);
 
-          // Exponential recovery if it died unexpectedly
           if (enable && retries < 5) {
             const backoff = Math.min(5000 * Math.pow(2, retries), 30000);
             appendConsoleLog(serverId, `[Playit/Agent]: Reconnecting in ${backoff / 1000}s...`);
-            const timer = setTimeout(() => {
+            setTimeout(() => {
               startAgent(retries + 1);
             }, backoff);
             
-            // Log that we are scheduled to restart
             try {
               if (fs.existsSync(configFile)) {
                 const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
@@ -524,7 +639,6 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
           lastStarted: Date.now()
         });
 
-        // Sync PID
         try {
           if (fs.existsSync(configFile)) {
             const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
@@ -553,6 +667,31 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
       }
     } catch {}
   }
+
+  return getPlayitStatus(serverId);
+}
+
+export async function provisionPlayitSecret(serverId: string, secretKey: string): Promise<PlayitStatus> {
+  const playitDir = getPlayitDir(serverId);
+  const secretFile = path.join(playitDir, 'playit.toml');
+  const socketFile = path.join(playitDir, 'playit.sock');
+
+  const trimmedSecret = secretKey.trim();
+  if (!trimmedSecret) throw new Error('Secret key cannot be empty.');
+
+  // Write secret key to playit.toml
+  fs.writeFileSync(secretFile, `secret_key = "${trimmedSecret}"\n`, 'utf-8');
+
+  // Attempt set_secret over IPC
+  if (fs.existsSync(socketFile)) {
+    try {
+      await queryIpc(socketFile, { type: 'set_secret', secret: trimmedSecret }, 2000);
+    } catch {}
+  }
+
+  // Restart daemon to apply secret
+  await togglePlayitAgent(serverId, false);
+  await togglePlayitAgent(serverId, true);
 
   return getPlayitStatus(serverId);
 }
@@ -613,21 +752,10 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
   const active = activePlayitProcesses.get(`node_${nodeId}`);
   const running = active ? isPidRunning(active.pid) : !!node.playitAgentRunning;
 
-  // Read active logs for real-time claim metadata if run locally
   let claimUrl = node.playitClaimUrl;
   let claimCode = node.playitClaimCode;
+  let waitingForSecretNode = false;
 
-  if (nodeId.startsWith('node_p6')) {
-    if (!claimUrl) claimUrl = 'https://playit.gg/claim/phase6test';
-    if (!claimCode) claimCode = 'PHASE6TEST';
-    if (node.playitAgentInstalled !== false && !node.playitSftpAddress) {
-      node.playitSftpAddress = 'sftp-p6.auto.playit.gg';
-    }
-    if (!node.playitSftpPort) node.playitSftpPort = 2022;
-    if (node.playitAgentInstalled === undefined) node.playitAgentInstalled = true;
-    if (node.playitAgentRunning === undefined) node.playitAgentRunning = true;
-  }
-  
   const logFile = path.join(playitDir, 'playit.log');
   if (fs.existsSync(logFile)) {
     try {
@@ -635,9 +763,9 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
       const meta = parseLogsForMetadata(logs);
       if (meta.claimUrl) claimUrl = meta.claimUrl;
       if (meta.claimCode) claimCode = meta.claimCode;
+      if (meta.waitingForSecret) waitingForSecretNode = true;
       
-      // Auto-extract tunnel address if connected
-      if (meta.tunnelAddress) {
+      if (isClaimed && meta.tunnelAddress) {
         node.playitSftpAddress = meta.tunnelAddress;
         node.playitSftpPort = meta.tunnelPort;
       }
@@ -652,7 +780,7 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
   }
 
   const isStarting = active ? (Date.now() - active.lastStarted < 4000) : false;
-  const hasTunnel = !!node.playitSftpAddress && node.playitSftpAddress !== 'sftp-tunnel.playit.gg';
+  const hasTunnel = isClaimed && !!node.playitSftpAddress && node.playitSftpAddress !== 'sftp-tunnel.playit.gg';
   const hasError = binCheck.runnable === false;
 
   const stateStatus = resolveLifecycleState(
@@ -663,7 +791,8 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
     hasTunnel,
     hasError,
     !!node.playitAgentInstalled,
-    isStarting
+    isStarting,
+    waitingForSecretNode
   );
 
   return {
@@ -673,8 +802,8 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
     status: stateStatus,
     claimUrl,
     claimCode,
-    sftpTunnelAddress: node.playitSftpAddress || (isClaimed ? 'sftp-tunnel.playit.gg' : undefined),
-    sftpTunnelPort: node.playitSftpPort || 2022,
+    sftpTunnelAddress: isClaimed ? node.playitSftpAddress : undefined,
+    sftpTunnelPort: isClaimed ? (node.playitSftpPort || 2022) : undefined,
     lastCheckedAt: new Date().toISOString(),
     agentVersion: '1.0.10',
     pid: active?.pid,
@@ -700,7 +829,6 @@ export async function installNodePlayitAgent(nodeId: string): Promise<NodePlayit
   node.playitAgentRunning = true;
   saveDbSync();
 
-  // Trigger startup on local node
   await toggleNodePlayitAgent(nodeId, true);
   return getNodePlayitStatus(nodeId);
 }
@@ -733,7 +861,6 @@ export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Pr
         socketFile,
         logFile,
         (meta) => {
-          // Parse and sync to node in DB
           if (meta.claimUrl) node.playitClaimUrl = meta.claimUrl;
           if (meta.claimCode) node.playitClaimCode = meta.claimCode;
           if (meta.tunnelAddress) {
@@ -773,6 +900,28 @@ export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Pr
       activePlayitProcesses.delete(activeKey);
     }
   }
+
+  return getNodePlayitStatus(nodeId);
+}
+
+export async function provisionNodePlayitSecret(nodeId: string, secretKey: string): Promise<NodePlayitStatus> {
+  const playitDir = getNodePlayitDir(nodeId);
+  const secretFile = path.join(playitDir, 'playit.toml');
+  const socketFile = path.join(playitDir, 'playit.sock');
+
+  const trimmedSecret = secretKey.trim();
+  if (!trimmedSecret) throw new Error('Secret key cannot be empty.');
+
+  fs.writeFileSync(secretFile, `secret_key = "${trimmedSecret}"\n`, 'utf-8');
+
+  if (fs.existsSync(socketFile)) {
+    try {
+      await queryIpc(socketFile, { type: 'set_secret', secret: trimmedSecret }, 2000);
+    } catch {}
+  }
+
+  await toggleNodePlayitAgent(nodeId, false);
+  await toggleNodePlayitAgent(nodeId, true);
 
   return getNodePlayitStatus(nodeId);
 }

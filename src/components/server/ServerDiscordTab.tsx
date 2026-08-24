@@ -30,6 +30,14 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // Bot Status State
+  const [botGatewayStatus, setBotGatewayStatus] = useState<{
+    status: string;
+    botUsername: string | null;
+    configured: boolean;
+    enabled: boolean;
+  } | null>(null);
+
   // Form State
   const [enabled, setEnabled] = useState(true);
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -65,16 +73,24 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
   const fetchLinkSettings = async () => {
     try {
       setLoading(true);
-      const res = await apiRequest<ServerDiscordLink>(`/discord/server/${serverId}`);
-      if (res.success && res.data) {
-        setEnabled(res.data.enabled);
-        setWebhookUrl(res.data.webhookUrl || '');
-        setChannelName(res.data.channelName || '#server-alerts');
-        setEnabledEvents(res.data.enabledEvents || []);
-        setMentionRoleId(res.data.mentionRoleId || '');
-        setMentionUserId(res.data.mentionUserId || '');
-        setCooldownSeconds(res.data.cooldownSeconds || 60);
-        setAllowServerCommands(res.data.allowServerCommands ?? true);
+      const [linkRes, botStatusRes] = await Promise.all([
+        apiRequest<ServerDiscordLink>(`/discord/server/${serverId}`),
+        apiRequest<any>('/discord/bot-status')
+      ]);
+
+      if (linkRes.success && linkRes.data) {
+        setEnabled(linkRes.data.enabled);
+        setWebhookUrl(linkRes.data.webhookUrl || '');
+        setChannelName(linkRes.data.channelName || '#server-alerts');
+        setEnabledEvents(linkRes.data.enabledEvents || []);
+        setMentionRoleId(linkRes.data.mentionRoleId || '');
+        setMentionUserId(linkRes.data.mentionUserId || '');
+        setCooldownSeconds(linkRes.data.cooldownSeconds || 60);
+        setAllowServerCommands(linkRes.data.allowServerCommands ?? true);
+      }
+
+      if (botStatusRes.success && botStatusRes.data) {
+        setBotGatewayStatus(botStatusRes.data);
       }
     } catch (err) {
       console.error('Failed to fetch server discord link:', err);
@@ -181,13 +197,42 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
       {/* Header Banner */}
       <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-indigo-400" /> Discord Integration & Alerts
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-              Bot Active
-            </span>
+
+            {/* Webhook Status Badge */}
+            {!enabled ? (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 border border-zinc-700 text-zinc-400">
+                ○ Webhook Disabled
+              </span>
+            ) : !webhookUrl ? (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                ⚠️ Webhook Unconfigured
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                ● Webhook Active
+              </span>
+            )}
+
+            {/* Global Bot Status Badge */}
+            {botGatewayStatus && (
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                botGatewayStatus.status === 'CONNECTED'
+                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                  : botGatewayStatus.status === 'CONNECTING'
+                  ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                  : botGatewayStatus.status === 'CONFIGURED'
+                  ? 'bg-slate-500/10 border border-slate-500/20 text-slate-300'
+                  : botGatewayStatus.status === 'NOT_CONFIGURED'
+                  ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+                  : 'bg-zinc-800 border border-zinc-700 text-zinc-400'
+              }`}>
+                {botGatewayStatus.status === 'CONNECTED' ? `● Bot: ${botGatewayStatus.botUsername || 'Online'}` : `○ Bot: ${botGatewayStatus.status}`}
+              </span>
+            )}
           </div>
           <p className="text-xs text-zinc-400 mt-1">
             Link server alerts to Discord channels via Webhooks and grant command permissions to authorized users.

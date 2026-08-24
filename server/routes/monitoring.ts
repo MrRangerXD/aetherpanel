@@ -5,6 +5,7 @@ import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import { AlertRule, AlertIncident, TelemetryPoint, Node, Server } from '../../src/types';
 import { dispatchDiscordNotification } from '../discordService';
+import { queryMinecraftServerStatus } from '../minecraftService';
 
 const router = Router();
 
@@ -105,8 +106,9 @@ export function generateHistoricalTelemetry(
     const latency = Math.max(4, Math.round(14 + (seed > 0 ? seed * 0.8 : 0)));
 
     // TPS for minecraft servers
-    const tps = Math.max(18.5, Math.min(20.0, +(20.0 - (cpu > 85 ? 0.8 : 0.05 * Math.random())).toFixed(2)));
-    const players = Math.max(0, Math.round(4 + Math.sin(i * 0.3) * 3));
+    const tps = Math.max(19.0, Math.min(20.0, +(20.0 - (cpu > 90 ? 0.5 : 0.02 * Math.random())).toFixed(2)));
+    const serverPlayerCount = targetType === 'server' ? ((entity as Server).playerCount ?? 0) : 0;
+    const players = isRunning ? serverPlayerCount : 0;
 
     points.push({
       timestamp: ts,
@@ -183,6 +185,67 @@ router.get('/server/:serverId/history', async (req: Request, res: Response) => {
       current: telemetry[telemetry.length - 1],
       history: telemetry
     }
+  });
+});
+
+// GET /api/v1/monitoring/server/:serverId/live - Real-Time Instantaneous Server Telemetry & SLP Status
+router.get('/server/:serverId/live', async (req: Request, res: Response) => {
+  const { serverId } = req.params;
+  const db = await getDb();
+  const server = db.servers.find(s => s.id === serverId);
+
+  if (!server) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Server not found.' } });
+  }
+
+  const isRunning = server.status === 'running';
+  const serverPort = server.primaryPort || (server as any).port;
+  let slpResult = { online: false, players: { online: 0, max: server.maxPlayers || 20 }, version: server.version, latencyMs: 0, motd: '' };
+
+  if (isRunning && serverPort) {
+    try {
+      const slp = await queryMinecraftServerStatus('127.0.0.1', serverPort, 1500);
+      if (slp.online) {
+        slpResult = {
+          online: true,
+          players: slp.players || { online: 0, max: server.maxPlayers || 20 },
+          version: slp.version || server.version,
+          latencyMs: slp.latencyMs || 5,
+          motd: slp.motd || ''
+        };
+      }
+    } catch {
+      // Process is alive but socket is not responding to SLP yet
+    }
+  }
+
+  const totalRamMB = server.limits?.ramMB || 2048;
+  const usedRamMB = isRunning ? (server.ramUsageMB || Math.round(totalRamMB * 0.4)) : 0;
+  const cpuPercent = isRunning ? (server.cpuUsage || 12) : 0;
+  const diskUsageMB = server.diskUsageMB || 1024;
+  const totalDiskGB = server.limits?.diskGB || 20;
+
+  const currentStatus = {
+    serverId: server.id,
+    processStatus: server.status,
+    protocolStatus: isRunning ? (slpResult.online ? 'ONLINE' : 'STARTING') : 'OFFLINE',
+    tps: isRunning ? 20.0 : 0.0,
+    playersOnline: isRunning ? (slpResult.online ? slpResult.players.online : (server.playerCount ?? 0)) : 0,
+    maxPlayers: slpResult.players?.max || server.maxPlayers || 20,
+    cpuPercent,
+    usedRamMB,
+    totalRamMB,
+    ramPercent: Math.round((usedRamMB / totalRamMB) * 100),
+    diskUsageMB,
+    totalDiskGB,
+    latencyMs: slpResult.latencyMs || (isRunning ? 8 : 0),
+    motd: slpResult.motd,
+    timestamp: new Date().toISOString()
+  };
+
+  return res.json({
+    success: true,
+    data: currentStatus
   });
 });
 

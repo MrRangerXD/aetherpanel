@@ -53,6 +53,7 @@ import { AdminCoupons } from './pages/admin/AdminCoupons';
 import { AdminAnnouncements } from './pages/admin/AdminAnnouncements';
 import { AdminSupport } from './pages/admin/AdminSupport';
 import { AdminAuditLogs } from './pages/admin/AdminAuditLogs';
+import { AdminApiKeys } from './pages/admin/AdminApiKeys';
 import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminAds } from './pages/admin/AdminAds';
 import { AdminRewards } from './pages/admin/AdminRewards';
@@ -349,6 +350,7 @@ function AppContent() {
           {currentPage === 'admin-announcements' && <AdminAnnouncements />}
           {currentPage === 'admin-support' && <AdminSupport />}
           {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
+          {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
           {currentPage === 'admin-legal' && <AdminLegal />}
           {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
           {currentPage === 'admin-settings' && <AdminSettings />}

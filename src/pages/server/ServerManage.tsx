@@ -67,11 +67,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  // Console state
-  const [logs, setLogs] = useState<string[]>([]);
-  const [command, setCommand] = useState('');
-  const consoleEndRef = useRef<HTMLDivElement>(null);
-
   // Files state
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<ServerFile[]>([]);
@@ -316,7 +311,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       const res = await apiRequest(`/servers/${serverId}/install-dependencies`, { method: 'POST' });
       if (res.success) {
         setDepsInstallResult({ success: true, message: 'Dependencies installed successfully!' });
-        fetchConsoleLogs();
       } else {
         setDepsInstallResult({ success: false, message: res.error?.message || 'Failed to install dependencies' });
       }
@@ -404,14 +398,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       }));
     }
     setShowFileBrowserModal(false);
-  };
-
-  // Fetch Console Logs
-  const fetchConsoleLogs = async () => {
-    const res = await apiRequest(`/servers/${serverId}/console`);
-    if (res.success && res.data?.logs) {
-      setLogs(res.data.logs);
-    }
   };
 
   // Fetch Files
@@ -673,58 +659,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   useEffect(() => {
     if (!server) return;
-    if (activeTab === 'console') {
-      fetchConsoleLogs();
-
-      // Establish Real-time WebSocket connection for streaming console
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const token = localStorage.getItem('aether_token') || '';
-      const wsUrl = `${protocol}//${window.location.host}/ws/console/${serverId}?token=${encodeURIComponent(token)}`;
-      let ws: WebSocket | null = null;
-      let pollInterval: NodeJS.Timeout | null = null;
-
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          console.log('[AetherConsole] Connected to live WebSocket stream');
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'backlog' && Array.isArray(data.logs)) {
-              setLogs(data.logs);
-            } else if (data.type === 'log' && typeof data.line === 'string') {
-              setLogs((prev) => [...prev, data.line]);
-            }
-          } catch {}
-        };
-
-        ws.onerror = () => {
-          // Fallback to polling if WebSocket fails
-          if (!pollInterval) {
-            pollInterval = setInterval(fetchConsoleLogs, 3000);
-          }
-        };
-
-        ws.onclose = () => {
-          if (!pollInterval) {
-            pollInterval = setInterval(fetchConsoleLogs, 3000);
-          }
-        };
-      } catch (err) {
-        pollInterval = setInterval(fetchConsoleLogs, 3000);
-      }
-
-      return () => {
-        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-          ws.close();
-        }
-        if (pollInterval) {
-          clearInterval(pollInterval);
-        }
-      };
-    } else if (activeTab === 'files') {
+    if (activeTab === 'files') {
       fetchFiles(currentPath);
     } else if (activeTab === 'plugins') {
       fetchPlugins();
@@ -744,10 +679,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     }
   }, [activeTab, serverId, currentPath]);
 
-  useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
-
   // Power Actions
   const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
     const res = await apiRequest(`/servers/${serverId}/power`, {
@@ -758,24 +689,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       runPreflightCheck();
     }
     fetchServerDetails();
-    fetchConsoleLogs();
-  };
-
-  // Command Send
-  const handleSendCommand = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!command.trim()) return;
-
-    const cmdToSend = command.trim();
-    setCommand('');
-    setLogs(prev => [...prev, `[USER COMMAND]: ${cmdToSend}`]);
-
-    await apiRequest(`/servers/${serverId}/command`, {
-      method: 'POST',
-      body: JSON.stringify({ command: cmdToSend })
-    });
-
-    setTimeout(fetchConsoleLogs, 800);
   };
 
   // File Upload Handling
@@ -1054,7 +967,6 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     setIsReinstalling(false);
     setShowReinstallModal(false);
     fetchServerDetails();
-    fetchConsoleLogs();
   };
 
   // Delete Server

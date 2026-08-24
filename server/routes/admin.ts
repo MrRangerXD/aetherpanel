@@ -6,7 +6,7 @@ import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } fro
 import { User, Product, Plan, Node, Allocation, Coupon, Announcement, SystemSettings } from '../../src/types';
 import { ensureLocalNode } from '../nodeAgent';
 import {
-  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent
+  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent, provisionNodePlayitSecret
 } from '../playitService';
 import { resolveNodeSftpMode } from '../sftpResolver';
 import { runNetworkDiagnostics } from '../network/networkDetection';
@@ -712,6 +712,21 @@ router.post('/nodes/:id/playit/toggle', async (req: AuthenticatedRequest, res: R
     res.json({ success: true, message: `Node Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/nodes/:id/playit/secret - Provision node-level Playit secret key
+router.post('/nodes/:id/playit/secret', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { secretKey } = req.body;
+    if (!secretKey || !secretKey.trim()) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_SECRET', message: 'Secret key is required' } });
+      return;
+    }
+    const status = await provisionNodePlayitSecret(req.params.id, secretKey);
+    res.json({ success: true, message: 'Node Playit secret provisioned successfully.', data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_SECRET_FAILED', message: err.message } });
   }
 });
 

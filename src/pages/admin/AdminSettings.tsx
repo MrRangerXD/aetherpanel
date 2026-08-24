@@ -1458,9 +1458,11 @@ export const AdminSettings: React.FC = () => {
                         <div>
                           <div className="text-[10px] font-mono uppercase text-zinc-500">Claiming Status</div>
                           <div className="text-xs font-bold text-white mt-1">
-                            {playitAgentStatus?.status === 'connected' ? (
+                            {String(playitAgentStatus?.status).toUpperCase() === 'CONNECTED' ? (
                               <span className="text-emerald-400 font-bold uppercase tracking-wide">CLAIMED & ACTIVE</span>
-                            ) : playitAgentStatus?.status === 'claiming' || playitAgentStatus?.claimUrl ? (
+                            ) : String(playitAgentStatus?.status).toUpperCase() === 'WAITING_FOR_CONFIGURATION' ? (
+                              <span className="text-amber-400 font-bold uppercase tracking-wide animate-pulse">WAITING FOR CONFIGURATION</span>
+                            ) : String(playitAgentStatus?.status).toUpperCase() === 'CLAIMING' || playitAgentStatus?.claimUrl ? (
                               <span className="text-amber-400 font-bold uppercase tracking-wide animate-pulse">WAITING FOR CLAIM</span>
                             ) : (
                               <span className="text-zinc-500 font-bold uppercase tracking-wide">UNCONFIGURED</span>

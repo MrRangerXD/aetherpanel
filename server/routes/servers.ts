@@ -13,12 +13,12 @@ import {
   readServerFile, writeServerFile, deleteServerItem, deleteServerItems, createServerDirectory,
   renameServerItem, moveServerItems, copyServerItems, compressServerItem, compressServerItems, decompressServerItem,
   readServerEnv, writeServerEnv, recordServerActivity,
-  listMinecraftPlugins, toggleMinecraftPlugin, getServerDir,
+  listMinecraftPlugins, toggleMinecraftPlugin, getServerDir, safePath,
   installServerDependencies, clearConsoleBuffer
 } from '../provider';
 import { closeServerConsoleClients } from '../consoleWs';
 import {
-  getPlayitStatus, installPlayitAgent, togglePlayitAgent, uninstallPlayitAgent
+  getPlayitStatus, installPlayitAgent, togglePlayitAgent, provisionPlayitSecret, uninstallPlayitAgent
 } from '../playitService';
 import { searchRealPlugins, downloadPluginJar } from '../pluginProviders';
 import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProcess, getBackupFilePath } from '../backups';
@@ -35,23 +35,23 @@ const router = Router();
 // Multer storage for server file upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const serverId = req.params.id;
-    const relPath = (req.query.path as string) || (req.body.path as string) || '';
-    const baseDir = getServerDir(serverId);
-    const targetDir = path.join(baseDir, relPath);
+    try {
+      const serverId = req.params.id;
+      const relPath = (req.query.path as string) || (req.body.path as string) || '';
+      const targetDir = safePath(serverId, relPath);
 
-    if (!targetDir.startsWith(baseDir)) {
-      return cb(new Error('Access denied: Outside server directory'), '');
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      cb(null, targetDir);
+    } catch (err: any) {
+      cb(new Error(`Access denied: ${err.message}`), '');
     }
-
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-
-    cb(null, targetDir);
   },
   filename: (req, file, cb) => {
-    cb(null, file.originalname);
+    const safeName = path.basename(file.originalname).replace(/[\/\\]/g, '_');
+    cb(null, safeName);
   }
 });
 
@@ -273,7 +273,7 @@ router.get('/:id/files', authMiddleware, requireApiKeyScope('files:read'), async
   const relPath = (req.query.path as string) || '';
   try {
     const files = listServerFiles(req.params.id, relPath);
-    res.json({ success: true, data: { path: relPath, files } });
+    res.json({ success: true, data: { path: relPath, files }, files });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'FILE_ERROR', message: err.message } });
   }
@@ -509,14 +509,15 @@ router.get('/:id/files/download', authMiddleware, async (req: AuthenticatedReque
   const relPath = req.query.path as string;
   if (!relPath) return res.status(400).json({ success: false, error: { code: 'PATH_REQUIRED', message: 'Path parameter is required.' } });
 
-  const baseDir = getServerDir(req.params.id);
-  const targetPath = path.join(baseDir, relPath);
-
-  if (!targetPath.startsWith(baseDir) || !fs.existsSync(targetPath)) {
-    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'File not found.' } });
+  try {
+    const targetPath = safePath(req.params.id, relPath);
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'File not found.' } });
+    }
+    res.download(targetPath, path.basename(targetPath));
+  } catch (err: any) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: err.message } });
   }
-
-  res.download(targetPath, path.basename(targetPath));
 });
 
 // POST /api/v1/servers/:id/files/compress - Create ZIP archive (single or multiple items)
@@ -1237,6 +1238,25 @@ router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedReque
     res.json({ success: true, message: `Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/playit/secret - Provision Playit secret key
+router.post('/:id/playit/secret', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { secretKey } = req.body;
+  if (!secretKey || !secretKey.trim()) {
+    res.status(400).json({ success: false, error: { code: 'INVALID_SECRET', message: 'Secret key is required' } });
+    return;
+  }
+
+  try {
+    const status = await provisionPlayitSecret(req.params.id, secretKey);
+    res.json({ success: true, message: 'Playit secret provisioned successfully.', data: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'PLAYIT_SECRET_FAILED', message: err.message } });
   }
 });
 

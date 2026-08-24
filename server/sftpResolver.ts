@@ -35,18 +35,29 @@ export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutio
   const netDiag = await runNetworkDiagnostics(sftpPort);
   const playitStatus = await getNodePlayitStatus(nodeId);
 
-  const statusLower = String(playitStatus.status).toLowerCase();
+  const statusUpper = String(playitStatus.status).toUpperCase();
 
   const playitInstalled = !!playitStatus.isInstalled;
-  const playitClaimed = statusLower === 'connected' || statusLower === 'claiming' || statusLower === 'claimed' || statusLower === 'connecting' || statusLower === 'claim_required' || (!!playitStatus.sftpTunnelAddress && playitStatus.sftpTunnelAddress !== 'sftp-tunnel.playit.gg');
-  const playitConnected = statusLower === 'connected';
+  const playitClaimed = statusUpper === 'CONNECTED' || statusUpper === 'CLAIMED';
+  const playitConnected = statusUpper === 'CONNECTED' && !!playitStatus.sftpTunnelAddress && playitStatus.sftpTunnelAddress.endsWith('.playit.gg');
 
   // SCENARIO A: Direct connection is possible (public IP exists and sftp port is reachable externally)
-  if (netDiag.publicIp && !netDiag.isBehindNat && netDiag.isPublicIpReachable && sftpDaemonOnline) {
+  let directHost = '';
+  let directReachable = false;
+
+  if (node?.publicIpv4 && isValidIPv4(node.publicIpv4)) {
+    directHost = node.publicIpv4.trim();
+    directReachable = sftpDaemonOnline && (await checkPortReachable(directHost, sftpPort, 1000));
+  } else if (netDiag.publicIp) {
+    directHost = netDiag.publicIp;
+    directReachable = sftpDaemonOnline && (netDiag.isPublicIpReachable || (await checkPortReachable(directHost, sftpPort, 1000)));
+  }
+
+  if (directHost && directReachable) {
     return {
       mode: 'DIRECT',
       status: 'online',
-      host: netDiag.publicIp,
+      host: directHost,
       port: sftpPort,
       source: 'public_ipv4',
       reachable: true,
@@ -58,41 +69,49 @@ export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutio
     };
   }
 
-  // SCENARIO B: Configured FQDN exists and is valid
+  // SCENARIO B: Configured FQDN exists and is valid and reachable
   if (node?.sftpFqdn && isValidFQDN(node.sftpFqdn) && sftpDaemonOnline) {
-    return {
-      mode: 'DIRECT',
-      status: 'online',
-      host: node.sftpFqdn.trim(),
-      port: sftpPort,
-      source: 'fqdn',
-      reachable: true,
-      agent: {
-        installed: playitInstalled,
-        claimed: playitClaimed,
-        connected: playitConnected
-      }
-    };
+    const fqdnHost = node.sftpFqdn.trim();
+    const fqdnReachable = await checkPortReachable(fqdnHost, sftpPort, 1000);
+    if (fqdnReachable) {
+      return {
+        mode: 'DIRECT',
+        status: 'online',
+        host: fqdnHost,
+        port: sftpPort,
+        source: 'fqdn',
+        reachable: true,
+        agent: {
+          installed: playitInstalled,
+          claimed: playitClaimed,
+          connected: playitConnected
+        }
+      };
+    }
   }
 
   if (node?.fqdn && isValidFQDN(node.fqdn) && sftpDaemonOnline) {
-    return {
-      mode: 'DIRECT',
-      status: 'online',
-      host: node.fqdn.trim(),
-      port: sftpPort,
-      source: 'fqdn',
-      reachable: true,
-      agent: {
-        installed: playitInstalled,
-        claimed: playitClaimed,
-        connected: playitConnected
-      }
-    };
+    const fqdnHost = node.fqdn.trim();
+    const fqdnReachable = await checkPortReachable(fqdnHost, sftpPort, 1000);
+    if (fqdnReachable) {
+      return {
+        mode: 'DIRECT',
+        status: 'online',
+        host: fqdnHost,
+        port: sftpPort,
+        source: 'fqdn',
+        reachable: true,
+        agent: {
+          installed: playitInstalled,
+          claimed: playitClaimed,
+          connected: playitConnected
+        }
+      };
+    }
   }
 
-  // SCENARIO C: Playit fallback is active and fully configured
-  if (playitInstalled && playitClaimed && playitConnected && sftpDaemonOnline) {
+  // SCENARIO C: Playit fallback is active and fully connected
+  if (playitInstalled && playitConnected && sftpDaemonOnline) {
     const playitHost = playitStatus.sftpTunnelAddress || 'sftp-tunnel.playit.gg';
     const playitPort = playitStatus.sftpTunnelPort || sftpPort;
 

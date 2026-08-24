@@ -175,7 +175,7 @@ export interface ServerStartupConfig {
   pid?: number;
 
   // Minecraft Runtime
-  javaVersion?: string;
+  javaVersion?: string | number;
   jvmFlags?: string;
   xmsMB?: number;
   xmxMB?: number;
@@ -234,6 +234,8 @@ export interface Server {
   ramUsageMB: number;
   diskUsageMB: number;
   uptimeSeconds: number;
+  playerCount?: number;
+  maxPlayers?: number;
 }
 
 export interface Location {
@@ -900,16 +902,44 @@ export interface ApiKey {
   installationId?: string;
   userId: string;
   userEmail: string;
+  userName?: string;
   name: string;
+  description?: string;
   keyPrefix: string;
   keyHash?: string;
   role: UserRole;
   allowedIps?: string[];
-  expiresAt?: string;
-  status?: 'active' | 'revoked';
-  scopes?: string[];
-  lastUsedAt?: string;
+  expiresAt?: string | null;
+  status: 'active' | 'revoked' | 'expired';
+  scopes: string[];
+  lastUsedAt?: string | null;
+  lastUsedIp?: string | null;
+  requestCount?: number;
   createdAt: string;
+  revokedAt?: string | null;
+  rotatedAt?: string | null;
+}
+
+export interface ApiAuditLog {
+  id: string;
+  apiKeyId: string;
+  userId: string;
+  userEmail?: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  ipAddress: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+export interface ApiKeyStats {
+  totalKeys: number;
+  activeKeys: number;
+  revokedKeys: number;
+  expiredKeys: number;
+  recentlyUsed24h: number;
+  lastActivityAt: string | null;
 }
 
 export interface WebhookSubscription {

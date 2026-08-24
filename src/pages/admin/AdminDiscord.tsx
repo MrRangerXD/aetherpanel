@@ -58,6 +58,15 @@ export const AdminDiscord: React.FC = () => {
     'RESOURCE_WARNING'
   ]);
   const [botStatus, setBotStatus] = useState<'online' | 'offline' | 'configured' | 'unconfigured'>('online');
+  const [restartingBot, setRestartingBot] = useState(false);
+  const [botGatewayDetails, setBotGatewayDetails] = useState<{
+    status: string;
+    botUsername: string | null;
+    guildCount: number;
+    lastConnected: string | null;
+    lastHeartbeat: string | null;
+    lastError: string | null;
+  } | null>(null);
 
   // Acceptance Tests State
   const [runningTests, setRunningTests] = useState(false);
@@ -80,9 +89,10 @@ export const AdminDiscord: React.FC = () => {
   const fetchSettingsAndLogs = async () => {
     try {
       setLoading(true);
-      const [settingsRes, logsRes] = await Promise.all([
+      const [settingsRes, logsRes, statusRes] = await Promise.all([
         apiRequest<DiscordBotSettings>('/discord/admin/settings'),
-        apiRequest<DiscordAuditLog[]>('/discord/admin/audit-logs')
+        apiRequest<DiscordAuditLog[]>('/discord/admin/audit-logs'),
+        apiRequest<any>('/discord/bot-status')
       ]);
 
       if (settingsRes.success && settingsRes.data) {
@@ -101,10 +111,28 @@ export const AdminDiscord: React.FC = () => {
       if (logsRes.success && logsRes.data) {
         setAuditLogs(logsRes.data);
       }
+
+      if (statusRes.success && statusRes.data) {
+        setBotGatewayDetails(statusRes.data);
+      }
     } catch (err) {
       console.error('Failed to load admin discord data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRestartBotGateway = async () => {
+    try {
+      setRestartingBot(true);
+      const res = await apiRequest<any>('/discord/admin/bot-restart', { method: 'POST' });
+      if (res.data) setBotGatewayDetails(res.data);
+      setTestNotice({ success: res.success, message: `Gateway restart result: ${res.message}` });
+      fetchSettingsAndLogs();
+    } catch (err: any) {
+      setTestNotice({ success: false, message: `Gateway restart failed: ${err.message}` });
+    } finally {
+      setRestartingBot(false);
     }
   };
 
@@ -239,15 +267,27 @@ export const AdminDiscord: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            onClick={handleRestartBotGateway}
+            disabled={restartingBot}
+            className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-1.5"
+          >
+            {restartingBot ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />}
+            <span>Restart Gateway</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleTestBotConnection}
             disabled={testingBot}
             className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-1.5"
           >
             {testingBot ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5 text-indigo-400" />}
-            <span>Ping Gateway</span>
+            <span>Ping Webhook</span>
           </button>
 
           <button
+            type="button"
             onClick={() => handleSaveSettings()}
             disabled={saving}
             className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-1.5"
@@ -309,6 +349,44 @@ export const AdminDiscord: React.FC = () => {
       {/* TAB 1: CONFIGURATION */}
       {activeTab === 'config' && (
         <div className="space-y-6">
+          {/* Bot Gateway Status Panel */}
+          {botGatewayDetails && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Gateway Status</span>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${
+                    botGatewayDetails.status === 'CONNECTED' ? 'bg-emerald-400 animate-pulse' :
+                    botGatewayDetails.status === 'CONNECTING' ? 'bg-blue-400 animate-spin' :
+                    botGatewayDetails.status === 'CONFIGURED' ? 'bg-slate-400' :
+                    botGatewayDetails.status === 'NOT_CONFIGURED' ? 'bg-amber-400' : 'bg-red-400'
+                  }`} />
+                  <span className="text-sm font-bold text-white uppercase font-mono">{botGatewayDetails.status}</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Bot Identity</span>
+                <div className="text-sm font-bold text-indigo-300 font-mono truncate">
+                  {botGatewayDetails.botUsername || (botToken ? 'Configured (Offline)' : 'Unconfigured')}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Connected Guilds</span>
+                <div className="text-sm font-bold text-white font-mono">
+                  {botGatewayDetails.guildCount} Discord Guild{botGatewayDetails.guildCount !== 1 ? 's' : ''}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Gateway Heartbeat</span>
+                <div className="text-xs font-semibold text-zinc-300 font-mono">
+                  {botGatewayDetails.lastHeartbeat ? new Date(botGatewayDetails.lastHeartbeat).toLocaleTimeString() : 'No Heartbeat'}
+                </div>
+              </div>
+            </div>
+          )}
           <form onSubmit={handleSaveSettings} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
               <div>

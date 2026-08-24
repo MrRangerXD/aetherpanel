@@ -79,7 +79,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   if (!token && req.headers['x-api-key']) {
     token = req.headers['x-api-key'] as string;
     isApiKey = true;
-  } else if (token && (token.startsWith('aeth_live_') || token.startsWith('aeth_sec_') || token.startsWith('aeth_'))) {
+  } else if (token && (token.startsWith('aep_live_') || token.startsWith('aep_sec_') || token.startsWith('aep_') || token.startsWith('aeth_live_') || token.startsWith('aeth_sec_') || token.startsWith('aeth_'))) {
     isApiKey = true;
   }
 
@@ -93,36 +93,49 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     
     const apiKey = db.apiKeys.find(k => k.keyHash === keyHash);
     if (!apiKey) {
-      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid API key.' } });
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid or unrecognized API key credentials.' } });
     }
+
+    // Check Revocation
     if (apiKey.status === 'revoked') {
-      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key revoked.' } });
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key has been revoked.' } });
     }
+
+    // Check Expiration
     if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
-      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key expired.' } });
+      apiKey.status = 'expired';
+      saveDbSync();
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'API key has expired.' } });
     }
+
+    // Check Owner User Account & Role Status
     const user = db.users.find(u => u.id === apiKey.userId && !u.isSuspended);
-    if (!user) {
-      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'User account suspended or not found.' } });
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Associated administrator account is suspended, demoted, or not found.' } });
     }
     
-    // Check rate limit
+    // Check Rate Limit
     if (!checkRateLimit(apiKey.id)) {
-      return res.status(429).json({ success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'API rate limit exceeded. Please try again later.' } });
+      return res.status(429).json({ success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'API rate limit exceeded. Maximum 60 requests per minute.' } });
     }
     
+    // Update usage metadata
     apiKey.lastUsedAt = new Date().toISOString();
+    apiKey.lastUsedIp = req.ip || req.socket.remoteAddress || 'unknown';
+    apiKey.requestCount = (apiKey.requestCount || 0) + 1;
     
-    // Log the API access
+    // Log API access safely (never log the key secret)
     if (!db.apiAuditLogs) db.apiAuditLogs = [];
     db.apiAuditLogs.unshift({
-      id: `apiaud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `apiaud_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
       apiKeyId: apiKey.id,
       userId: user.id,
-      endpoint: req.originalUrl,
+      userEmail: user.email,
+      endpoint: req.originalUrl || req.url,
       method: req.method,
-      statusCode: 200, // Will be inaccurate but sufficient for now unless we hook res.on('finish')
+      statusCode: 200,
       ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'] || 'API-Client',
       createdAt: new Date().toISOString()
     });
     if (db.apiAuditLogs.length > 1000) db.apiAuditLogs = db.apiAuditLogs.slice(0, 1000);
@@ -183,10 +196,25 @@ export function requireApiKeyScope(requiredScope: string) {
     if (!apiKey) return next();
 
     const scopes: string[] = apiKey.scopes || [];
-    const singularScope = requiredScope.replace('servers:', 'server:').replace('files:', 'file:').replace('backups:', 'backup:');
-    const pluralScope = requiredScope.replace('server:', 'servers:').replace('file:', 'files:').replace('backup:', 'backups:');
 
-    if (scopes.includes('*') || scopes.includes('admin') || scopes.includes(requiredScope) || scopes.includes(singularScope) || scopes.includes(pluralScope)) {
+    if (scopes.includes('*') || scopes.includes('admin') || scopes.includes('full')) {
+      return next();
+    }
+
+    if (scopes.includes(requiredScope)) {
+      return next();
+    }
+
+    const category = requiredScope.split(/[:.]/)[0];
+    if (scopes.includes(`${category}.*`) || scopes.includes(`${category}:*`) || scopes.includes(`${category}.manage`)) {
+      return next();
+    }
+
+    const altScope = requiredScope.includes('.') 
+      ? requiredScope.replace('.', ':') 
+      : requiredScope.replace(':', '.');
+
+    if (scopes.includes(altScope)) {
       return next();
     }
 
@@ -194,11 +222,13 @@ export function requireApiKeyScope(requiredScope: string) {
       success: false,
       error: {
         code: 'FORBIDDEN_SCOPE',
-        message: `API key lacks required scope '${requiredScope}'.`
+        message: `Your API key does not have the required scope '${requiredScope}'.`
       }
     });
   };
 }
+
+export const requireApiScope = requireApiKeyScope;
 
 export const requireAdmin = requireRole(['admin', 'super_admin']);
 
@@ -257,18 +287,4 @@ export async function createAuditLog(
     db.auditLogs = db.auditLogs.slice(0, 500);
   }
   saveDbSync();
-}
-
-
-export function requireApiScope(requiredScope: string) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const apiKey = (req as any).apiKey;
-    if (!apiKey) return next(); // Fallback if using standard session auth (which wouldn't have apiKey)
-    
-    const scopes = apiKey.scopes || [];
-    if (!scopes.includes(requiredScope) && !scopes.includes('*')) {
-      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: `Missing required scope: ${requiredScope}` } });
-    }
-    next();
-  }
 }

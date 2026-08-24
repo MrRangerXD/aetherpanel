@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Terminal as TerminalIcon,
   Send,
@@ -13,8 +13,10 @@ import {
   Wifi,
   WifiOff,
   AlertTriangle,
-  Clock,
-  Sparkles
+  Download,
+  Terminal,
+  Activity,
+  Layers
 } from 'lucide-react';
 import { Server } from '../../types';
 
@@ -24,21 +26,25 @@ interface ServerConsoleTabProps {
   onPowerAction?: (action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
 }
 
-// Simple ANSI & Minecraft formatting parser to clean or style terminal lines
+// ANSI escape sequence and terminal line classifier
 function parseTerminalLine(rawText: string) {
-  // Check for common log stream prefixes
-  const isStderr = rawText.includes('[STDERR]') || rawText.includes('ERROR') || rawText.includes('FATAL') || rawText.includes('Exception');
+  const isStderr =
+    rawText.includes('[STDERR]') ||
+    rawText.includes('ERROR') ||
+    rawText.includes('FATAL') ||
+    rawText.includes('Exception') ||
+    rawText.includes('Traceback (most recent call last)');
   const isWarn = rawText.includes('WARN') || rawText.includes('WARNING');
   const isSuccess = rawText.includes('SUCCESS') || rawText.includes('Done (') || rawText.includes('ready in');
   const isUserCmd = rawText.includes('[UserCommand]') || rawText.includes('[USER COMMAND]');
-  const isDaemon = rawText.includes('[AetherDaemon]');
+  const isDaemon = rawText.includes('[AetherDaemon]') || rawText.includes('[Server thread]');
 
-  // Clean ANSI escape sequences for text rendering
+  // Strip ANSI escape sequences for clean rendering
   const cleaned = rawText.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 
   let colorClass = 'text-zinc-300';
   if (isUserCmd) {
-    colorClass = 'text-cyan-400 font-semibold bg-cyan-950/20 px-1 py-0.5 rounded';
+    colorClass = 'text-cyan-400 font-semibold bg-cyan-950/30 px-1 py-0.5 rounded border border-cyan-800/40 inline-block';
   } else if (isStderr) {
     colorClass = 'text-rose-400 font-medium';
   } else if (isWarn) {
@@ -46,7 +52,7 @@ function parseTerminalLine(rawText: string) {
   } else if (isSuccess) {
     colorClass = 'text-emerald-400 font-medium';
   } else if (isDaemon) {
-    colorClass = 'text-violet-400 font-medium';
+    colorClass = 'text-violet-300 font-medium';
   }
 
   return { cleaned, colorClass, isStderr, isWarn, isSuccess, isUserCmd, isDaemon };
@@ -65,42 +71,73 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastAck, setLastAck] = useState<string | null>(null);
 
+  // References for isolated scroll container and realtime sockets
   const consoleContainerRef = useRef<HTMLDivElement>(null);
-  const consoleBottomRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollRef = useRef(true);
   const wsRef = useRef<WebSocket | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
 
-  const isMinecraft = /minecraft|paper|purpur|velocity|bungeecord|forge|fabric/i.test(server.software) || server.productId?.includes('minecraft');
+  const isMinecraft =
+    /minecraft|paper|purpur|velocity|bungeecord|forge|fabric|spigot|bedrock|pocketmine/i.test(server.software || '') ||
+    (server.productId || '').includes('minecraft');
+  
+  const isNode = /node|express|discord/i.test(server.software || '') || server.software === 'Node.js';
+  const isPython = /python|django|flask|fastapi/i.test(server.software || '') || server.software === 'Python';
+  const isBun = /bun/i.test(server.software || '') || server.software === 'Bun';
+
   const isRunning = server.status === 'running';
   const isStarting = server.status === 'starting';
   const isStopping = server.status === 'stopping';
 
-  // Quick Command Suggestions
+  // Quick Command Suggestions based on runtime
   const quickCommands = useMemo(() => {
     if (isMinecraft) {
       return [
         { label: 'list', cmd: 'list', desc: 'List online players' },
-        { label: 'tps', cmd: 'tps', desc: 'Check TPS & tick health' },
-        { label: 'help', cmd: 'help', desc: 'List commands' },
+        { label: 'tps', cmd: 'tps', desc: 'Check TPS & tick performance' },
+        { label: 'help', cmd: 'help', desc: 'List server commands' },
         { label: 'save-all', cmd: 'save-all', desc: 'Force world save' },
         { label: 'say Hi', cmd: 'say Hello everyone!', desc: 'Broadcast message' },
-        { label: 'version', cmd: 'version', desc: 'Server build info' },
+        { label: 'version', cmd: 'version', desc: 'Engine build info' },
         { label: 'stop', cmd: 'stop', desc: 'Graceful shutdown' }
+      ];
+    }
+    if (isPython) {
+      return [
+        { label: 'help', cmd: 'help', desc: 'Bot help menu' },
+        { label: 'status', cmd: 'status', desc: 'Process status' },
+        { label: 'ping', cmd: 'ping', desc: 'Heartbeat response' },
+        { label: 'stats', cmd: 'stats', desc: 'Memory & Uptime' },
+        { label: 'reload', cmd: 'reload', desc: 'Reload modules' }
       ];
     }
     return [
       { label: 'help', cmd: 'help', desc: 'Bot help menu' },
-      { label: 'status', cmd: 'status', desc: 'Bot health & status' },
+      { label: 'status', cmd: 'status', desc: 'Bot status' },
       { label: 'ping', cmd: 'ping', desc: 'Heartbeat test' },
-      { label: 'reload', cmd: 'reload', desc: 'Reload modules' },
-      { label: 'stats', cmd: 'stats', desc: 'Process memory & uptime' }
+      { label: 'stats', cmd: 'stats', desc: 'Process statistics' },
+      { label: 'reload', cmd: 'reload', desc: 'Hot reload' }
     ];
-  }, [isMinecraft]);
+  }, [isMinecraft, isPython]);
 
-  // REST API Fallback fetching
-  const fetchConsoleLogs = async () => {
+  // Isolated scroll method: ONLY mutates consoleContainerRef.current.scrollTop
+  const scrollConsoleToBottom = useCallback((smooth = false) => {
+    const el = consoleContainerRef.current;
+    if (!el) return;
+    if (smooth) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: 'smooth'
+      });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, []);
+
+  // REST API Fallback Fetching
+  const fetchConsoleLogs = useCallback(async () => {
     try {
       const token = localStorage.getItem('aether_token');
       const res = await fetch(`/api/v1/servers/${server.id}/console`, {
@@ -110,13 +147,16 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         const json = await res.json();
         if (json.success && Array.isArray(json.data?.logs)) {
           setLogs(json.data.logs);
+          if (isAutoScrollRef.current) {
+            requestAnimationFrame(() => scrollConsoleToBottom(false));
+          }
         }
       }
     } catch {}
-  };
+  }, [server.id, scrollConsoleToBottom]);
 
-  // Connect WebSocket
-  const connectWebSocket = () => {
+  // WebSocket Connection Management
+  const connectWebSocket = useCallback(() => {
     if (wsRef.current) {
       try {
         wsRef.current.close();
@@ -149,14 +189,24 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           if (data.type === 'init' || data.type === 'backlog') {
             if (Array.isArray(data.logs)) {
               setLogs(data.logs);
+              if (isAutoScrollRef.current) {
+                requestAnimationFrame(() => scrollConsoleToBottom(false));
+              }
             }
           } else if (data.type === 'log' && typeof data.line === 'string') {
             setLogs((prev) => {
               const updated = [...prev, data.line];
-              if (updated.length > 1500) updated.shift();
-              return updated;
+              return updated.length > 1500 ? updated.slice(updated.length - 1500) : updated;
             });
-            if (!isAutoScroll) {
+
+            if (isAutoScrollRef.current) {
+              requestAnimationFrame(() => {
+                const el = consoleContainerRef.current;
+                if (el && isAutoScrollRef.current) {
+                  el.scrollTop = el.scrollHeight;
+                }
+              });
+            } else {
               setUnreadCount((c) => c + 1);
             }
           } else if (data.type === 'status_change') {
@@ -184,16 +234,17 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     } catch {
       switchToPolling();
     }
-  };
+  }, [server.id, onRefreshServer, scrollConsoleToBottom]);
 
-  const switchToPolling = () => {
+  const switchToPolling = useCallback(() => {
     setWsStatus('polling');
     if (!pollIntervalRef.current) {
       fetchConsoleLogs();
       pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
     }
-  };
+  }, [fetchConsoleLogs]);
 
+  // Connect on mount or when server.id changes, with strict cleanup
   useEffect(() => {
     connectWebSocket();
 
@@ -202,56 +253,53 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         try {
           wsRef.current.close();
         } catch {}
+        wsRef.current = null;
       }
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     };
-  }, [server.id]);
+  }, [connectWebSocket]);
 
-  // Scroll detection & auto-scrolling
+  // Handle scroll events in the isolated viewport
   const handleScroll = () => {
     const el = consoleContainerRef.current;
     if (!el) return;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isAtBottom = distanceFromBottom <= 40;
+
+    isAutoScrollRef.current = isAtBottom;
     setIsAutoScroll(isAtBottom);
+
     if (isAtBottom) {
       setUnreadCount(0);
     }
   };
 
-  useEffect(() => {
-    if (isAutoScroll) {
-      consoleBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      setUnreadCount(0);
-    }
-  }, [logs, isAutoScroll]);
-
-  const scrollToBottom = () => {
+  // Jump to bottom action
+  const handleJumpToBottom = () => {
+    isAutoScrollRef.current = true;
     setIsAutoScroll(true);
     setUnreadCount(0);
-    consoleBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollConsoleToBottom(true);
   };
 
-  // Command submission
+  // Command submission: Dispatches to WebSocket / REST and keeps page scroll stationary
   const handleSendCommand = async (e?: React.FormEvent, customCmd?: string) => {
     if (e) e.preventDefault();
     const cmdToSend = (customCmd !== undefined ? customCmd : command).trim();
     if (!cmdToSend) return;
 
-    // Reset history index & record command
     setCommandHistory((prev) => [cmdToSend, ...prev.filter((c) => c !== cmdToSend)].slice(0, 30));
     setHistoryIndex(-1);
     setCommand('');
     setIsSubmitting(true);
 
-    // Optimistic local echo
-    setLogs((prev) => [...prev, `[UserCommand]: > ${cmdToSend}`]);
-
-    // Send via WebSocket if connected, otherwise fallback to REST API
     let sentViaWs = false;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
@@ -280,7 +328,11 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     }
 
     setIsSubmitting(false);
-    setTimeout(scrollToBottom, 50);
+
+    // If user was following live logs, scroll to bottom without affecting parent page
+    if (isAutoScrollRef.current) {
+      requestAnimationFrame(() => scrollConsoleToBottom(true));
+    }
   };
 
   // Keyboard navigation (History Up/Down)
@@ -323,20 +375,37 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     setUnreadCount(0);
   };
 
+  const handleDownloadLogs = () => {
+    const text = logs.join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${server.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_console_${Date.now()}.log`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleManualReconnect = () => {
+    reconnectAttemptsRef.current = 0;
+    connectWebSocket();
+  };
+
   return (
     <div id="server-console-tab" className="space-y-4">
-      {/* Console Header Bar */}
+      {/* Console Top Control & Status Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-md">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Connection Status Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
-            <span className="text-zinc-500">Transport:</span>
+            <span className="text-zinc-500">Live Stream:</span>
             {wsStatus === 'connected' && (
               <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                Live WS
+                Connected
               </span>
             )}
             {wsStatus === 'connecting' && (
@@ -358,17 +427,33 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               </span>
             )}
             {wsStatus === 'disconnected' && (
-              <span className="flex items-center gap-1.5 text-zinc-500">
+              <span className="flex items-center gap-1.5 text-rose-400 font-semibold">
                 <WifiOff className="h-3 w-3" />
-                Offline
+                Connection Lost
               </span>
             )}
           </div>
 
+          {/* Buffer Capacity Badge */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
             <span className="text-zinc-500">Buffer:</span>
             <span className="text-zinc-300 font-bold">{logs.length}</span>
             <span className="text-zinc-600 hidden xs:inline">/ 1500 lines</span>
+          </div>
+
+          {/* Runtime Type Badge */}
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/30 border border-zinc-850 text-xs font-mono text-zinc-400">
+            {isMinecraft ? (
+              <span className="text-amber-400">Minecraft {server.software || 'Paper'}</span>
+            ) : isNode ? (
+              <span className="text-emerald-400">Node.js Runtime</span>
+            ) : isPython ? (
+              <span className="text-blue-400">Python Runtime</span>
+            ) : isBun ? (
+              <span className="text-amber-300">Bun Runtime</span>
+            ) : (
+              <span className="text-zinc-400">Custom Container</span>
+            )}
           </div>
         </div>
 
@@ -380,8 +465,8 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Search..."
-              className="w-full sm:w-44 pl-8 pr-3 py-2 sm:py-1.5 rounded-xl bg-black/50 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-all"
+              placeholder="Search logs..."
+              className="w-full sm:w-44 pl-8 pr-3 py-2 sm:py-1.5 rounded-xl bg-black/50 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-all font-mono"
             />
           </div>
 
@@ -389,59 +474,86 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <button
             onClick={handleCopyLogs}
             title="Copy Console Output"
-            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-            <span className="hidden md:inline">{copied ? 'Copied!' : 'Copy'}</span>
+            <span className="hidden md:inline">{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+
+          {/* Download Logs Button */}
+          <button
+            onClick={handleDownloadLogs}
+            title="Download Logs as File"
+            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
+          >
+            <Download className="h-3.5 w-3.5" />
           </button>
 
           {/* Clear Button */}
           <button
             onClick={handleClearLogs}
             title="Clear Console View"
-            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 hover:border-rose-800 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-rose-400 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 hover:border-rose-800 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-rose-400 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Clear</span>
           </button>
 
-          {/* Reload Backlog Button */}
+          {/* Reconnect / Refresh Button */}
           <button
-            onClick={fetchConsoleLogs}
-            title="Refresh Backlog"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
+            onClick={handleManualReconnect}
+            title="Reconnect Console Stream"
+            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
           >
-            <RotateCw className="h-3.5 w-3.5" />
+            <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'connecting' || wsStatus === 'reconnecting' ? 'animate-spin text-amber-400' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Terminal Viewport */}
+      {/* Independent Terminal Viewport Container (STRICTLY ISOLATED SCROLL) */}
       <div className="relative">
         <div
+          id="console-viewport-container"
           ref={consoleContainerRef}
           onScroll={handleScroll}
-          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-3 sm:p-4 font-mono text-xs text-zinc-300 h-[380px] sm:h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white touch-scroll"
           tabIndex={0}
+          style={{ overscrollBehavior: 'contain' }}
+          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-3 sm:p-4 font-mono text-xs text-zinc-300 h-[380px] sm:h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white touch-scroll focus:outline-none focus:border-zinc-700"
         >
           {filteredLogs.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-3">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-3 select-none">
               <TerminalIcon className="h-10 w-10 text-zinc-700" />
               {filterQuery ? (
                 <div>
                   <p className="font-semibold text-zinc-400">No matching log lines found.</p>
-                  <p className="text-[11px] text-zinc-600">Try adjusting your filter search term.</p>
+                  <p className="text-[11px] text-zinc-600">Try adjusting or clearing your search filter query.</p>
+                </div>
+              ) : isStarting ? (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-center gap-2 text-amber-400 font-semibold">
+                    <RotateCw className="h-4 w-4 animate-spin" />
+                    <span>Starting server container...</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600">Initializing runtime environment and attaching stdout stream...</p>
+                </div>
+              ) : isStopping ? (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-center gap-2 text-amber-400 font-semibold">
+                    <RotateCw className="h-4 w-4 animate-spin" />
+                    <span>Stopping server...</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600">Sending graceful shutdown signal to active process...</p>
                 </div>
               ) : isRunning ? (
                 <div>
-                  <p className="font-semibold text-zinc-400">Connected to active container.</p>
+                  <p className="font-semibold text-zinc-400">Live container active (PID: {server.startup?.pid || 'Attached'}).</p>
                   <p className="text-[11px] text-zinc-600">Waiting for process stdout/stderr emissions...</p>
                 </div>
               ) : (
                 <div className="space-y-2 max-w-sm">
-                  <p className="font-semibold text-zinc-400">Server is currently offline.</p>
+                  <p className="font-semibold text-zinc-400">Server is offline.</p>
                   <p className="text-[11px] text-zinc-600">
-                    Start the server to initialize the container sandbox and attach real-time live console output.
+                    Start the server to view live console output.
                   </p>
                   {onPowerAction && (
                     <button
@@ -468,22 +580,22 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               );
             })
           )}
-          <div ref={consoleBottomRef} />
         </div>
 
-        {/* Floating "Jump to Bottom" button when scrolled up */}
-        {!isAutoScroll && unreadCount > 0 && (
+        {/* Floating "Jump to Latest" indicator when scrolled up (Clicking scrolls ONLY the console) */}
+        {!isAutoScroll && (
           <button
-            onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-xl animate-bounce transition-all z-10 cursor-pointer"
+            type="button"
+            onClick={handleJumpToBottom}
+            className="absolute bottom-4 right-4 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-2xl transition-all z-10 cursor-pointer animate-fade-in"
           >
             <ArrowDown className="h-3.5 w-3.5" />
-            <span>{unreadCount} new line{unreadCount > 1 ? 's' : ''} ↓</span>
+            <span>{unreadCount > 0 ? `↓ ${unreadCount} New Log${unreadCount > 1 ? 's' : ''}` : 'Jump to Latest ↓'}</span>
           </button>
         )}
       </div>
 
-      {/* Interactive Command Input Bar */}
+      {/* Interactive Command Input Form (Page Scroll Completely Isolated) */}
       <form onSubmit={(e) => handleSendCommand(e)} className="space-y-2">
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1">
@@ -496,13 +608,13 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               disabled={!isRunning && !isStarting}
               placeholder={
                 isRunning
-                  ? `Type ${isMinecraft ? 'command (e.g. list, help, tps)' : 'bot command'}...`
+                  ? `Type ${isMinecraft ? 'Minecraft command (e.g. list, help, tps)' : 'runtime command / stdin'}...`
                   : isStarting
-                  ? 'Server starting... queued'
-                  : 'Server is offline.'
+                  ? 'Server is starting... input queued'
+                  : 'Server is offline. Start server to send commands.'
               }
               className={`w-full rounded-xl bg-zinc-950 border pl-8 pr-16 sm:pr-24 py-3 sm:py-2.5 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition-all ${
-                isRunning
+                isRunning || isStarting
                   ? 'border-zinc-800 focus:border-amber-500'
                   : 'border-zinc-800/60 bg-zinc-950/60 opacity-70 cursor-not-allowed'
               }`}
@@ -557,7 +669,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
             <span>↑↓ history</span>
             <span>•</span>
-            <span>sandbox active</span>
+            <span>stdin active</span>
           </div>
         </div>
       </form>
