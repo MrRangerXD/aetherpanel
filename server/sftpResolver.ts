@@ -38,8 +38,8 @@ export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutio
   const statusUpper = String(playitStatus.status).toUpperCase();
 
   const playitInstalled = !!playitStatus.isInstalled;
-  const playitClaimed = statusUpper === 'CONNECTED' || statusUpper === 'CLAIMED';
-  const playitConnected = statusUpper === 'CONNECTED' && !!playitStatus.sftpTunnelAddress && playitStatus.sftpTunnelAddress.endsWith('.playit.gg');
+  const playitClaimed = !!playitStatus.isClaimed;
+  const playitConnected = !!playitStatus.isRunning && playitClaimed;
 
   // SCENARIO A: Direct connection is possible (public IP exists and sftp port is reachable externally)
   let directHost = '';
@@ -111,9 +111,9 @@ export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutio
   }
 
   // SCENARIO C: Playit fallback is active and fully connected
-  if (playitInstalled && playitConnected && sftpDaemonOnline) {
-    const playitHost = playitStatus.sftpTunnelAddress || 'sftp-tunnel.playit.gg';
-    const playitPort = playitStatus.sftpTunnelPort || sftpPort;
+  if (playitInstalled && playitConnected && sftpDaemonOnline && node?.playitSftpAddress) {
+    const playitHost = node.playitSftpAddress;
+    const playitPort = node.playitSftpPort || sftpPort;
 
     return {
       mode: 'TUNNELED',

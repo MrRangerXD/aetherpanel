@@ -13,6 +13,7 @@ import { useTheme } from '../../lib/ThemeContext';
 interface ServerDeployWizardProps {
   onNavigate: (page: string) => void;
   onSelectServer?: (serverId: string) => void;
+  onRefreshServers?: () => void;
   initialPlanId?: string;
   initialCategory?: string;
 }
@@ -114,6 +115,7 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
 export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   onNavigate,
   onSelectServer,
+  onRefreshServers,
   initialPlanId,
   initialCategory
 }) => {
@@ -345,6 +347,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         setDeployedServerId(res.data.server.id);
         setPipelineStage(7);
         await refreshUser();
+        if (onRefreshServers) onRefreshServers();
       } else {
         throw new Error(res.error?.message || 'Deployment execution failed on cluster.');
       }

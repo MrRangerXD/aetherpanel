@@ -495,6 +495,18 @@ export async function startServer(serverId: string): Promise<boolean> {
 
       child.stdout?.on('data', (chunk) => {
         appendConsoleLog(serverId, chunk.toString());
+        if (server.status === 'starting') {
+          server.status = 'running';
+          server.cpuUsage = 1.2;
+          server.ramUsageMB = runtime === 'python' ? 32 : 45;
+          server.uptimeSeconds = 0;
+          saveDbSync();
+          emitServerStatus(serverId, 'running', { pid: child.pid });
+          setupStableUptimeReset(serverId);
+          dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
+            message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
+          }).catch(() => {});
+        }
       });
 
       child.stderr?.on('data', (chunk) => {
@@ -515,19 +527,26 @@ export async function startServer(serverId: string): Promise<boolean> {
         handleProcessExit(serverId, code, signal, child);
       });
 
-      server.status = 'running';
-      server.cpuUsage = 1.2;
-      server.ramUsageMB = runtime === 'python' ? 32 : 45;
+      // Keep starting until verified or active for 1.5 seconds
+      server.status = 'starting';
       server.uptimeSeconds = 0;
       saveDbSync();
-      emitServerStatus(serverId, 'running', { pid: child.pid });
+      emitServerStatus(serverId, 'starting', { pid: child.pid });
 
-      // Stable Uptime Tracker: Reset crash counter after 5 minutes of stable uptime
-      setupStableUptimeReset(serverId);
-
-      dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
-        message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
-      }).catch(() => {});
+      setTimeout(async () => {
+        if (activeProcesses.has(serverId) && server.status === 'starting') {
+          server.status = 'running';
+          server.cpuUsage = 1.2;
+          server.ramUsageMB = runtime === 'python' ? 32 : 45;
+          server.uptimeSeconds = 0;
+          saveDbSync();
+          emitServerStatus(serverId, 'running', { pid: child.pid });
+          setupStableUptimeReset(serverId);
+          dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
+            message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
+          }).catch(() => {});
+        }
+      }, 1500);
 
       return true;
     } catch (err: any) {
@@ -561,7 +580,7 @@ export async function startServer(serverId: string): Promise<boolean> {
 
     const jarName = server.startup?.serverJar || 'server.jar';
     const serverJarPath = path.join(dir, jarName);
-    if (!fs.existsSync(serverJarPath) || fs.statSync(serverJarPath).size < 1024) {
+    if (!fs.existsSync(serverJarPath) || fs.statSync(serverJarPath).size < 100) {
       appendConsoleLog(serverId, `[Server thread/ERROR]: '${jarName}' artifact is missing or invalid in server root.`);
       appendConsoleLog(serverId, `[Server thread/INFO]: Please use the Reinstall function to download the official server JAR.`);
       server.status = 'error';
@@ -634,6 +653,31 @@ export async function startServer(serverId: string): Promise<boolean> {
       child.stdout?.on('data', (chunk) => {
         const str = chunk.toString();
         appendConsoleLog(serverId, str);
+
+        // Check startup confirmation signals
+        if (server.status === 'starting') {
+          const isReadySignal = 
+            /Done \([0-9.]+s\)!/i.test(str) ||
+            str.includes('For help, type "help"') ||
+            str.includes('Timings Reset') ||
+            str.includes('Listening on /') ||
+            str.includes('Thread Query Listener started') ||
+            str.includes('RCON running on');
+
+          if (isReadySignal) {
+            server.status = 'running';
+            server.cpuUsage = 2.8;
+            server.ramUsageMB = 480;
+            server.uptimeSeconds = 0;
+            saveDbSync();
+            emitServerStatus(serverId, 'running', { pid: child.pid });
+            setupStableUptimeReset(serverId);
+            dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
+              message: `Minecraft Server '${server.name}' (${server.software} ${server.version}) is now ONLINE and listening on ${server.primaryIp}:${server.primaryPort}.`
+            }).catch(() => {});
+          }
+        }
+
         if (str.includes('java.lang.UnsupportedClassVersionError') || str.includes('UnsupportedClassVersionError')) {
           server.startup = server.startup || {};
           if (server.startup.lastCrashReason !== 'JAVA_VERSION_MISMATCH') {
@@ -687,19 +731,26 @@ export async function startServer(serverId: string): Promise<boolean> {
         handleProcessExit(serverId, code, signal, child);
       });
 
-      server.status = 'running';
-      server.cpuUsage = 2.8;
-      server.ramUsageMB = 480;
+      // Keep server in 'starting' state until confirmed by logs or fallback after 20s
+      server.status = 'starting';
       server.uptimeSeconds = 0;
       saveDbSync();
-      emitServerStatus(serverId, 'running', { pid: child.pid });
+      emitServerStatus(serverId, 'starting', { pid: child.pid });
 
-      // Stable Uptime Tracker: Reset crash counter after 5 minutes of stable uptime
-      setupStableUptimeReset(serverId);
-
-      dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
-        message: `Minecraft Server '${server.name}' started successfully and is listening on ${server.primaryIp}:${server.primaryPort}.`
-      }).catch(() => {});
+      setTimeout(async () => {
+        if (activeProcesses.has(serverId) && server.status === 'starting') {
+          server.status = 'running';
+          server.cpuUsage = 2.8;
+          server.ramUsageMB = 480;
+          server.uptimeSeconds = 0;
+          saveDbSync();
+          emitServerStatus(serverId, 'running', { pid: child.pid });
+          setupStableUptimeReset(serverId);
+          dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
+            message: `Minecraft Server '${server.name}' (${server.software} ${server.version}) is now active on ${server.primaryIp}:${server.primaryPort}.`
+          }).catch(() => {});
+        }
+      }, 20000);
 
       return true;
     } catch (err: any) {

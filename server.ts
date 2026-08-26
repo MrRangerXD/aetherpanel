@@ -33,7 +33,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  if (process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1') {
+  // Enable reverse proxy trust (Cloud Run, Nginx, Cloudflare, Caddy)
+  if (process.env.TRUST_PROXY !== 'false' && process.env.TRUST_PROXY !== '0') {
     app.set('trust proxy', true);
   }
 

@@ -182,16 +182,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const handleMessage = (event: MessageEvent) => {
-          if (event.data?.type === 'DISCORD_AUTH_SUCCESS' && event.data?.token) {
+          if (event.origin !== window.location.origin) return;
+          const type = event.data?.type;
+          if ((type === 'AETHERPANEL_DISCORD_OAUTH_SUCCESS' || type === 'DISCORD_AUTH_SUCCESS') && event.data?.token) {
             window.removeEventListener('message', handleMessage);
             localStorage.setItem('aether_token', event.data.token);
             setUser(event.data.user);
             resolve({ success: true });
-          } else if (event.data?.type === 'DISCORD_AUTH_ERROR') {
+          } else if (type === 'AETHERPANEL_DISCORD_OAUTH_ERROR' || type === 'DISCORD_AUTH_ERROR') {
             window.removeEventListener('message', handleMessage);
             resolve({
               success: false,
-              message: event.data.error || 'Discord authentication failed.'
+              message: event.data?.error || 'Discord authentication failed.'
             });
           }
         };

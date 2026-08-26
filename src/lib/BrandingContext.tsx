@@ -8,8 +8,10 @@ interface BrandingContextType {
   discordUrl: string;
   maintenanceMode: boolean;
   maintenanceMessage: string;
+  enablePlayit: boolean;
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
+  setEnablePlayitLocally: (enabled: boolean) => void;
 }
 
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
@@ -23,6 +25,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [discordUrl, setDiscordUrl] = useState<string>('https://discord.gg');
   const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string>('AetherPanel is currently performing scheduled system upgrades.');
+  const [enablePlayit, setEnablePlayit] = useState<boolean>(() => {
+    const saved = localStorage.getItem('aether_enable_playit');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   const fetchBranding = useCallback(async () => {
     try {
@@ -37,6 +43,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (res.data.discordUrl) setDiscordUrl(res.data.discordUrl);
         if (res.data.maintenanceMode !== undefined) setMaintenanceMode(res.data.maintenanceMode);
         if (res.data.maintenanceMessage) setMaintenanceMessage(res.data.maintenanceMessage);
+        if (res.data.enablePlayit !== undefined) {
+          setEnablePlayit(res.data.enablePlayit);
+          localStorage.setItem('aether_enable_playit', String(res.data.enablePlayit));
+        }
       }
     } catch (err) {
       console.error('[BrandingContext] Failed to load branding settings:', err);
@@ -63,6 +73,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const setEnablePlayitLocally = (enabled: boolean) => {
+    setEnablePlayit(enabled);
+    localStorage.setItem('aether_enable_playit', String(enabled));
+  };
+
   return (
     <BrandingContext.Provider
       value={{
@@ -72,8 +87,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         discordUrl,
         maintenanceMode,
         maintenanceMessage,
+        enablePlayit,
         refreshBranding: fetchBranding,
-        updateBrandNameLocally
+        updateBrandNameLocally,
+        setEnablePlayitLocally
       }}
     >
       {children}

@@ -22,8 +22,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
   const [loading, setLoading] = useState(true);
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
-  const fetchServers = async () => {
-    setLoading(true);
+  const fetchServers = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     const res = await apiRequest('/servers');
     if (res.success && res.data) {
       setServers(res.data);
@@ -32,9 +32,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
   };
 
   useEffect(() => {
-    fetchServers();
+    fetchServers(true);
     const interval = setInterval(() => {
-      fetchServers();
+      fetchServers(false);
     }, 10000); // 10s live polling
     return () => clearInterval(interval);
   }, []);

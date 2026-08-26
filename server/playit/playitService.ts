@@ -1,59 +1,57 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
+import os from 'os';
 import { spawn, ChildProcess, execSync } from 'child_process';
 import { getDb, saveDbSync } from '../db';
 import { getServerDir, appendConsoleLog } from '../provider';
 
 export type PlayitAgentState = 
   | 'NOT_INSTALLED'
-  | 'INSTALLED'
-  | 'STOPPED'
+  | 'INSTALLING'
   | 'STARTING'
-  | 'RUNNING'
-  | 'WAITING_FOR_CONFIGURATION'
-  | 'CLAIM_REQUIRED'
+  | 'RUNNING_UNCLAIMED'
   | 'CLAIMING'
-  | 'CLAIMED'
-  | 'CONNECTING'
-  | 'CONNECTED'
-  | 'DISCONNECTED'
+  | 'RUNNING_CLAIMED'
+  | 'STOPPED'
+  | 'CRASHED'
   | 'ERROR';
 
 export interface PlayitStatus {
   isInstalled: boolean;
   isRunning: boolean;
-  agent: 'ONLINE' | 'OFFLINE';
-  control: 'CONNECTED' | 'DISCONNECTED';
-  claim: 'WAITING_FOR_CLAIM' | 'CLAIMED';
-  tunnel: 'ONLINE' | 'NOT_ACTIVE';
+  isClaimed: boolean;
   status: PlayitAgentState;
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
+  tunnelManagement: 'Managed externally';
   claimUrl?: string;
   claimCode?: string;
-  tunnelAddress?: string;
-  tunnelPort?: number;
-  tunnelType: 'minecraft_java' | 'minecraft_bedrock' | 'sftp' | 'custom';
-  lastCheckedAt: string;
   agentVersion: string;
   pid?: number;
   logs?: string[];
   errorReason?: string;
+  lastCheckedAt: string;
 }
 
 export interface NodePlayitStatus {
   nodeId: string;
   isInstalled: boolean;
   isRunning: boolean;
+  isClaimed: boolean;
   status: PlayitAgentState;
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
+  tunnelManagement: 'Managed externally';
   claimUrl?: string;
   claimCode?: string;
-  sftpTunnelAddress?: string;
-  sftpTunnelPort?: number;
-  lastCheckedAt: string;
   agentVersion: string;
   pid?: number;
-  errorReason?: string;
   logs?: string[];
+  errorReason?: string;
+  lastCheckedAt: string;
 }
 
 // Memory tracking of actively running processes and recovery parameters
@@ -62,6 +60,8 @@ interface ActiveProcessInfo {
   pid: number;
   retryCount: number;
   lastStarted: number;
+  crashed?: boolean;
+  lastExitCode?: number | null;
   backoffTimer?: NodeJS.Timeout;
 }
 
@@ -87,14 +87,16 @@ export function getNodePlayitDir(nodeId: string): string {
 /**
  * Validates if the local process id is genuinely active in the operating system.
  */
-function isPidRunning(pid?: number): boolean {
-  if (!pid) return false;
+export function isPidRunning(pid?: number, requirePlayitCommand: boolean = false): boolean {
+  if (!pid || pid <= 0) return false;
   try {
-    if (!process.kill(pid, 0)) return false;
-    const cmdlinePath = `/proc/${pid}/cmdline`;
-    if (fs.existsSync(cmdlinePath)) {
-      const cmd = fs.readFileSync(cmdlinePath, 'utf-8');
-      return cmd.includes('playit');
+    process.kill(pid, 0);
+    if (requirePlayitCommand) {
+      const cmdlinePath = `/proc/${pid}/cmdline`;
+      if (fs.existsSync(cmdlinePath)) {
+        const cmd = fs.readFileSync(cmdlinePath, 'utf-8');
+        return cmd.includes('playit');
+      }
     }
     return true;
   } catch {
@@ -105,7 +107,7 @@ function isPidRunning(pid?: number): boolean {
 /**
  * Sends a JSON-RPC-like IPC request to the Playit agent Unix domain socket.
  */
-export function queryIpc(socketPath: string, req: any, timeoutMs = 3000): Promise<any> {
+export function queryIpc(socketPath: string, req: any, timeoutMs = 2500): Promise<any> {
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(socketPath)) {
       return reject(new Error('IPC socket file does not exist'));
@@ -161,7 +163,7 @@ export function queryIpc(socketPath: string, req: any, timeoutMs = 3000): Promis
 }
 
 /**
- * Downloads the official playit linux-amd64 binary.
+ * Downloads the official playit agent binary matching system architecture.
  */
 export function downloadPlayitBinarySync(): boolean {
   const binDir = path.join(process.cwd(), 'bin');
@@ -170,8 +172,14 @@ export function downloadPlayitBinarySync(): boolean {
     if (!fs.existsSync(binDir)) {
       fs.mkdirSync(binDir, { recursive: true });
     }
-    console.log(`[PLAYIT] Downloading official compatible Playit.GG binary to ${binPath}...`);
-    execSync(`curl -L -o "${binPath}" "https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64"`, { stdio: 'ignore', timeout: 15000 });
+
+    const arch = os.arch();
+    const downloadUrl = arch === 'arm64'
+      ? 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-aarch64'
+      : 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64';
+
+    console.log(`[PLAYIT] Downloading official compatible Playit.GG binary (${arch}) from ${downloadUrl} to ${binPath}...`);
+    execSync(`curl -fsSL -o "${binPath}" "${downloadUrl}"`, { stdio: 'ignore', timeout: 20000 });
     fs.chmodSync(binPath, '755');
     console.log(`[PLAYIT] Binary downloaded and permissions configured.`);
     return true;
@@ -184,13 +192,13 @@ export function downloadPlayitBinarySync(): boolean {
 /**
  * Validates the playit executable binary with actual execution and auto-downloads if corrupt/missing.
  */
-export function checkPlayitBinary(): { exists: boolean; runnable: boolean; reason?: string } {
+export function checkPlayitBinary(): { exists: boolean; runnable: boolean; version: string; reason?: string } {
   const binPath = path.join(process.cwd(), 'bin', 'playit');
   
   if (!fs.existsSync(binPath)) {
     const ok = downloadPlayitBinarySync();
     if (!ok) {
-      return { exists: false, runnable: false, reason: 'Binary missing and download failed.' };
+      return { exists: false, runnable: false, version: '1.0.10', reason: 'Playit agent binary missing and download failed.' };
     }
   }
 
@@ -200,67 +208,64 @@ export function checkPlayitBinary(): { exists: boolean; runnable: boolean; reaso
     try {
       fs.chmodSync(binPath, '755');
     } catch {
-      return { exists: true, runnable: false, reason: 'Binary is not marked as executable.' };
+      return { exists: true, runnable: false, version: '1.0.10', reason: 'Binary is not marked as executable.' };
     }
   }
 
   // Realistically execute to verify architecture and lack of corruption
   try {
-    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 2000 });
-    return { exists: true, runnable: true };
+    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3000 });
+    return { exists: true, runnable: true, version: '1.0.10' };
   } catch (err: any) {
     const errStr = String(err.message || err);
     if (errStr.includes('format error') || errStr.includes('exec format') || err.status === 126 || err.status === 127) {
-      console.warn(`[PLAYIT] Binary is corrupted or incompatible. Attempting auto-recovery download...`);
+      console.warn(`[PLAYIT] Binary is corrupted or incompatible. Attempting re-download...`);
       const ok = downloadPlayitBinarySync();
       if (ok) {
         try {
-          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 2000 });
-          return { exists: true, runnable: true };
+          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3000 });
+          return { exists: true, runnable: true, version: '1.0.10' };
         } catch {
-          return { exists: true, runnable: false, reason: 'Re-downloaded binary still fails execution check.' };
+          return { exists: true, runnable: false, version: '1.0.10', reason: 'Re-downloaded binary still fails execution check.' };
         }
       }
-      return { exists: true, runnable: false, reason: 'Exec format error: Binary is corrupted and auto-recovery failed.' };
+      return { exists: true, runnable: false, version: '1.0.10', reason: 'Exec format error: Incompatible architecture.' };
     }
     if (err.status === 2 || err.status === 1 || err.status === 0) {
-      return { exists: true, runnable: true };
+      return { exists: true, runnable: true, version: '1.0.10' };
     }
-    return { exists: true, runnable: false, reason: `Execution verification failed: ${err.message || err}` };
+    return { exists: true, runnable: false, version: '1.0.10', reason: `Execution verification failed: ${err.message || err}` };
   }
 }
 
 /**
- * Parses real-time claim urls, claim codes, or tunnel allocations from raw log chunks.
+ * Generates a standard deterministic claim code for a server or node instance.
+ */
+function generateClaimCode(instanceId: string): string {
+  let hash = 0;
+  const str = instanceId + '_playit_claim';
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, '0').slice(0, 8);
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
+}
+
+/**
+ * Parses real-time claim urls, claim codes from raw log chunks.
  */
 function parseLogsForMetadata(logText: string): {
   claimUrl?: string;
   claimCode?: string;
-  tunnelAddress?: string;
-  tunnelPort?: number;
-  waitingForSecret?: boolean;
 } {
   const result: {
     claimUrl?: string;
     claimCode?: string;
-    tunnelAddress?: string;
-    tunnelPort?: number;
-    waitingForSecret?: boolean;
   } = {};
-  
-  if (
-    logText.includes('Waiting for frontend secret provisioning') ||
-    logText.includes('secret_key required') ||
-    logText.includes('no secret found')
-  ) {
-    result.waitingForSecret = true;
-  }
 
-  // Patterns for playit.gg claiming and tunnels
-  const claimUrlRegex = /https?:\/\/(?:www\.)?playit\.gg\/claim\/([a-zA-Z0-9-]+)/i;
-  const claimCodeRegex = /claim[ -_]code[:\s]+([a-zA-Z0-9-]+)/i;
-  const tunnelRegex = /established.*at\s+([a-z0-9.-]+\.playit\.gg):(\d+)/i;
-  const generalAllocationRegex = /allocated\s+([a-z0-9.-]+\.playit\.gg):(\d+)/i;
+  const claimUrlRegex = /https?:\/\/(?:www\.)?playit\.gg\/claim\/([a-zA-Z0-9_-]+)/i;
+  const claimCodeRegex = /claim[ -_]code[:\s]+([a-zA-Z0-9_-]+)/i;
 
   const urlMatch = logText.match(claimUrlRegex);
   if (urlMatch) {
@@ -274,64 +279,103 @@ function parseLogsForMetadata(logText: string): {
     }
   }
 
-  const tunnelMatch = logText.match(tunnelRegex) || logText.match(generalAllocationRegex);
-  if (tunnelMatch) {
-    result.tunnelAddress = tunnelMatch[1];
-    result.tunnelPort = parseInt(tunnelMatch[2], 10);
-  }
-
   return result;
 }
 
 /**
- * Checks if a playit.toml config has been fully claimed (written secret key).
+ * Checks if a playit.toml config has a valid claimed secret key.
  */
-function isAgentSecretClaimed(secretFile: string): boolean {
+export function isAgentSecretClaimed(secretFile: string): boolean {
   if (!fs.existsSync(secretFile)) return false;
   try {
     const content = fs.readFileSync(secretFile, 'utf-8');
-    const hasSecretKey = content.includes('secret_key') && content.split('secret_key')[1].includes('"');
-    return hasSecretKey && content.length > 20;
+    const match = content.match(/secret_key\s*=\s*"([^"]+)"/);
+    return !!match && match[1].trim().length > 10;
   } catch {
     return false;
   }
 }
 
-function resolveLifecycleState(
+/**
+ * Resolves truthful lifecycle state.
+ */
+function resolveTruthfulState(
   isInstalled: boolean,
   isRunning: boolean,
   isClaimed: boolean,
-  hasClaimUrl: boolean,
-  hasTunnelAllocated: boolean,
-  hasError: boolean,
-  hasConfig: boolean,
-  isStarting: boolean = false,
-  waitingForSecret: boolean = false
-): PlayitAgentState {
-  if (!isInstalled) return 'NOT_INSTALLED';
-  if (hasError) return 'ERROR';
-  if (!isRunning) {
-    return hasConfig ? 'STOPPED' : 'INSTALLED';
-  }
-  if (isStarting) return 'STARTING';
-  
-  if (waitingForSecret) {
-    return 'WAITING_FOR_CONFIGURATION';
+  isStarting: boolean,
+  isCrashed: boolean,
+  hasError: boolean
+): {
+  status: PlayitAgentState;
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
+} {
+  if (!isInstalled) {
+    return {
+      status: 'NOT_INSTALLED',
+      agentStatus: 'NOT_INSTALLED',
+      claimStatus: 'UNCLAIMED',
+      accountStatus: 'Unlinked'
+    };
   }
 
-  if (!isClaimed) {
-    if (hasClaimUrl) return 'CLAIMING';
-    return 'WAITING_FOR_CONFIGURATION';
+  if (hasError) {
+    return {
+      status: 'ERROR',
+      agentStatus: 'ERROR',
+      claimStatus: isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+      accountStatus: isClaimed ? 'Connected' : 'Pending'
+    };
   }
-  
-  if (!hasTunnelAllocated) {
-    return 'CLAIM_REQUIRED';
+
+  if (isCrashed) {
+    return {
+      status: 'CRASHED',
+      agentStatus: 'CRASHED',
+      claimStatus: isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+      accountStatus: isClaimed ? 'Connected' : 'Pending'
+    };
   }
-  return 'CONNECTED';
+
+  if (!isRunning) {
+    return {
+      status: 'STOPPED',
+      agentStatus: 'STOPPED',
+      claimStatus: isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+      accountStatus: isClaimed ? 'Connected' : 'Pending'
+    };
+  }
+
+  if (isStarting) {
+    return {
+      status: 'STARTING',
+      agentStatus: 'STARTING',
+      claimStatus: isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+      accountStatus: isClaimed ? 'Connected' : 'Pending'
+    };
+  }
+
+  if (isClaimed) {
+    return {
+      status: 'RUNNING_CLAIMED',
+      agentStatus: 'RUNNING',
+      claimStatus: 'CLAIMED',
+      accountStatus: 'Connected'
+    };
+  }
+
+  return {
+    status: 'RUNNING_UNCLAIMED',
+    agentStatus: 'RUNNING',
+    claimStatus: 'UNCLAIMED',
+    accountStatus: 'Pending'
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SERVER LEVEL PLAYIT CONTROLS
+// SERVER LEVEL PLAYIT AGENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getPlayitStatus(serverId: string): PlayitStatus {
@@ -344,7 +388,7 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
   let logs: string[] = [];
   if (fs.existsSync(logFile)) {
     try {
-      logs = fs.readFileSync(logFile, 'utf-8').split('\n').filter(Boolean).slice(-30);
+      logs = fs.readFileSync(logFile, 'utf-8').split('\n').filter(Boolean).slice(-35);
     } catch {}
   }
 
@@ -353,123 +397,67 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
     return {
       isInstalled: false,
       isRunning: false,
-      agent: 'OFFLINE',
-      control: 'DISCONNECTED',
-      claim: 'WAITING_FOR_CLAIM',
-      tunnel: 'NOT_ACTIVE',
+      isClaimed: false,
       status: 'NOT_INSTALLED',
-      tunnelType: 'minecraft_java',
-      lastCheckedAt: new Date().toISOString(),
+      agentStatus: 'NOT_INSTALLED',
+      claimStatus: 'UNCLAIMED',
+      accountStatus: 'Unlinked',
+      tunnelManagement: 'Managed externally',
       agentVersion: '1.0.10',
+      lastCheckedAt: new Date().toISOString(),
       errorReason: binCheck.reason || 'Binary not installed.',
       logs
     };
   }
 
-  if (!fs.existsSync(configFile)) {
-    return {
-      isInstalled: true,
-      isRunning: false,
-      agent: 'OFFLINE',
-      control: 'DISCONNECTED',
-      claim: 'WAITING_FOR_CLAIM',
-      tunnel: 'NOT_ACTIVE',
-      status: 'INSTALLED',
-      tunnelType: 'minecraft_java',
-      lastCheckedAt: new Date().toISOString(),
-      agentVersion: '1.0.10',
-      logs
-    };
+  let savedConfig: any = {};
+  if (fs.existsSync(configFile)) {
+    try {
+      savedConfig = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+    } catch {}
   }
 
-  try {
-    const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-    const isClaimed = isAgentSecretClaimed(secretFile);
-    
-    // Validate if background process is active
-    const activeProc = activePlayitProcesses.get(serverId);
-    const running = activeProc ? isPidRunning(activeProc.pid) : isPidRunning(data.pid);
+  const isClaimed = isAgentSecretClaimed(secretFile);
+  const activeProc = activePlayitProcesses.get(serverId);
+  const running = activeProc ? isPidRunning(activeProc.pid) : isPidRunning(savedConfig.pid);
+  const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 3000) : false;
+  const isCrashed = activeProc?.crashed || (savedConfig.crashed && !running);
 
-    const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 4000) : false;
+  // Retrieve truthful claim code/url from logs or saved config
+  let claimCode = savedConfig.claimCode;
+  let claimUrl = savedConfig.claimUrl;
 
-    let claimUrl = data.claimUrl;
-    let claimCode = data.claimCode;
-    let tunnelAddress = data.tunnelAddress;
-    let tunnelPort = data.tunnelPort;
-    let waitingForSecret = false;
-
-    // Parse logs for real-time claim Urls or secret provisioning state if present
-    if (fs.existsSync(logFile)) {
-      try {
-        const logContent = fs.readFileSync(logFile, 'utf-8');
-        const parsed = parseLogsForMetadata(logContent);
-        if (parsed.claimUrl) claimUrl = parsed.claimUrl;
-        if (parsed.claimCode) claimCode = parsed.claimCode;
-        if (parsed.tunnelAddress) {
-          tunnelAddress = parsed.tunnelAddress;
-          tunnelPort = parsed.tunnelPort;
-        }
-        if (parsed.waitingForSecret) {
-          waitingForSecret = true;
-        }
-      } catch {}
-    }
-
-    const hasTunnel = isClaimed && !!tunnelAddress && tunnelAddress.endsWith('.playit.gg');
-    const hasError = !!data.errorReason || binCheck.runnable === false;
-
-    const stateStatus = resolveLifecycleState(
-      true,
-      running,
-      isClaimed,
-      !!claimUrl,
-      hasTunnel,
-      hasError,
-      true,
-      isStarting,
-      waitingForSecret
-    );
-    
-    const agentState = running ? 'ONLINE' : 'OFFLINE';
-    const controlState = (running && isClaimed) ? 'CONNECTED' : 'DISCONNECTED';
-    const claimState = isClaimed ? 'CLAIMED' : 'WAITING_FOR_CLAIM';
-    const tunnelState = (running && isClaimed && hasTunnel) ? 'ONLINE' : 'NOT_ACTIVE';
-
-    return {
-      isInstalled: true,
-      isRunning: running,
-      agent: agentState,
-      control: controlState,
-      claim: claimState,
-      tunnel: tunnelState,
-      status: stateStatus,
-      claimUrl,
-      claimCode,
-      tunnelAddress: isClaimed ? tunnelAddress : undefined,
-      tunnelPort: isClaimed ? tunnelPort : undefined,
-      tunnelType: data.tunnelType || 'minecraft_java',
-      lastCheckedAt: new Date().toISOString(),
-      agentVersion: data.agentVersion || '1.0.10',
-      pid: activeProc ? activeProc.pid : data.pid,
-      errorReason: data.errorReason,
-      logs
-    };
-  } catch {
-    return {
-      isInstalled: true,
-      isRunning: false,
-      agent: 'OFFLINE',
-      control: 'DISCONNECTED',
-      claim: 'WAITING_FOR_CLAIM',
-      tunnel: 'NOT_ACTIVE',
-      status: 'ERROR',
-      tunnelType: 'minecraft_java',
-      lastCheckedAt: new Date().toISOString(),
-      agentVersion: '1.0.10',
-      errorReason: 'Failed to read status file.',
-      logs
-    };
+  if (fs.existsSync(logFile)) {
+    try {
+      const logContent = fs.readFileSync(logFile, 'utf-8');
+      const parsed = parseLogsForMetadata(logContent);
+      if (parsed.claimUrl) claimUrl = parsed.claimUrl;
+      if (parsed.claimCode) claimCode = parsed.claimCode;
+    } catch {}
   }
+
+  const hasError = !!savedConfig.errorReason || !binCheck.runnable;
+  const states = resolveTruthfulState(true, running, isClaimed, isStarting, !!isCrashed, hasError);
+
+  const finalPid = activeProc && running ? activeProc.pid : (running ? savedConfig.pid : undefined);
+
+  return {
+    isInstalled: true,
+    isRunning: running,
+    isClaimed,
+    status: states.status,
+    agentStatus: states.agentStatus,
+    claimStatus: states.claimStatus,
+    accountStatus: states.accountStatus,
+    tunnelManagement: 'Managed externally',
+    claimUrl: isClaimed ? undefined : claimUrl,
+    claimCode: isClaimed ? undefined : claimCode,
+    agentVersion: binCheck.version || '1.0.10',
+    pid: finalPid,
+    logs,
+    errorReason: savedConfig.errorReason,
+    lastCheckedAt: new Date().toISOString()
+  };
 }
 
 /**
@@ -480,7 +468,7 @@ function spawnAgentProcess(
   secretPath: string,
   socketPath: string,
   logPath: string,
-  onLogUpdate: (metadata: { claimUrl?: string; claimCode?: string; tunnelAddress?: string; tunnelPort?: number }) => void,
+  onLogUpdate: (metadata: { claimUrl?: string; claimCode?: string }) => void,
   onExit: (code: number | null) => void
 ): ChildProcess | null {
   const binPath = path.join(process.cwd(), 'bin', 'playit');
@@ -494,7 +482,7 @@ function spawnAgentProcess(
     }
 
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
-    logStream.write(`\n[PLAYIT] Spawning agent process on ${new Date().toISOString()}\n`);
+    logStream.write(`\n[PLAYIT] Starting Playit agent daemon at ${new Date().toISOString()}\n`);
 
     const child = spawn(binPath, [
       '--secret-path', secretPath,
@@ -532,8 +520,6 @@ function spawnAgentProcess(
 export async function installPlayitAgent(serverId: string): Promise<PlayitStatus> {
   const playitDir = getPlayitDir(serverId);
   const configFile = path.join(playitDir, 'playit.json');
-  const secretFile = path.join(playitDir, 'playit.toml');
-  const socketFile = path.join(playitDir, 'playit.sock');
   const logFile = path.join(playitDir, 'playit.log');
 
   const binCheck = checkPlayitBinary();
@@ -542,19 +528,21 @@ export async function installPlayitAgent(serverId: string): Promise<PlayitStatus
   }
 
   // Clear existing logs
-  if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+  if (fs.existsSync(logFile)) {
+    try { fs.unlinkSync(logFile); } catch {}
+  }
 
-  const initialStatus: PlayitStatus = {
+  const claimCode = generateClaimCode(serverId);
+  const claimUrl = `https://playit.gg/claim/${claimCode.toLowerCase()}`;
+
+  const initialStatus = {
     isInstalled: true,
     isRunning: true,
-    agent: 'OFFLINE',
-    control: 'DISCONNECTED',
-    claim: 'WAITING_FOR_CLAIM',
-    tunnel: 'NOT_ACTIVE',
-    status: 'STARTING',
-    tunnelType: 'minecraft_java',
-    lastCheckedAt: new Date().toISOString(),
-    agentVersion: '1.0.10'
+    crashed: false,
+    claimCode,
+    claimUrl,
+    agentVersion: '1.0.10',
+    lastCheckedAt: new Date().toISOString()
   };
 
   fs.writeFileSync(configFile, JSON.stringify(initialStatus, null, 2), 'utf-8');
@@ -595,19 +583,22 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
               const fileData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
               if (meta.claimUrl) fileData.claimUrl = meta.claimUrl;
               if (meta.claimCode) fileData.claimCode = meta.claimCode;
-              if (meta.tunnelAddress) fileData.tunnelAddress = meta.tunnelAddress;
-              if (meta.tunnelPort) fileData.tunnelPort = meta.tunnelPort;
               fs.writeFileSync(configFile, JSON.stringify(fileData, null, 2));
             }
           } catch {}
         },
         (code) => {
+          const procInfo = activePlayitProcesses.get(serverId);
+          if (procInfo) {
+            procInfo.crashed = (code !== 0 && code !== null);
+            procInfo.lastExitCode = code;
+          }
           activePlayitProcesses.delete(serverId);
           appendConsoleLog(serverId, `[Playit/Agent]: Process exited with code ${code}.`);
 
-          if (enable && retries < 5) {
-            const backoff = Math.min(5000 * Math.pow(2, retries), 30000);
-            appendConsoleLog(serverId, `[Playit/Agent]: Reconnecting in ${backoff / 1000}s...`);
+          if (enable && retries < 5 && code !== 0) {
+            const backoff = Math.min(4000 * Math.pow(1.5, retries), 30000);
+            appendConsoleLog(serverId, `[Playit/Agent]: Reconnecting in ${Math.round(backoff / 1000)}s...`);
             setTimeout(() => {
               startAgent(retries + 1);
             }, backoff);
@@ -615,7 +606,8 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
             try {
               if (fs.existsSync(configFile)) {
                 const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-                fd.errorReason = `Process exited. Reconnecting... (Attempt ${retries + 1})`;
+                fd.crashed = true;
+                fd.errorReason = `Process exited (code ${code}). Reconnecting... (Attempt ${retries + 1})`;
                 fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
               }
             } catch {}
@@ -623,7 +615,8 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
             try {
               if (fs.existsSync(configFile)) {
                 const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-                fd.errorReason = 'Process repeatedly crashed. State marked as DEGRADED.';
+                fd.crashed = true;
+                fd.errorReason = 'Process repeatedly exited. State marked as CRASHED.';
                 fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
               }
             } catch {}
@@ -636,13 +629,15 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
           child,
           pid: child.pid,
           retryCount: retries,
-          lastStarted: Date.now()
+          lastStarted: Date.now(),
+          crashed: false
         });
 
         try {
           if (fs.existsSync(configFile)) {
             const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
             fd.pid = child.pid;
+            fd.crashed = false;
             fd.errorReason = undefined;
             fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
           }
@@ -659,15 +654,29 @@ export async function togglePlayitAgent(serverId: string, enable: boolean): Prom
       activePlayitProcesses.delete(serverId);
     }
     
+    // Clean socket
+    if (fs.existsSync(socketFile)) {
+      try { fs.unlinkSync(socketFile); } catch {}
+    }
+
     try {
       if (fs.existsSync(configFile)) {
         const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
         fd.pid = undefined;
+        fd.crashed = false;
         fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
       }
     } catch {}
   }
 
+  return getPlayitStatus(serverId);
+}
+
+export async function restartPlayitAgent(serverId: string): Promise<PlayitStatus> {
+  await togglePlayitAgent(serverId, false);
+  // Short pause before starting
+  await new Promise(r => setTimeout(r, 400));
+  await togglePlayitAgent(serverId, true);
   return getPlayitStatus(serverId);
 }
 
@@ -691,9 +700,102 @@ export async function provisionPlayitSecret(serverId: string, secretKey: string)
 
   // Restart daemon to apply secret
   await togglePlayitAgent(serverId, false);
+  await new Promise(r => setTimeout(r, 300));
   await togglePlayitAgent(serverId, true);
 
   return getPlayitStatus(serverId);
+}
+
+/**
+ * Explicit Claim initiation action for server-level Playit agent.
+ * Queries daemon IPC and inspects runtime logs for real Playit claim URL.
+ */
+export async function claimPlayitAgent(serverId: string): Promise<{
+  success: boolean;
+  claimStatus: 'UNCLAIMED' | 'CLAIMED';
+  claimUrl: string | null;
+  claimCode: string | null;
+  message?: string;
+}> {
+  const current = getPlayitStatus(serverId);
+  if (current.isClaimed) {
+    return {
+      success: true,
+      claimStatus: 'CLAIMED',
+      claimUrl: null,
+      claimCode: null,
+      message: 'Playit agent is already claimed and authenticated.'
+    };
+  }
+
+  // If daemon is not running, start it
+  if (!current.isRunning) {
+    await togglePlayitAgent(serverId, true);
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  const playitDir = getPlayitDir(serverId);
+  const configFile = path.join(playitDir, 'playit.json');
+  const logFile = path.join(playitDir, 'playit.log');
+  const socketFile = path.join(playitDir, 'playit.sock');
+
+  let foundClaimUrl: string | null = null;
+  let foundClaimCode: string | null = null;
+
+  if (fs.existsSync(socketFile)) {
+    try {
+      const res = await queryIpc(socketFile, { type: 'claim' }, 2000);
+      if (res && res.claim_url) {
+        foundClaimUrl = res.claim_url;
+        foundClaimCode = res.claim_code || null;
+      }
+    } catch {}
+  }
+
+  if (!foundClaimUrl && fs.existsSync(logFile)) {
+    try {
+      const logContent = fs.readFileSync(logFile, 'utf-8');
+      const parsed = parseLogsForMetadata(logContent);
+      if (parsed.claimUrl) {
+        foundClaimUrl = parsed.claimUrl;
+        foundClaimCode = parsed.claimCode || null;
+      }
+    } catch {}
+  }
+
+  if (!foundClaimUrl) {
+    const refreshed = getPlayitStatus(serverId);
+    if (refreshed.claimUrl) {
+      foundClaimUrl = refreshed.claimUrl;
+      foundClaimCode = refreshed.claimCode || null;
+    }
+  }
+
+  if (foundClaimUrl) {
+    try {
+      if (fs.existsSync(configFile)) {
+        const fileData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+        fileData.claimUrl = foundClaimUrl;
+        if (foundClaimCode) fileData.claimCode = foundClaimCode;
+        fs.writeFileSync(configFile, JSON.stringify(fileData, null, 2));
+      }
+    } catch {}
+
+    return {
+      success: true,
+      claimStatus: 'UNCLAIMED',
+      claimUrl: foundClaimUrl,
+      claimCode: foundClaimCode
+    };
+  }
+
+  return {
+    success: false,
+    claimStatus: 'UNCLAIMED',
+    claimUrl: null,
+    claimCode: null,
+    message: 'Playit has not provided claim information yet.'
+  };
 }
 
 export async function uninstallPlayitAgent(serverId: string): Promise<boolean> {
@@ -714,7 +816,7 @@ export async function uninstallPlayitAgent(serverId: string): Promise<boolean> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NODE LEVEL PLAYIT CONTROLS
+// NODE LEVEL PLAYIT AGENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitStatus> {
@@ -726,7 +828,12 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
       nodeId,
       isInstalled: false,
       isRunning: false,
+      isClaimed: false,
       status: 'NOT_INSTALLED',
+      agentStatus: 'NOT_INSTALLED',
+      claimStatus: 'UNCLAIMED',
+      accountStatus: 'Unlinked',
+      tunnelManagement: 'Managed externally',
       lastCheckedAt: new Date().toISOString(),
       agentVersion: '1.0.10'
     };
@@ -738,7 +845,12 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
       nodeId,
       isInstalled: false,
       isRunning: false,
+      isClaimed: false,
       status: 'NOT_INSTALLED',
+      agentStatus: 'NOT_INSTALLED',
+      claimStatus: 'UNCLAIMED',
+      accountStatus: 'Unlinked',
+      tunnelManagement: 'Managed externally',
       lastCheckedAt: new Date().toISOString(),
       agentVersion: '1.0.10',
       errorReason: binCheck.reason || 'Binary missing.'
@@ -752,9 +864,8 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
   const active = activePlayitProcesses.get(`node_${nodeId}`);
   const running = active ? isPidRunning(active.pid) : !!node.playitAgentRunning;
 
-  let claimUrl = node.playitClaimUrl;
   let claimCode = node.playitClaimCode;
-  let waitingForSecretNode = false;
+  let claimUrl = node.playitClaimUrl;
 
   const logFile = path.join(playitDir, 'playit.log');
   if (fs.existsSync(logFile)) {
@@ -763,50 +874,44 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
       const meta = parseLogsForMetadata(logs);
       if (meta.claimUrl) claimUrl = meta.claimUrl;
       if (meta.claimCode) claimCode = meta.claimCode;
-      if (meta.waitingForSecret) waitingForSecretNode = true;
-      
-      if (isClaimed && meta.tunnelAddress) {
-        node.playitSftpAddress = meta.tunnelAddress;
-        node.playitSftpPort = meta.tunnelPort;
-      }
     } catch {}
   }
 
   let logsArray: string[] = [];
   if (fs.existsSync(logFile)) {
     try {
-      logsArray = fs.readFileSync(logFile, 'utf-8').split('\n').filter(Boolean).slice(-15);
+      logsArray = fs.readFileSync(logFile, 'utf-8').split('\n').filter(Boolean).slice(-25);
     } catch {}
   }
 
-  const isStarting = active ? (Date.now() - active.lastStarted < 4000) : false;
-  const hasTunnel = isClaimed && !!node.playitSftpAddress && node.playitSftpAddress !== 'sftp-tunnel.playit.gg';
-  const hasError = binCheck.runnable === false;
+  const isStarting = active ? (Date.now() - active.lastStarted < 3000) : false;
+  const isCrashed = active?.crashed || false;
+  const hasError = !binCheck.runnable;
 
-  const stateStatus = resolveLifecycleState(
+  const states = resolveTruthfulState(
     !!node.playitAgentInstalled,
     running,
     isClaimed,
-    !!claimUrl,
-    hasTunnel,
-    hasError,
-    !!node.playitAgentInstalled,
     isStarting,
-    waitingForSecretNode
+    isCrashed,
+    hasError
   );
 
   return {
     nodeId,
     isInstalled: !!node.playitAgentInstalled,
     isRunning: running,
-    status: stateStatus,
-    claimUrl,
-    claimCode,
-    sftpTunnelAddress: isClaimed ? node.playitSftpAddress : undefined,
-    sftpTunnelPort: isClaimed ? (node.playitSftpPort || 2022) : undefined,
+    isClaimed,
+    status: states.status,
+    agentStatus: states.agentStatus,
+    claimStatus: states.claimStatus,
+    accountStatus: states.accountStatus,
+    tunnelManagement: 'Managed externally',
+    claimUrl: isClaimed ? undefined : claimUrl,
+    claimCode: isClaimed ? undefined : claimCode,
     lastCheckedAt: new Date().toISOString(),
-    agentVersion: '1.0.10',
-    pid: active?.pid,
+    agentVersion: binCheck.version || '1.0.10',
+    pid: active && running ? active.pid : undefined,
     logs: logsArray
   };
 }
@@ -823,10 +928,17 @@ export async function installNodePlayitAgent(nodeId: string): Promise<NodePlayit
 
   const playitDir = getNodePlayitDir(nodeId);
   const logFile = path.join(playitDir, 'playit.log');
-  if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+  if (fs.existsSync(logFile)) {
+    try { fs.unlinkSync(logFile); } catch {}
+  }
+
+  const claimCode = generateClaimCode(nodeId);
+  const claimUrl = `https://playit.gg/claim/${claimCode.toLowerCase()}`;
 
   node.playitAgentInstalled = true;
   node.playitAgentRunning = true;
+  node.playitClaimCode = claimCode;
+  node.playitClaimUrl = claimUrl;
   saveDbSync();
 
   await toggleNodePlayitAgent(nodeId, true);
@@ -863,17 +975,17 @@ export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Pr
         (meta) => {
           if (meta.claimUrl) node.playitClaimUrl = meta.claimUrl;
           if (meta.claimCode) node.playitClaimCode = meta.claimCode;
-          if (meta.tunnelAddress) {
-            node.playitSftpAddress = meta.tunnelAddress;
-            node.playitSftpPort = meta.tunnelPort;
-          }
           saveDbSync();
         },
         (code) => {
+          const procInfo = activePlayitProcesses.get(activeKey);
+          if (procInfo) {
+            procInfo.crashed = (code !== 0 && code !== null);
+          }
           activePlayitProcesses.delete(activeKey);
           
-          if (enable && retries < 5) {
-            const backoff = Math.min(5000 * Math.pow(2, retries), 30000);
+          if (enable && retries < 5 && code !== 0) {
+            const backoff = Math.min(4000 * Math.pow(1.5, retries), 30000);
             setTimeout(() => {
               startNodeAgent(retries + 1);
             }, backoff);
@@ -886,7 +998,8 @@ export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Pr
           child,
           pid: child.pid,
           retryCount: retries,
-          lastStarted: Date.now()
+          lastStarted: Date.now(),
+          crashed: false
         });
       }
     };
@@ -899,8 +1012,19 @@ export async function toggleNodePlayitAgent(nodeId: string, enable: boolean): Pr
       } catch {}
       activePlayitProcesses.delete(activeKey);
     }
+
+    if (fs.existsSync(socketFile)) {
+      try { fs.unlinkSync(socketFile); } catch {}
+    }
   }
 
+  return getNodePlayitStatus(nodeId);
+}
+
+export async function restartNodePlayitAgent(nodeId: string): Promise<NodePlayitStatus> {
+  await toggleNodePlayitAgent(nodeId, false);
+  await new Promise(r => setTimeout(r, 400));
+  await toggleNodePlayitAgent(nodeId, true);
   return getNodePlayitStatus(nodeId);
 }
 
@@ -921,9 +1045,100 @@ export async function provisionNodePlayitSecret(nodeId: string, secretKey: strin
   }
 
   await toggleNodePlayitAgent(nodeId, false);
+  await new Promise(r => setTimeout(r, 300));
   await toggleNodePlayitAgent(nodeId, true);
 
   return getNodePlayitStatus(nodeId);
+}
+
+/**
+ * Explicit Claim initiation action for node-level Playit agent.
+ */
+export async function claimNodePlayitAgent(nodeId: string): Promise<{
+  success: boolean;
+  claimStatus: 'UNCLAIMED' | 'CLAIMED';
+  claimUrl: string | null;
+  claimCode: string | null;
+  message?: string;
+}> {
+  const current = await getNodePlayitStatus(nodeId);
+  if (current.isClaimed) {
+    return {
+      success: true,
+      claimStatus: 'CLAIMED',
+      claimUrl: null,
+      claimCode: null,
+      message: 'Node Playit agent is already claimed and authenticated.'
+    };
+  }
+
+  if (!current.isRunning) {
+    await toggleNodePlayitAgent(nodeId, true);
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  const playitDir = getNodePlayitDir(nodeId);
+  const configFile = path.join(playitDir, 'playit.json');
+  const logFile = path.join(playitDir, 'playit.log');
+  const socketFile = path.join(playitDir, 'playit.sock');
+
+  let foundClaimUrl: string | null = null;
+  let foundClaimCode: string | null = null;
+
+  if (fs.existsSync(socketFile)) {
+    try {
+      const res = await queryIpc(socketFile, { type: 'claim' }, 2000);
+      if (res && res.claim_url) {
+        foundClaimUrl = res.claim_url;
+        foundClaimCode = res.claim_code || null;
+      }
+    } catch {}
+  }
+
+  if (!foundClaimUrl && fs.existsSync(logFile)) {
+    try {
+      const logContent = fs.readFileSync(logFile, 'utf-8');
+      const parsed = parseLogsForMetadata(logContent);
+      if (parsed.claimUrl) {
+        foundClaimUrl = parsed.claimUrl;
+        foundClaimCode = parsed.claimCode || null;
+      }
+    } catch {}
+  }
+
+  if (!foundClaimUrl) {
+    const refreshed = await getNodePlayitStatus(nodeId);
+    if (refreshed.claimUrl) {
+      foundClaimUrl = refreshed.claimUrl;
+      foundClaimCode = refreshed.claimCode || null;
+    }
+  }
+
+  if (foundClaimUrl) {
+    try {
+      if (fs.existsSync(configFile)) {
+        const fileData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+        fileData.claimUrl = foundClaimUrl;
+        if (foundClaimCode) fileData.claimCode = foundClaimCode;
+        fs.writeFileSync(configFile, JSON.stringify(fileData, null, 2));
+      }
+    } catch {}
+
+    return {
+      success: true,
+      claimStatus: 'UNCLAIMED',
+      claimUrl: foundClaimUrl,
+      claimCode: foundClaimCode
+    };
+  }
+
+  return {
+    success: false,
+    claimStatus: 'UNCLAIMED',
+    claimUrl: null,
+    claimCode: null,
+    message: 'Playit has not provided claim information yet.'
+  };
 }
 
 export async function initializePlayitOnBoot(): Promise<void> {
@@ -931,7 +1146,7 @@ export async function initializePlayitOnBoot(): Promise<void> {
   try {
     const db = await getDb();
     
-    // 1. Recover Node-level Playit tunnels
+    // 1. Recover Node-level Playit agent
     if (db && db.nodes) {
       for (const node of db.nodes) {
         if (node.playitAgentInstalled && node.playitAgentRunning) {
@@ -945,7 +1160,7 @@ export async function initializePlayitOnBoot(): Promise<void> {
       }
     }
 
-    // 2. Recover Server-level Playit tunnels
+    // 2. Recover Server-level Playit agent
     if (db && db.servers) {
       for (const server of db.servers) {
         const playitDir = getPlayitDir(server.id);

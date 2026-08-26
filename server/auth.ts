@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { getDb, saveDbSync } from './db';
 import { User, UserRole, AuditLog } from '../src/types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aetherpanel_secret_jwt_key_2026_super_safe';
+export const JWT_SECRET = process.env.JWT_SECRET || 'aetherpanel_secret_jwt_key_2026_super_safe';
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
@@ -206,7 +206,14 @@ export function requireApiKeyScope(requiredScope: string) {
     }
 
     const category = requiredScope.split(/[:.]/)[0];
-    if (scopes.includes(`${category}.*`) || scopes.includes(`${category}:*`) || scopes.includes(`${category}.manage`)) {
+    const categoryPlural = category.endsWith('s') ? category : category + 's';
+    const categorySingular = category.endsWith('s') ? category.slice(0, -1) : category;
+
+    if (
+      scopes.includes(`${category}.*`) || scopes.includes(`${category}:*`) || scopes.includes(`${category}.manage`) ||
+      scopes.includes(`${categoryPlural}.*`) || scopes.includes(`${categoryPlural}:*`) || scopes.includes(`${categoryPlural}.manage`) ||
+      scopes.includes(`${categorySingular}.*`) || scopes.includes(`${categorySingular}:*`) || scopes.includes(`${categorySingular}.manage`)
+    ) {
       return next();
     }
 
@@ -215,6 +222,13 @@ export function requireApiKeyScope(requiredScope: string) {
       : requiredScope.replace(':', '.');
 
     if (scopes.includes(altScope)) {
+      return next();
+    }
+
+    const singularRequired = requiredScope.replace(/^servers:/, 'server:').replace(/^servers\./, 'server.');
+    const pluralRequired = requiredScope.replace(/^server:/, 'servers:').replace(/^server\./, 'servers.');
+
+    if (scopes.includes(singularRequired) || scopes.includes(pluralRequired)) {
       return next();
     }
 

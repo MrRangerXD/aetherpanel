@@ -315,6 +315,54 @@ export interface SftpConnectionInfo {
   nodeName?: string;
 }
 
+export type PlayitAgentState = 
+  | 'NOT_INSTALLED'
+  | 'INSTALLING'
+  | 'STARTING'
+  | 'RUNNING_UNCLAIMED'
+  | 'CLAIMING'
+  | 'RUNNING_CLAIMED'
+  | 'STOPPED'
+  | 'CRASHED'
+  | 'ERROR';
+
+export interface PlayitStatus {
+  isInstalled: boolean;
+  isRunning: boolean;
+  isClaimed: boolean;
+  status: PlayitAgentState;
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
+  tunnelManagement: 'Managed externally';
+  claimUrl?: string;
+  claimCode?: string;
+  agentVersion: string;
+  pid?: number;
+  logs?: string[];
+  errorReason?: string;
+  lastCheckedAt: string;
+}
+
+export interface NodePlayitStatus {
+  nodeId: string;
+  isInstalled: boolean;
+  isRunning: boolean;
+  isClaimed: boolean;
+  status: PlayitAgentState;
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
+  tunnelManagement: 'Managed externally';
+  claimUrl?: string;
+  claimCode?: string;
+  agentVersion: string;
+  pid?: number;
+  logs?: string[];
+  errorReason?: string;
+  lastCheckedAt: string;
+}
+
 export interface NodeInstallToken {
   id: string;
   nodeId: string;
@@ -619,6 +667,7 @@ export interface SystemSettings {
   authProviders?: AuthProviderSettings;
   themeSettings?: CustomThemeSettings;
   antiAbuse?: AntiAbuseSettings;
+  enablePlayit?: boolean;
 }
 
 export interface PluginItem {

@@ -3,6 +3,10 @@ import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import {
   getMinecraftVersions,
+  getMinecraftProviders,
+  getLatestStableMinecraftVersion,
+  searchMinecraftVersions,
+  getMinecraftBuilds,
   getRecommendedJavaVersion,
   readServerProperties,
   writeServerProperties,
@@ -19,6 +23,43 @@ import path from 'path';
 
 const router = Router();
 
+// GET /api/v1/minecraft/providers - Query supported software providers
+router.get('/providers', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: getMinecraftProviders()
+  });
+});
+
+// GET /api/v1/minecraft/versions/latest - Query latest stable version for software
+router.get('/versions/latest', async (req: Request, res: Response) => {
+  try {
+    const software = (req.query.software as string) || 'paper';
+    const latest = await getLatestStableMinecraftVersion(software);
+    res.json({
+      success: true,
+      data: { software, latest, recommendedJava: getRecommendedJavaVersion(latest) }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'FETCH_LATEST_FAILED', message: err.message } });
+  }
+});
+
+// GET /api/v1/minecraft/versions/search - Search versions dynamically
+router.get('/versions/search', async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string) || '';
+    const software = (req.query.software as string) || 'paper';
+    const results = await searchMinecraftVersions(q, software);
+    res.json({
+      success: true,
+      data: { query: q, software, versions: results }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'SEARCH_FAILED', message: err.message } });
+  }
+});
+
 // GET /api/v1/minecraft/versions - Query supported versions for software
 router.get('/versions', async (req: Request, res: Response) => {
   try {
@@ -33,6 +74,34 @@ router.get('/versions', async (req: Request, res: Response) => {
       success: false,
       error: { code: 'VERSION_FETCH_FAILED', message: err.message }
     });
+  }
+});
+
+// GET /api/v1/minecraft/:software/versions - Query versions for specific software
+router.get('/:software/versions', async (req: Request, res: Response) => {
+  try {
+    const software = req.params.software;
+    const versionInfo = await getMinecraftVersions(software);
+    res.json({
+      success: true,
+      data: versionInfo
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'SOFTWARE_VERSIONS_FAILED', message: err.message } });
+  }
+});
+
+// GET /api/v1/minecraft/:software/:version/builds - Query builds/artifacts for software version
+router.get('/:software/:version/builds', async (req: Request, res: Response) => {
+  try {
+    const { software, version } = req.params;
+    const buildsInfo = await getMinecraftBuilds(software, version);
+    res.json({
+      success: true,
+      data: buildsInfo
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'BUILDS_FETCH_FAILED', message: err.message } });
   }
 });
 

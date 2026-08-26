@@ -12,6 +12,7 @@ import { apiRequest } from '../../lib/api';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem, ServerStartupConfig, ServerEnvVar } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import { useBranding } from '../../lib/BrandingContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
@@ -42,6 +43,7 @@ interface ServerManageProps {
 export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab, onNavigate }) => {
   const { user } = useAuth();
   const { accentClasses } = useTheme();
+  const { enablePlayit } = useBranding();
 
   const [server, setServer] = useState<Server | null>(null);
   const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
@@ -352,12 +354,15 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         if (s.startup.javaVersion) setJavaVersion(s.startup.javaVersion);
         if (s.startup.botRuntime) {
           setActiveBotRuntime(s.startup.botRuntime);
-        } else if (s.software.toLowerCase().includes('python')) {
-          setActiveBotRuntime('python');
-        } else if (s.software.toLowerCase().includes('bun')) {
-          setActiveBotRuntime('bun');
         } else {
-          setActiveBotRuntime('nodejs');
+          const sw = typeof s.software === 'string' ? s.software.toLowerCase() : '';
+          if (sw.includes('python')) {
+            setActiveBotRuntime('python');
+          } else if (sw.includes('bun')) {
+            setActiveBotRuntime('bun');
+          } else {
+            setActiveBotRuntime('nodejs');
+          }
         }
       } else {
         setStartupFlags('-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200');
@@ -1006,13 +1011,14 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     );
   }
 
-  const fullIp = `${server.primaryIp}:${server.primaryPort}`;
+  const fullIp = `${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}`;
   const isRunning = server.status === 'running';
-  const isMinecraft = server.productId === 'prod_minecraft' || server.software.toLowerCase().includes('paper') || server.software.toLowerCase().includes('spigot') || server.software.toLowerCase().includes('forge') || server.software.toLowerCase().includes('minecraft');
-  const isPython = server.software.toLowerCase().includes('python') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
-  const isBun = server.software.toLowerCase().includes('bun') || (server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
+  const swLower = typeof server.software === 'string' ? server.software.toLowerCase() : '';
+  const isMinecraft = server.productId === 'prod_minecraft' || swLower.includes('paper') || swLower.includes('spigot') || swLower.includes('forge') || swLower.includes('minecraft') || swLower.includes('purpur');
+  const isPython = swLower.includes('python') || Boolean(server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
+  const isBun = swLower.includes('bun') || Boolean(server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
   const isNode = !isMinecraft && !isPython && !isBun;
-  const isBot = server.productId === 'prod_bot' || server.software.toLowerCase().includes('node') || isPython || isBun || isNode;
+  const isBot = server.productId === 'prod_bot' || swLower.includes('node') || isPython || isBun || isNode;
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
@@ -1184,7 +1190,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           >
             <option value="console">💻 Console Logs</option>
             <option value="monitoring">📊 Monitoring & Metrics</option>
-            <option value="network">🌐 Network, SFTP & Playit</option>
+            <option value="network">🌐 {enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</option>
             <option value="files">📁 File Manager</option>
             {isMinecraft && <option value="plugins">🧩 Plugins Manager</option>}
             {isMinecraft && <option value="properties">⚙️ Server Properties</option>}
@@ -1227,7 +1233,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             }`}
           >
             <Globe className="h-4 w-4" />
-            <span>Network, SFTP & Playit</span>
+            <span>{enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</span>
           </button>
 
           <button
@@ -3408,7 +3414,12 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 <div className="text-xs text-zinc-400">Wipes files and re-applies default templates for the current software.</div>
               </div>
               <button
-                onClick={() => setShowReinstallModal(true)}
+                onClick={() => {
+                  const initialSoft = server.software || 'Paper';
+                  setReinstallSoftware(initialSoft);
+                  loadReinstallVersions(initialSoft);
+                  setShowReinstallModal(true);
+                }}
                 className="px-4 py-2 rounded-xl bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-500/30 font-semibold text-xs shrink-0"
               >
                 Reinstall Server

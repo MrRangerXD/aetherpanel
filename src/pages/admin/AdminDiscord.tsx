@@ -3,7 +3,7 @@ import {
   MessageSquare, Bot, Shield, Key, RefreshCw, Save, Check,
   AlertCircle, Eye, EyeOff, Radio, Activity, Filter, Search, Terminal,
   Play, CheckCircle2, XCircle, Clock, ExternalLink, Flame, ShieldAlert,
-  Sparkles, HelpCircle, Layers
+  Sparkles, HelpCircle, Layers, Copy
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { DiscordBotSettings, DiscordAuditLog, DiscordNotificationEvent } from '../../types';
@@ -39,6 +39,7 @@ export const AdminDiscord: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [copiedUri, setCopiedUri] = useState(false);
 
   // Settings state
   const [enabled, setEnabled] = useState(true);
@@ -101,7 +102,7 @@ export const AdminDiscord: React.FC = () => {
         setBotToken(s.botToken || '');
         setClientId(s.clientId || '');
         setClientSecret(s.clientSecret || '');
-        setRedirectUri(s.redirectUri || 'http://localhost:3000/settings');
+        setRedirectUri(s.redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '/api/v1/auth/discord/callback'));
         setDefaultWebhookUrl(s.defaultWebhookUrl || '');
         setCommandRateLimitPerMin(s.commandRateLimitPerMin || 10);
         setDefaultNotificationEvents(s.defaultNotificationEvents || []);
@@ -464,14 +465,36 @@ export const AdminDiscord: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">OAuth2 Redirect URI</label>
-                <input
-                  type="text"
-                  value={redirectUri}
-                  onChange={e => setRedirectUri(e.target.value)}
-                  placeholder="http://localhost:3000/settings"
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">Discord OAuth2 Redirect URI</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const uriToCopy = redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '');
+                      if (uriToCopy) {
+                        navigator.clipboard.writeText(uriToCopy);
+                        setCopiedUri(true);
+                        setTimeout(() => setCopiedUri(false), 2000);
+                      }
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-medium transition-colors"
+                  >
+                    {copiedUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedUri ? 'Copied!' : 'Copy Callback URI'}</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={redirectUri}
+                    onChange={e => setRedirectUri(e.target.value)}
+                    placeholder={typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : 'https://panel.yourdomain.com/api/v1/auth/discord/callback'}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Add this dynamic callback to Discord Developer Portal → OAuth2 → Redirects for this installation.
+                </p>
               </div>
 
               <div>

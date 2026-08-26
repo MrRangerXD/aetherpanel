@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { getDb, saveDbSync } from '../db';
-import { generateToken, authMiddleware, createAuditLog, AuthenticatedRequest } from '../auth';
+import { generateToken, authMiddleware, createAuditLog, AuthenticatedRequest, JWT_SECRET } from '../auth';
 import { User, DiscordAccount } from '../../src/types';
 import { evaluateIpRisk, AntiAbuseConfig } from '../utils/ipRiskProvider';
+import { getDiscordOAuthRedirectUri, getCurrentInstallationPublicUrl } from '../oauthUrlResolver';
 
 const router = Router();
 
@@ -695,8 +697,27 @@ router.get('/discord/url', async (req, res) => {
       });
     }
 
-    const redirectUri = discordSettings?.redirectUri || process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/v1/auth/discord/callback`;
-    const state = crypto.randomBytes(16).toString('hex');
+    // Check if requesting user is authenticated to embed userId in OAuth state for persistent account linking
+    let linkingUserId: string | undefined;
+    const authHeader = req.headers.authorization;
+    const cookieToken = req.cookies?.aether_token;
+    const token = (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (cookieToken || req.query.token as string));
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        if (decoded && decoded.id) {
+          linkingUserId = decoded.id;
+        }
+      } catch {}
+    }
+
+    const redirectUri = getDiscordOAuthRedirectUri(req, db.settings);
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const state = jwt.sign({
+      nonce,
+      userId: linkingUserId || null,
+      action: linkingUserId ? 'link' : 'auth'
+    }, JWT_SECRET, { expiresIn: '15m' });
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -723,22 +744,31 @@ router.get('/discord/url', async (req, res) => {
 
 // GET /api/v1/auth/discord/callback - OAuth2 callback handler (Popup postMessage & session creation)
 router.get('/discord/callback', async (req, res) => {
+  let targetOrigin = 'http://localhost:3000';
   try {
-    const { code, error, error_description } = req.query;
+    const db = await getDb();
+    targetOrigin = getCurrentInstallationPublicUrl(req, db.settings);
+    const { code, state, error, error_description } = req.query;
 
     if (error) {
+      const errMsg = String(error_description || error || 'Discord authorization cancelled');
       return res.send(`
         <!DOCTYPE html>
         <html>
           <body style="background:#09090b;color:#f87171;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
             <div style="text-align:center;">
               <h2>Discord Authentication Cancelled</h2>
-              <p>${error_description || error}</p>
+              <p>${errMsg}</p>
               <script>
-                if (window.opener) {
-                  window.opener.postMessage({ type: 'DISCORD_AUTH_ERROR', error: '${error_description || error}' }, '*');
-                  setTimeout(() => window.close(), 2000);
-                }
+                (function() {
+                  var targetOrigin = ${JSON.stringify(targetOrigin)};
+                  if (window.opener) {
+                    var payload = { type: 'AETHERPANEL_DISCORD_OAUTH_ERROR', success: false, error: ${JSON.stringify(errMsg)} };
+                    try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
+                    try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_ERROR' }, targetOrigin); } catch (e) {}
+                    setTimeout(function() { try { window.close(); } catch(e){} }, 1500);
+                  }
+                })();
               </script>
             </div>
           </body>
@@ -750,11 +780,31 @@ router.get('/discord/callback', async (req, res) => {
       return res.status(400).send('Missing authorization code.');
     }
 
-    const db = await getDb();
+    // Decode state to extract authenticated user who initiated linking
+    let stateUserId: string | undefined;
+    if (state) {
+      try {
+        const statePayload = jwt.verify(String(state), JWT_SECRET) as any;
+        if (statePayload?.userId) {
+          stateUserId = statePayload.userId;
+        }
+      } catch {}
+    }
+
+    // Fallback: check session cookie if stateUserId wasn't extracted
+    if (!stateUserId && req.cookies?.aether_token) {
+      try {
+        const decoded = jwt.verify(req.cookies.aether_token, JWT_SECRET) as any;
+        if (decoded?.id) {
+          stateUserId = decoded.id;
+        }
+      } catch {}
+    }
+
     const discordSettings = db.settings.authProviders?.discord;
     const clientId = discordSettings?.clientId || process.env.DISCORD_CLIENT_ID;
     const clientSecret = discordSettings?.clientSecret || process.env.DISCORD_CLIENT_SECRET;
-    const redirectUri = discordSettings?.redirectUri || process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/v1/auth/discord/callback`;
+    const redirectUri = getDiscordOAuthRedirectUri(req, db.settings);
 
     if (!clientId || !clientSecret) {
       return res.status(500).send('Discord OAuth credentials not configured on server.');
@@ -784,10 +834,15 @@ router.get('/discord/callback', async (req, res) => {
               <h2>Authentication Failed</h2>
               <p>${errMsg}</p>
               <script>
-                if (window.opener) {
-                  window.opener.postMessage({ type: 'DISCORD_AUTH_ERROR', error: '${errMsg}' }, '*');
-                  setTimeout(() => window.close(), 2500);
-                }
+                (function() {
+                  var targetOrigin = ${JSON.stringify(targetOrigin)};
+                  if (window.opener) {
+                    var payload = { type: 'AETHERPANEL_DISCORD_OAUTH_ERROR', success: false, error: ${JSON.stringify(errMsg)} };
+                    try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
+                    try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_ERROR' }, targetOrigin); } catch (e) {}
+                    setTimeout(function() { try { window.close(); } catch(e){} }, 2000);
+                  }
+                })();
               </script>
             </div>
           </body>
@@ -812,8 +867,13 @@ router.get('/discord/callback', async (req, res) => {
       ? `https://cdn.discordapp.com/avatars/${discordId}/${discordUser.avatar}.png`
       : `https://api.dicebear.com/7.x/identicon/svg?seed=${discordUsername}`;
 
-    // Check existing user
-    let user = db.users.find(u => (u.discordId && u.discordId === discordId) || (discordEmail && u.email.toLowerCase() === discordEmail));
+    // Target user to link: prioritizing stateUserId (authenticated user linking account)
+    let user = stateUserId ? db.users.find(u => u.id === stateUserId) : null;
+
+    // If not linking an active session, search by linked discordId or matched email
+    if (!user) {
+      user = db.users.find(u => (u.discordId && u.discordId === discordId) || (discordEmail && u.email.toLowerCase() === discordEmail));
+    }
 
     if (user) {
       if (user.isSuspended) {
@@ -831,6 +891,17 @@ router.get('/discord/callback', async (req, res) => {
         `);
       }
 
+      // Unlink discordId from any other account to maintain 1:1 integrity
+      db.users.forEach(otherUser => {
+        if (otherUser.id !== user!.id && otherUser.discordId === discordId) {
+          delete otherUser.discordId;
+          otherUser.updatedAt = new Date().toISOString();
+          if (db.discordLinks && db.discordLinks[otherUser.id]) {
+            delete db.discordLinks[otherUser.id];
+          }
+        }
+      });
+
       user.discordId = discordId;
       if (!user.avatarUrl || user.avatarUrl.includes('dicebear')) {
         user.avatarUrl = discordAvatar;
@@ -838,7 +909,7 @@ router.get('/discord/callback', async (req, res) => {
       user.updatedAt = new Date().toISOString();
 
       if (!db.discordLinks) db.discordLinks = {};
-      db.discordLinks[user.id] = {
+      const discordAccountData = {
         discordId,
         username: discordUsername,
         globalName: discordUser.global_name || discordUsername,
@@ -846,10 +917,11 @@ router.get('/discord/callback', async (req, res) => {
         email: discordEmail || user.email,
         linkedAt: new Date().toISOString()
       };
+      db.discordLinks[user.id] = discordAccountData;
       saveDbSync();
 
       const sessionToken = generateToken(user);
-      await createAuditLog(user.id, user.email, user.role, 'DISCORD_LOGIN', 'SESSION', 'Logged in via Discord OAuth2');
+      await createAuditLog(user.id, user.email, user.role, 'DISCORD_ACCOUNT_LINKED', 'DISCORD', `Linked Discord account ${discordUsername} (${discordId})`);
 
       res.cookie('aether_token', sessionToken, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
 
@@ -858,19 +930,29 @@ router.get('/discord/callback', async (req, res) => {
         <html>
           <body style="background:#09090b;color:#34d399;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
             <div style="text-align:center;">
-              <h2>✅ Welcome back, ${user.displayName}!</h2>
-              <p>Authenticating session...</p>
+              <h2>✅ Welcome, ${user.displayName}!</h2>
+              <p>Discord account authorized and linked successfully.</p>
               <script>
-                if (window.opener) {
-                  window.opener.postMessage({
-                    type: 'DISCORD_AUTH_SUCCESS',
-                    token: '${sessionToken}',
-                    user: ${JSON.stringify(user)}
-                  }, '*');
-                  window.close();
-                } else {
-                  window.location.href = '/dashboard';
-                }
+                (function() {
+                  var targetOrigin = ${JSON.stringify(targetOrigin)};
+                  var userData = ${JSON.stringify(user)};
+                  var token = ${JSON.stringify(sessionToken)};
+                  var discordAccount = ${JSON.stringify(discordAccountData)};
+                  if (window.opener) {
+                    var payload = {
+                      type: 'AETHERPANEL_DISCORD_OAUTH_SUCCESS',
+                      success: true,
+                      token: token,
+                      user: userData,
+                      discordAccount: discordAccount
+                    };
+                    try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
+                    try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_SUCCESS' }, targetOrigin); } catch (e) {}
+                    setTimeout(function() { try { window.close(); } catch(e){} }, 200);
+                  } else {
+                    document.body.innerHTML = '<div style="text-align:center;padding:30px;"><h2>Discord authorization successful</h2><p>You can close this window and return to AetherPanel.</p></div>';
+                  }
+                })();
               </script>
             </div>
           </body>
@@ -929,7 +1011,7 @@ router.get('/discord/callback', async (req, res) => {
     db.users.push(newUser);
     db.passwords[userId] = passwordHash;
     if (!db.discordLinks) db.discordLinks = {};
-    db.discordLinks[userId] = {
+    const newDiscordAccount = {
       discordId,
       username: discordUsername,
       globalName: discordUser.global_name || discordUsername,
@@ -937,6 +1019,7 @@ router.get('/discord/callback', async (req, res) => {
       email: discordEmail || newUser.email,
       linkedAt: new Date().toISOString()
     };
+    db.discordLinks[userId] = newDiscordAccount;
     saveDbSync();
 
     const sessionToken = generateToken(newUser);
@@ -950,18 +1033,28 @@ router.get('/discord/callback', async (req, res) => {
         <body style="background:#09090b;color:#34d399;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
           <div style="text-align:center;">
             <h2>✅ Account Created! Welcome, ${newUser.displayName}!</h2>
-            <p>Redirecting to control panel...</p>
+            <p>Authenticating session...</p>
             <script>
-              if (window.opener) {
-                window.opener.postMessage({
-                  type: 'DISCORD_AUTH_SUCCESS',
-                  token: '${sessionToken}',
-                  user: ${JSON.stringify(newUser)}
-                }, '*');
-                window.close();
-              } else {
-                window.location.href = '/dashboard';
-              }
+              (function() {
+                var targetOrigin = ${JSON.stringify(targetOrigin)};
+                var userData = ${JSON.stringify(newUser)};
+                var token = ${JSON.stringify(sessionToken)};
+                var discordAccount = ${JSON.stringify(newDiscordAccount)};
+                if (window.opener) {
+                  var payload = {
+                    type: 'AETHERPANEL_DISCORD_OAUTH_SUCCESS',
+                    success: true,
+                    token: token,
+                    user: userData,
+                    discordAccount: discordAccount
+                  };
+                  try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
+                  try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_SUCCESS' }, targetOrigin); } catch (e) {}
+                  setTimeout(function() { try { window.close(); } catch(e){} }, 200);
+                } else {
+                  document.body.innerHTML = '<div style="text-align:center;padding:30px;"><h2>Discord authorization successful</h2><p>You can close this window and return to AetherPanel.</p></div>';
+                }
+              })();
             </script>
           </div>
         </body>

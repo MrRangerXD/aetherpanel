@@ -9,6 +9,7 @@ import {
   DiscordBotSettings,
   DiscordAccount
 } from '../src/types';
+import { getDiscordOAuthRedirectUri } from './oauthUrlResolver';
 
 // Rate Limiting Map: discordUserId -> array of timestamps
 const userCommandTimestamps: Record<string, number[]> = {};
@@ -456,16 +457,6 @@ export async function executeDiscordCommand(
   }
   userCommandTimestamps[discordUserId].push(now);
   
-  // Command Parsing
-  const parts = commandStr.trim().split(' ').filter(Boolean);
-  const baseCmd = parts[0]?.toLowerCase();
-  const subCmd = parts[1]?.toLowerCase();
-  const inlineServerArg = parts[2];
-  
-  if (baseCmd !== '/server') {
-    return { success: false, message: 'Unknown command prefix. Valid commands start with /server (e.g., /server status).' };
-  }
-  
   // Verify User Link
   let aetherUserId: string | null = null;
   if (db.discordLinks) {
@@ -482,6 +473,23 @@ export async function executeDiscordCommand(
       success: false,
       message: 'Your Discord account is not linked to an AetherPanel user account. Please authorize and link your Discord account under User Settings.'
     };
+  }
+
+  // Handle /ping check
+  const parts = commandStr.trim().split(' ').filter(Boolean);
+  const baseCmd = parts[0]?.toLowerCase();
+  const subCmd = parts[1]?.toLowerCase();
+  const inlineServerArg = parts[2];
+
+  if (baseCmd === '/ping') {
+    return {
+      success: true,
+      message: 'Pong! AetherPanel Discord Manager Bot is online and responsive.'
+    };
+  }
+  
+  if (baseCmd !== '/server') {
+    return { success: false, message: 'Unknown command prefix. Valid commands start with /server (e.g., /server status) or /ping.' };
   }
   
   const user = db.users.find(u => u.id === aetherUserId);
@@ -645,8 +653,9 @@ export async function runDiscordAcceptanceTestSuite(adminUserId: string): Promis
   // Test 4: OAuth2 Client Configuration
   const t4 = Date.now();
   const hasClientSecret = !!globalSettings?.clientSecret;
-  const hasRedirectUri = !!globalSettings?.redirectUri;
-  addTest('test_4', '4. OAuth2 Client Setup', 'auth', hasClientSecret && hasRedirectUri, hasClientSecret && hasRedirectUri ? 'OAuth2 Client Secret and Redirect URI configured' : 'OAuth2 credentials unconfigured', 'Checks authorization code flow configuration', t4);
+  const redirectUri = getDiscordOAuthRedirectUri(undefined, globalSettings);
+  const hasRedirectUri = !!redirectUri;
+  addTest('test_4', '4. OAuth2 Client Setup', 'auth', hasClientSecret && hasRedirectUri, hasClientSecret && hasRedirectUri ? `OAuth2 Client configured with redirect URI: ${redirectUri}` : 'OAuth2 credentials unconfigured', 'Checks authorization code flow configuration', t4);
 
   // Test 5: Sensitive Credential Masking Security
   const t5 = Date.now();

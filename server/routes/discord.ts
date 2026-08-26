@@ -16,6 +16,7 @@ import {
   DiscordBotSettings,
   DiscordNotificationEvent
 } from '../../src/types';
+import { getDiscordOAuthRedirectUri } from '../oauthUrlResolver';
 
 const router = Router();
 
@@ -57,7 +58,25 @@ router.get('/bot-status', authMiddleware, async (req: AuthenticatedRequest, res:
 router.get('/user', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const userId = req.user!.id;
-  const discordAccount = db.discordLinks ? db.discordLinks[userId] : null;
+  let discordAccount = db.discordLinks ? db.discordLinks[userId] : null;
+
+  // Fallback: If not in discordLinks map but user has a discordId, hydrate and persist it
+  if (!discordAccount) {
+    const userRecord = db.users.find(u => u.id === userId);
+    if (userRecord && userRecord.discordId) {
+      if (!db.discordLinks) db.discordLinks = {};
+      discordAccount = {
+        discordId: userRecord.discordId,
+        username: userRecord.username || userRecord.displayName,
+        globalName: userRecord.displayName || userRecord.username,
+        avatar: userRecord.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${userRecord.username}`,
+        email: userRecord.email,
+        linkedAt: userRecord.updatedAt || userRecord.createdAt || new Date().toISOString()
+      };
+      db.discordLinks[userId] = discordAccount;
+      saveDbSync();
+    }
+  }
 
   res.json({
     success: true,
@@ -85,6 +104,23 @@ router.post('/user/connect', authMiddleware, async (req: AuthenticatedRequest, r
 
   const cleanDiscordId = discordId.trim();
   const cleanUsername = username.trim();
+
+  // Unlink from other accounts if present
+  db.users.forEach(u => {
+    if (u.id !== userId && u.discordId === cleanDiscordId) {
+      delete u.discordId;
+      u.updatedAt = new Date().toISOString();
+      if (db.discordLinks && db.discordLinks[u.id]) {
+        delete db.discordLinks[u.id];
+      }
+    }
+  });
+
+  const userRecord = db.users.find(u => u.id === userId);
+  if (userRecord) {
+    userRecord.discordId = cleanDiscordId;
+    userRecord.updatedAt = new Date().toISOString();
+  }
 
   if (!db.discordLinks) db.discordLinks = {};
 
@@ -121,6 +157,12 @@ router.delete('/user/disconnect', authMiddleware, async (req: AuthenticatedReque
   const db = await getDb();
   const userId = req.user!.id;
 
+  const userRecord = db.users.find(u => u.id === userId);
+  if (userRecord && userRecord.discordId) {
+    delete userRecord.discordId;
+    userRecord.updatedAt = new Date().toISOString();
+  }
+
   if (db.discordLinks && db.discordLinks[userId]) {
     const prev = db.discordLinks[userId];
     delete db.discordLinks[userId];
@@ -134,6 +176,8 @@ router.delete('/user/disconnect', authMiddleware, async (req: AuthenticatedReque
       'DISCORD',
       `Unlinked Discord account ${prev.username}`
     );
+  } else {
+    saveDbSync();
   }
 
   res.json({ success: true, message: 'Discord account disconnected.' });
@@ -327,11 +371,13 @@ router.get('/admin/settings', authMiddleware, async (req: AuthenticatedRequest, 
   const settings = db.settings?.discordSettings || defaultDiscordSettings;
   const botTokenMasked = settings.botToken ? `••••••••${settings.botToken.slice(-4)}` : '';
   const clientSecretMasked = settings.clientSecret ? `••••••••${settings.clientSecret.slice(-4)}` : '';
+  const dynamicRedirectUri = getDiscordOAuthRedirectUri(req, db.settings);
 
   res.json({
     success: true,
     data: {
       ...settings,
+      redirectUri: dynamicRedirectUri,
       botToken: botTokenMasked,
       clientSecret: clientSecretMasked,
       botTokenConfigured: !!settings.botToken,

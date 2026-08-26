@@ -1,23 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Globe, Key, Copy, Check, RefreshCw, Shield, AlertTriangle,
-  ExternalLink, Play, Square, Wifi, Terminal, Server, CheckCircle2,
-  Lock, ArrowRight, Download, Radio, Network, FolderSync
+  ExternalLink, Play, Square, Wifi, Terminal, CheckCircle2,
+  Lock, Download, ChevronDown, ChevronUp, RotateCw, Server as ServerIcon,
+  HelpCircle, AlertCircle
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Server as ServerType, SftpConnectionInfo } from '../../types';
-
-interface PlayitData {
-  isInstalled: boolean;
-  isRunning: boolean;
-  status: 'uninstalled' | 'installed' | 'claiming' | 'connected' | 'disconnected' | 'error';
-  claimUrl?: string;
-  claimCode?: string;
-  tunnelAddress?: string;
-  tunnelPort?: number;
-  tunnelType: string;
-  agentVersion: string;
-}
+import { Server as ServerType, SftpConnectionInfo, PlayitStatus } from '../../types';
+import { useBranding } from '../../lib/BrandingContext';
 
 interface ServerNetworkPlayitTabProps {
   server: ServerType;
@@ -25,14 +15,123 @@ interface ServerNetworkPlayitTabProps {
 }
 
 export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ server, onRefreshServer }) => {
-  const [playit, setPlayit] = useState<PlayitData | null>(null);
+  const { enablePlayit } = useBranding();
+  const [playit, setPlayit] = useState<PlayitStatus | null>(null);
   const [loadingPlayit, setLoadingPlayit] = useState<boolean>(true);
   const [installingPlayit, setInstallingPlayit] = useState<boolean>(false);
-  const [togglingTunnel, setTogglingTunnel] = useState<boolean>(false);
+  const [togglingAgent, setTogglingAgent] = useState<boolean>(false);
+  const [restartingAgent, setRestartingAgent] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  
+  // Advanced Manual Secret
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [secretInput, setSecretInput] = useState<string>('');
   const [submittingSecret, setSubmittingSecret] = useState<boolean>(false);
   const [secretMsg, setSecretMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // SFTP state
+  const [sftpInfo, setSftpInfo] = useState<SftpConnectionInfo | null>((server as any).sftp || null);
+  const [loadingSftp, setLoadingSftp] = useState<boolean>(!((server as any).sftp));
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [resettingPassword, setResettingPassword] = useState<boolean>(false);
+
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccessMsg, setClaimSuccessMsg] = useState<string | null>(null);
+  const [isClaiming, setIsClaiming] = useState<boolean>(false);
+
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchSftpInfo = async () => {
+    try {
+      setLoadingSftp(true);
+      const res = await apiRequest(`/servers/${server.id}/sftp`);
+      if (res.success && res.data) {
+        setSftpInfo(res.data);
+      }
+    } catch {
+      // fallback
+    } finally {
+      setLoadingSftp(false);
+    }
+  };
+
+  const fetchPlayitStatus = async () => {
+    if (!enablePlayit) {
+      setLoadingPlayit(false);
+      return;
+    }
+    setLoadingPlayit(true);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit`);
+      if (res.success && res.data) {
+        setPlayit(res.data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingPlayit(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSftpInfo();
+    if (enablePlayit) {
+      fetchPlayitStatus();
+
+      // Periodic heartbeat polling for claim detection
+      const interval = setInterval(() => {
+        fetchPlayitStatus();
+      }, 6000);
+
+      return () => clearInterval(interval);
+    }
+  }, [server.id, enablePlayit]);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleInstallPlayit = async () => {
+    setInstallingPlayit(true);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit/install`, { method: 'POST' });
+      if (res.success && res.data) {
+        setPlayit(res.data);
+        fetchSftpInfo();
+      }
+    } finally {
+      setInstallingPlayit(false);
+    }
+  };
+
+  const handleToggleAgent = async (enable: boolean) => {
+    setTogglingAgent(true);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ enable })
+      });
+      if (res.success && res.data) {
+        setPlayit(res.data);
+      }
+    } finally {
+      setTogglingAgent(false);
+    }
+  };
+
+  const handleRestartAgent = async () => {
+    setRestartingAgent(true);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit/restart`, { method: 'POST' });
+      if (res.success && res.data) {
+        setPlayit(res.data);
+      }
+    } finally {
+      setRestartingAgent(false);
+    }
+  };
 
   const handleProvisionSecret = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,76 +158,48 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
     }
   };
 
-  // SFTP state
-  const [sftpInfo, setSftpInfo] = useState<SftpConnectionInfo | null>((server as any).sftp || null);
-  const [loadingSftp, setLoadingSftp] = useState<boolean>(!((server as any).sftp));
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [resettingPassword, setResettingPassword] = useState<boolean>(false);
-
-  const fetchSftpInfo = async () => {
-    try {
-      setLoadingSftp(true);
-      const res = await apiRequest(`/servers/${server.id}/sftp`);
-      if (res.success && res.data) {
-        setSftpInfo(res.data);
-      }
-    } catch {
-      // fallback to basic
-    } finally {
-      setLoadingSftp(false);
-    }
-  };
-
-  const fetchPlayitStatus = async () => {
+  const handleClaimAgent = async () => {
+    if (isClaiming) return;
+    setIsClaiming(true);
+    setClaimError(null);
+    setClaimSuccessMsg(null);
     setLoadingPlayit(true);
+
     try {
-      const res = await apiRequest(`/servers/${server.id}/playit`);
-      if (res.success && res.data) {
-        setPlayit(res.data);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingPlayit(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSftpInfo();
-    fetchPlayitStatus();
-  }, [server.id]);
-
-  const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const handleInstallPlayit = async () => {
-    setInstallingPlayit(true);
-    try {
-      const res = await apiRequest(`/servers/${server.id}/playit/install`, { method: 'POST' });
-      if (res.success && res.data) {
-        setPlayit(res.data);
-        fetchSftpInfo();
-      }
-    } finally {
-      setInstallingPlayit(false);
-    }
-  };
-
-  const handleTogglePlayit = async (enable: boolean) => {
-    setTogglingTunnel(true);
-    try {
-      const res = await apiRequest(`/servers/${server.id}/playit/toggle`, {
-        method: 'POST',
-        body: JSON.stringify({ enable })
+      const res = await apiRequest<{ claimUrl: string | null; claimCode: string | null; claimStatus: string }>(`/servers/${server.id}/playit/claim`, {
+        method: 'POST'
       });
+
       if (res.success && res.data) {
-        setPlayit(res.data);
+        setPlayit(prev => prev ? {
+          ...prev,
+          claimUrl: res.data.claimUrl || prev.claimUrl,
+          claimCode: res.data.claimCode || prev.claimCode,
+          claimStatus: (res.data.claimStatus as any) || prev.claimStatus
+        } : prev);
+
+        if (res.data.claimUrl) {
+          setClaimSuccessMsg('Official Playit claim URL generated. Opening claim window...');
+          try {
+            window.open(res.data.claimUrl, '_blank');
+          } catch {
+            setClaimError('Popup blocked by browser. Please use the "Open Claim Page" button below.');
+          }
+        } else {
+          setClaimError('Playit daemon is starting or has not generated a claim URL yet. Please refresh in a moment.');
+        }
+
+        await fetchPlayitStatus();
+      } else {
+        const errorMsg = res.error?.message || res.message || 'Playit daemon claim service returned an error.';
+        setClaimError(errorMsg);
       }
+    } catch (err: any) {
+      console.error('Failed to claim Playit agent:', err);
+      setClaimError(err.message || 'Failed to connect to Playit claim endpoint.');
     } finally {
-      setTogglingTunnel(false);
+      setIsClaiming(false);
+      setLoadingPlayit(false);
     }
   };
 
@@ -156,6 +227,9 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const sftpUser = sftpInfo?.username || `srv_${server.id.substring(0, 10)}`;
   const sftpPass = sftpInfo?.password || (server as any).sftpPassword || '••••••••••••••••';
   const sftpUri = sftpInfo?.connectionUri || `sftp://${sftpUser}@${sftpHost}:${sftpPort}`;
+
+  const isClaimed = playit?.isClaimed || playit?.claimStatus === 'CLAIMED';
+  const isRunning = playit?.isRunning || playit?.agentStatus === 'RUNNING';
 
   return (
     <div className="space-y-6">
@@ -216,7 +290,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
         </div>
       </div>
 
-      {/* SFTP Secure File Transfer Credentials with Real Resolver */}
+      {/* SFTP Credentials */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div>
@@ -224,16 +298,6 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Key className="h-5 w-5 text-violet-400" /> SFTP (Secure File Transfer Protocol)
               </h3>
-              {sftpInfo?.endpointMode === 'playit_tunnel' && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Playit Tunnel Secured
-                </span>
-              )}
-              {sftpInfo?.endpointMode === 'node_fqdn' && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Node FQDN
-                </span>
-              )}
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
               Connect desktop FTP clients (FileZilla, WinSCP, Cyberduck) with high-speed encrypted transfers.
@@ -322,8 +386,19 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
         </div>
       </div>
 
-      {/* Playit.gg Tunnel Integration Card */}
-      <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/20 p-6 space-y-5 shadow-2xl">
+      {/* Playit.GG Agent Manager Card */}
+      {!enablePlayit ? (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 text-center space-y-2">
+          <div className="p-3 rounded-full bg-zinc-800/80 text-zinc-500 w-fit mx-auto">
+            <Globe className="h-5 w-5" />
+          </div>
+          <h4 className="text-xs font-bold text-zinc-300">Playit.GG Agent Integration Disabled</h4>
+          <p className="text-[11px] text-zinc-500 max-w-md mx-auto">
+            Playit.GG agent management and tunnel connectivity have been globally disabled by the platform administrator in System Settings.
+          </p>
+        </div>
+      ) : (
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-5 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
@@ -331,13 +406,13 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Playit.gg Tunnel & Custom Domain</h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Zero Port-Forwarding
+                <h3 className="text-base font-bold text-white">Playit.GG Agent Manager</h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Agent Manager Only
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Generate a permanent public IP address and custom domain for players and remote connectivity without port forwarding.
+                Install and manage the real Playit agent daemon. Claim the agent with your Playit account to configure tunnels directly on playit.gg.
               </p>
             </div>
           </div>
@@ -345,156 +420,436 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           <div className="flex items-center gap-2">
             <button
               onClick={fetchPlayitStatus}
-              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              disabled={loadingPlayit}
+              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors flex items-center gap-1.5 text-xs font-semibold"
               title="Refresh Playit Status"
             >
-              <RefreshCw className={`h-4 w-4 ${loadingPlayit ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingPlayit ? 'animate-spin text-amber-400' : ''}`} />
+              <span className="hidden sm:inline">Refresh Status</span>
             </button>
             {playit?.isInstalled && (
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                playit.isRunning
+                isRunning
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : playit.status === 'STARTING'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                  : playit.status === 'CRASHED'
+                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                   : 'bg-zinc-800 text-zinc-400 border-zinc-700'
               }`}>
-                <span className={`h-2 w-2 rounded-full ${playit.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
-                <span>{playit.isRunning ? 'Tunnel Online' : 'Tunnel Paused'}</span>
+                <span className={`h-2 w-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : playit.status === 'STARTING' ? 'bg-amber-400 animate-spin' : playit.status === 'CRASHED' ? 'bg-rose-400' : 'bg-zinc-500'}`} />
+                <span>
+                  {isRunning ? 'RUNNING' : playit.status === 'STARTING' ? 'STARTING' : playit.status === 'CRASHED' ? 'CRASHED' : 'STOPPED'}
+                </span>
               </span>
             )}
           </div>
         </div>
 
-        {loadingPlayit ? (
+        {loadingPlayit && !playit ? (
           <div className="p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
             <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
-            <span>Loading Playit.gg agent status...</span>
+            <span>Checking Playit agent status...</span>
           </div>
         ) : !playit?.isInstalled ? (
+          /* Not Installed State */
           <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-800 text-center space-y-4">
             <div className="max-w-md mx-auto space-y-2">
-              <h4 className="text-sm font-bold text-white">Install Playit.gg Agent Daemon</h4>
+              <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-1">
+                <Download className="h-6 w-6" />
+              </div>
+              <h4 className="text-sm font-bold text-white">Install Playit.GG Agent Daemon</h4>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Connect your server through the Playit.gg global network to receive a free custom subdomain (e.g., <code className="text-amber-300">yourserver.auto.playit.gg</code>) with automatic DDoS mitigation.
+                AetherPanel will download and start the official Playit agent on this node. Once running, you will receive a claim link to bind this agent to your Playit.GG account.
               </p>
             </div>
             <button
               onClick={handleInstallPlayit}
               disabled={installingPlayit}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 mx-auto disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 mx-auto disabled:opacity-50 transition-all"
             >
               {installingPlayit ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Configuring Agent...</span>
+                  <span>Installing & Starting Agent...</span>
                 </>
               ) : (
                 <>
                   <Download className="h-4 w-4" />
-                  <span>Install Playit.gg Agent</span>
+                  <span>Install Playit Agent</span>
                 </>
               )}
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
-                <span className="text-[11px] text-zinc-400 uppercase font-semibold">Playit Public Subdomain</span>
-                <div className="flex items-center justify-between font-mono text-xs">
-                  <span className="text-amber-300 font-bold truncate">{playit.tunnelAddress || 'Generating...'}</span>
-                  {playit.tunnelAddress && (
-                    <button onClick={() => handleCopy(playit.tunnelAddress!, 'playit_domain')} className="text-zinc-400 hover:text-white">
-                      {copiedKey === 'playit_domain' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
+          /* Installed State */
+          <div className="space-y-5">
+            {/* Playit Agent Metadata Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Agent Status</span>
+                <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+                  {isRunning ? (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      RUNNING
+                    </span>
+                  ) : playit.status === 'STARTING' ? (
+                    <span className="text-amber-400">STARTING...</span>
+                  ) : playit.status === 'CRASHED' ? (
+                    <span className="text-rose-400">CRASHED</span>
+                  ) : (
+                    <span className="text-zinc-400">STOPPED</span>
                   )}
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
-                <span className="text-[11px] text-zinc-400 uppercase font-semibold">Tunnel Port</span>
-                <div className="flex items-center justify-between font-mono text-xs">
-                  <span className="text-white font-bold">{playit.tunnelPort || 25565}</span>
-                  <span className="text-[10px] text-zinc-500 font-sans">Public Port</span>
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Claim Status</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold">
+                  {isClaimed ? (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> CLAIMED
+                    </span>
+                  ) : (
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" /> UNCLAIMED
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
-                <span className="text-[11px] text-zinc-400 uppercase font-semibold">Tunnel Action</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleTogglePlayit(!playit.isRunning)}
-                    disabled={togglingTunnel}
-                    className={`w-full py-1.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-colors ${
-                      playit.isRunning
-                        ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30'
-                        : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
-                    }`}
-                  >
-                    {playit.isRunning ? (
-                      <>
-                        <Square className="h-3 w-3 fill-current" /> Pause Tunnel
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-3 w-3 fill-current" /> Start Tunnel
-                      </>
-                    )}
-                  </button>
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Agent Version</span>
+                <div className="font-mono text-xs text-zinc-200 font-semibold">
+                  v{playit.agentVersion || '1.0.10'}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Process PID</span>
+                <div className="font-mono text-xs text-zinc-300">
+                  {playit.pid ? `PID ${playit.pid}` : 'None'}
                 </div>
               </div>
             </div>
 
-            {playit.claimUrl && (
-              <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-amber-300">
-                  <CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" />
-                  <span>Claim Code: <strong className="font-mono text-white">{playit.claimCode}</strong></span>
+            {/* Error / Crash Notice if any */}
+            {playit.errorReason && (
+              <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-bold">Agent Issue Detected:</span>
+                  <p className="text-rose-200 text-[11px] font-mono">{playit.errorReason}</p>
                 </div>
-                <a
-                  href={playit.claimUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 text-zinc-950 font-bold hover:bg-amber-400 transition-colors"
-                >
-                  <span>Link to Playit.gg Account</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
               </div>
             )}
 
-            {/* Secret Key Provisioning Box */}
-            <form onSubmit={handleProvisionSecret} className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-                  <Key className="h-3.5 w-3.5 text-amber-400" /> Provision Playit Secret Key
-                </span>
-                <span className="text-[10px] text-zinc-500">Optional Manual Agent Configuration</span>
+            {/* Claim Section: UNCLAIMED FLOW */}
+            {!isClaimed && (
+              <div className={`p-5 rounded-xl border space-y-4 ${
+                isRunning 
+                  ? 'bg-amber-950/20 border-amber-500/30' 
+                  : playit.status === 'CRASHED'
+                  ? 'bg-rose-950/20 border-rose-500/30'
+                  : 'bg-zinc-900/60 border-zinc-800'
+              }`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 ${
+                  isRunning ? 'border-amber-500/20' : 'border-zinc-800'
+                }`}>
+                  <div className={`flex items-center gap-2 ${
+                    isRunning ? 'text-amber-300' : playit.status === 'CRASHED' ? 'text-rose-400' : 'text-zinc-400'
+                  }`}>
+                    <AlertCircle className={`h-5 w-5 shrink-0 ${
+                      isRunning ? 'text-amber-400' : playit.status === 'CRASHED' ? 'text-rose-400' : 'text-zinc-500'
+                    }`} />
+                    <div>
+                      <h4 className="text-sm font-bold text-white">
+                        {isRunning
+                          ? 'Your Playit agent is running and ready to be claimed'
+                          : playit.status === 'STARTING'
+                          ? 'Playit agent is starting...'
+                          : playit.status === 'CRASHED'
+                          ? 'Playit agent crashed and is offline'
+                          : 'Playit agent is stopped'}
+                      </h4>
+                      <p className={`text-xs ${isRunning ? 'text-amber-200/80' : 'text-zinc-400'}`}>
+                        {isRunning
+                          ? 'Link this agent to your Playit.GG account to enable secure network access.'
+                          : 'Start the agent daemon above to generate or refresh your claim link.'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase self-start sm:self-auto ${
+                    isRunning
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                  }`}>
+                    {isRunning ? 'Awaiting Claim' : playit.status}
+                  </span>
+                </div>
+
+                {/* Claim Error / Notice */}
+                {claimError && (
+                  <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                    <span>{claimError}</span>
+                  </div>
+                )}
+                {claimSuccessMsg && (
+                  <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>{claimSuccessMsg}</span>
+                  </div>
+                )}
+
+                {playit.claimUrl ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Official Claim URL</span>
+                        <div className="font-mono text-xs text-amber-300 truncate max-w-lg">
+                          {playit.claimUrl}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleCopy(playit.claimUrl!, 'claim_url')}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors flex items-center gap-1"
+                        >
+                          {copiedKey === 'claim_url' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedKey === 'claim_url' ? 'Copied' : 'Copy URL'}</span>
+                        </button>
+                        <a
+                          href={playit.claimUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition-all shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5"
+                        >
+                          <span>Open Claim Page</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </div>
+                    </div>
+
+                    {playit.claimCode && (
+                      <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
+                        <span>Agent Claim Code: <strong className="font-mono text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{playit.claimCode}</strong></span>
+                        <button
+                          onClick={fetchPlayitStatus}
+                          className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${loadingPlayit ? 'animate-spin' : ''}`} />
+                          <span>Refresh Claim Status</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-400">
+                    <span className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                      <span>{isRunning ? 'Agent active. Click Claim Agent to open official setup page.' : 'Start the agent or click Claim Agent below.'}</span>
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={handleClaimAgent}
+                        disabled={loadingPlayit || isClaiming}
+                        className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20"
+                      >
+                        {isClaiming ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Claiming...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>Claim Agent</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={fetchPlayitStatus}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-semibold flex items-center gap-1"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${loadingPlayit ? 'animate-spin' : ''}`} />
+                        <span>Refresh</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={secretInput}
-                  onChange={(e) => setSecretInput(e.target.value)}
-                  placeholder="Enter secret key from playit.gg..."
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
-                />
-                <button
-                  type="submit"
-                  disabled={submittingSecret || !secretInput.trim()}
-                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-lg transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+            )}
+
+            {/* Claim Section: CLAIMED FLOW */}
+            {isClaimed && (
+              <div className="p-5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      Agent Claimed & Account Connected
+                    </h4>
+                    <p className="text-xs text-emerald-200/80 mt-0.5">
+                      This agent daemon is authenticated and linked with your Playit.GG account.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-3 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
+                    Connected
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Tunnel Management: Managed Externally Card */}
+            <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                      Tunnel Management
+                    </h4>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      Managed externally
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400">
+                    After claiming the agent, create and manage your Playit tunnels directly from your Playit dashboard.
+                  </p>
+                </div>
+                <a
+                  href="https://playit.gg/account/tunnels"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
                 >
-                  {submittingSecret ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
-                  <span>Apply Key</span>
+                  <span>Open Playit Dashboard</span>
+                  <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
+                </a>
+              </div>
+            </div>
+
+            {/* Agent Action Controls */}
+            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-zinc-200">Agent Daemon Lifecycle</span>
+                <p className="text-[11px] text-zinc-500">Restart or stop the local Playit process on this node.</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRestartAgent}
+                  disabled={restartingAgent || !isRunning}
+                  className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  title="Restart Playit Agent"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 ${restartingAgent ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>{restartingAgent ? 'Restarting...' : 'Restart Agent'}</span>
+                </button>
+
+                <button
+                  onClick={() => handleToggleAgent(!isRunning)}
+                  disabled={togglingAgent}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    isRunning
+                      ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-md shadow-emerald-500/20'
+                  }`}
+                >
+                  {togglingAgent ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : isRunning ? (
+                    <>
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                      <span>Stop Agent</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                      <span>Start Agent</span>
+                    </>
+                  )}
                 </button>
               </div>
-              {secretMsg && (
-                <p className={`text-[11px] ${secretMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {secretMsg.text}
-                </p>
+            </div>
+
+            {/* Agent Live Console Logs */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-zinc-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">Agent Output Logs</span>
+                </div>
+                <span className="text-[10px] font-mono text-zinc-500">Live Daemon Buffer</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/90 font-mono text-xs text-zinc-300 max-h-52 overflow-y-auto space-y-1 select-text">
+                {!playit.logs || playit.logs.length === 0 ? (
+                  <div className="text-zinc-600 italic py-2">No agent logs recorded yet.</div>
+                ) : (
+                  playit.logs.map((line, idx) => (
+                    <div key={idx} className="whitespace-pre-wrap leading-relaxed hover:bg-zinc-900/50 px-1 rounded transition-colors">
+                      {line}
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            </div>
+
+            {/* Advanced / Manual Configuration (Collapsed Accordion) */}
+            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full p-3.5 text-left flex items-center justify-between text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-zinc-500" />
+                  <span>Manual Recovery: Provision Playit Secret Key</span>
+                </span>
+                {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+
+              {showAdvanced && (
+                <form onSubmit={handleProvisionSecret} className="p-4 pt-0 space-y-3 border-t border-zinc-900 mt-2">
+                  <p className="text-[11px] text-zinc-400">
+                    If you have an existing Playit agent secret key from your account dashboard, enter it below to bypass the interactive claim flow.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={secretInput}
+                      onChange={(e) => setSecretInput(e.target.value)}
+                      placeholder="Enter secret key from playit.gg..."
+                      className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={submittingSecret || !secretInput.trim()}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-lg transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
+                    >
+                      {submittingSecret ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                      <span>Apply Secret</span>
+                    </button>
+                  </div>
+                  {secretMsg && (
+                    <p className={`text-[11px] ${secretMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {secretMsg.text}
+                    </p>
+                  )}
+                </form>
               )}
-            </form>
+            </div>
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

@@ -320,6 +320,7 @@ function AppContent() {
             <ServerDeployWizard
               onNavigate={handleNavigate}
               onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+              onRefreshServers={fetchServers}
             />
           )}
           {currentPage === 'server-manage' && (

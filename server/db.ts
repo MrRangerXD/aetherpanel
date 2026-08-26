@@ -880,8 +880,12 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           maintenanceMode: false,
           maintenanceMessage: 'Under maintenance',
           defaultTheme: 'dark',
-          accentColor: '#8b5cf6'
+          accentColor: '#8b5cf6',
+          enablePlayit: true
         };
+      }
+      if (dbCache!.settings.enablePlayit === undefined) {
+        dbCache!.settings.enablePlayit = true;
       }
       if (!dbCache!.settings.platformName) {
         dbCache!.settings.platformName = dbCache!.settings.brandName || 'AetherPanel';
@@ -1532,6 +1536,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     maintenanceMessage: 'AetherPanel is currently performing scheduled system upgrades. We will be back online shortly.',
     defaultTheme: 'dark',
     accentColor: '#8b5cf6', // Violet
+    enablePlayit: true,
     paymentGateways: {
       upi: {
         enabled: true,
@@ -1564,7 +1569,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       botToken: '',
       clientId: '',
       clientSecret: '',
-      redirectUri: 'http://localhost:3000/settings',
+      redirectUri: '',
       defaultWebhookUrl: '',
       botStatus: 'offline',
       commandRateLimitPerMin: 10,

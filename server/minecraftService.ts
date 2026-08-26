@@ -324,6 +324,101 @@ export async function getMinecraftVersions(software: string = 'paper'): Promise<
   };
 }
 
+// Get Supported Providers List
+export function getMinecraftProviders() {
+  return [
+    { id: 'paper', name: 'PaperMC', description: 'High performance, feature-rich Minecraft server software' },
+    { id: 'purpur', name: 'PurpurMC', description: 'Drop-in replacement for Paper with extra customization options' },
+    { id: 'vanilla', name: 'Vanilla (Mojang)', description: 'Official Minecraft server software provided directly by Mojang' },
+    { id: 'fabric', name: 'Fabric', description: 'Lightweight, modular modding toolchain for modern Minecraft' },
+    { id: 'spigot', name: 'Spigot', description: 'Classic high performance Minecraft server platform' },
+    { id: 'forge', name: 'Forge', description: 'Popular server platform for complex Minecraft mods' }
+  ];
+}
+
+// Get Latest Stable Version for a Software Provider
+export async function getLatestStableMinecraftVersion(software: string = 'paper'): Promise<string> {
+  const verInfo = await getMinecraftVersions(software);
+  return verInfo.latest || '1.21.4';
+}
+
+// Search Versions dynamically across a software provider
+export async function searchMinecraftVersions(query: string, software: string = 'paper'): Promise<string[]> {
+  const verInfo = await getMinecraftVersions(software);
+  const q = (query || '').toLowerCase().trim();
+  if (!q) return verInfo.versions;
+  return verInfo.versions.filter(v => v.toLowerCase().includes(q));
+}
+
+// Get available builds / artifacts for a software version
+export async function getMinecraftBuilds(software: string, version: string): Promise<{
+  software: string;
+  version: string;
+  builds: Array<{ build: string | number; channel?: string; url?: string; latest?: boolean }>;
+}> {
+  const norm = (software || 'paper').toLowerCase().trim();
+  if (norm.includes('paper')) {
+    try {
+      const data = await fetchJson<{ builds: number[] }>(
+        `https://fill.papermc.io/v3/projects/paper/versions/${version}`
+      );
+      if (data && Array.isArray(data.builds) && data.builds.length > 0) {
+        const sortedBuilds = [...data.builds].sort((a, b) => b - a);
+        return {
+          software: norm,
+          version,
+          builds: sortedBuilds.map((b, idx) => ({
+            build: b,
+            latest: idx === 0,
+            channel: 'stable'
+          }))
+        };
+      }
+    } catch {}
+  } else if (norm.includes('purpur')) {
+    try {
+      const data = await fetchJson<{ builds?: { all?: string[]; latest?: string } }>(
+        `https://api.purpurmc.org/v2/purpur/${version}`
+      );
+      if (data && data.builds && Array.isArray(data.builds.all)) {
+        const sorted = [...data.builds.all].reverse();
+        return {
+          software: norm,
+          version,
+          builds: sorted.map((b, idx) => ({
+            build: b,
+            latest: idx === 0,
+            channel: 'stable'
+          }))
+        };
+      }
+    } catch {}
+  } else if (norm.includes('fabric')) {
+    try {
+      const loaders = await fetchJson<Array<{ loader: { version: string; stable: boolean } }>>(
+        `https://meta.fabricmc.net/v2/versions/loader/${version}`
+      );
+      if (Array.isArray(loaders) && loaders.length > 0) {
+        return {
+          software: norm,
+          version,
+          builds: loaders.map((l, idx) => ({
+            build: l.loader.version,
+            latest: idx === 0,
+            channel: l.loader.stable ? 'stable' : 'experimental'
+          }))
+        };
+      }
+    } catch {}
+  }
+
+  return {
+    software: norm,
+    version,
+    builds: [{ build: 'latest', latest: true, channel: 'stable' }]
+  };
+}
+
 // Helper: Download a file over HTTPS with redirect support
 export function downloadFile(url: string, destPath: string): Promise<boolean> {
   return new Promise((resolve, reject) => {

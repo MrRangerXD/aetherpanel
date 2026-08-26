@@ -6,7 +6,7 @@ import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } fro
 import { User, Product, Plan, Node, Allocation, Coupon, Announcement, SystemSettings } from '../../src/types';
 import { ensureLocalNode } from '../nodeAgent';
 import {
-  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent, provisionNodePlayitSecret
+  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent, restartNodePlayitAgent, provisionNodePlayitSecret, claimNodePlayitAgent
 } from '../playitService';
 import { resolveNodeSftpMode } from '../sftpResolver';
 import { runNetworkDiagnostics } from '../network/networkDetection';
@@ -14,6 +14,7 @@ import { stopServer, startServer, restartServer, getServerDir } from '../provide
 import { clearConsoleBuffer, closeServerConsoleClients } from '../consoleWs';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerType } from './serverTypes';
+import { getDiscordOAuthRedirectUri } from '../oauthUrlResolver';
 
 const router = Router();
 
@@ -704,14 +705,24 @@ router.post('/nodes/:id/playit/install', async (req: AuthenticatedRequest, res: 
   }
 });
 
-// POST /api/v1/admin/nodes/:id/playit/toggle - Toggle node-level Playit tunnel
+// POST /api/v1/admin/nodes/:id/playit/toggle - Toggle node-level Playit agent
 router.post('/nodes/:id/playit/toggle', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { enable } = req.body;
     const status = await toggleNodePlayitAgent(req.params.id, Boolean(enable));
-    res.json({ success: true, message: `Node Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
+    res.json({ success: true, message: `Node Playit agent ${enable ? 'started' : 'stopped'}.`, data: status });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/nodes/:id/playit/restart - Restart node-level Playit agent
+router.post('/nodes/:id/playit/restart', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = await restartNodePlayitAgent(req.params.id);
+    res.json({ success: true, message: 'Node Playit agent restarted successfully.', data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_RESTART_FAILED', message: err.message } });
   }
 });
 
@@ -727,6 +738,16 @@ router.post('/nodes/:id/playit/secret', async (req: AuthenticatedRequest, res: R
     res.json({ success: true, message: 'Node Playit secret provisioned successfully.', data: status });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'PLAYIT_SECRET_FAILED', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/nodes/:id/playit/claim - Initiate node Playit claim action
+router.post('/nodes/:id/playit/claim', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const claimRes = await claimNodePlayitAgent(req.params.id);
+    res.json({ success: true, data: claimRes });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_CLAIM_FAILED', message: err.message } });
   }
 });
 
@@ -1653,22 +1674,27 @@ router.put('/legal/:slug', async (req: AuthenticatedRequest, res: Response) => {
 // GET /api/v1/admin/auth-providers - Get system auth provider settings
 router.get('/auth-providers', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  const authProviders = db.settings.authProviders || {
-    emailPassword: { enabled: true },
+  const discordSettings = db.settings.authProviders?.discord;
+  const redirectUri = getDiscordOAuthRedirectUri(req, db.settings);
+
+  const authProviders = {
+    emailPassword: {
+      enabled: db.settings.authProviders?.emailPassword?.enabled ?? true
+    },
     google: {
-      enabled: true,
-      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || '',
-      firebaseAuthDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
-      firebaseStorageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-      firebaseMessagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-      firebaseAppId: process.env.VITE_FIREBASE_APP_ID || ''
+      enabled: db.settings.authProviders?.google?.enabled ?? true,
+      firebaseApiKey: db.settings.authProviders?.google?.firebaseApiKey || process.env.VITE_FIREBASE_API_KEY || '',
+      firebaseAuthDomain: db.settings.authProviders?.google?.firebaseAuthDomain || process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+      firebaseProjectId: db.settings.authProviders?.google?.firebaseProjectId || process.env.VITE_FIREBASE_PROJECT_ID || '',
+      firebaseStorageBucket: db.settings.authProviders?.google?.firebaseStorageBucket || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+      firebaseMessagingSenderId: db.settings.authProviders?.google?.firebaseMessagingSenderId || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+      firebaseAppId: db.settings.authProviders?.google?.firebaseAppId || process.env.VITE_FIREBASE_APP_ID || ''
     },
     discord: {
-      enabled: true,
-      clientId: process.env.DISCORD_CLIENT_ID || '',
-      clientSecret: process.env.DISCORD_CLIENT_SECRET ? '••••••••••••••••' : '',
-      redirectUri: process.env.DISCORD_REDIRECT_URI || ''
+      enabled: discordSettings?.enabled ?? true,
+      clientId: discordSettings?.clientId || process.env.DISCORD_CLIENT_ID || '',
+      clientSecret: (discordSettings?.clientSecret || process.env.DISCORD_CLIENT_SECRET) ? '••••••••••••••••' : '',
+      redirectUri
     }
   };
 
@@ -1733,10 +1759,19 @@ router.put('/auth-providers', async (req: AuthenticatedRequest, res: Response) =
     'Updated authentication provider settings (Google Firebase, Discord OAuth, Email/Password)'
   );
 
+  const currentRedirectUri = getDiscordOAuthRedirectUri(req, db.settings);
+  const responseData = {
+    ...db.settings.authProviders,
+    discord: {
+      ...db.settings.authProviders.discord,
+      redirectUri: currentRedirectUri
+    }
+  };
+
   res.json({
     success: true,
     message: 'Authentication providers updated successfully.',
-    data: db.settings.authProviders
+    data: responseData
   });
 });
 
@@ -1784,7 +1819,7 @@ router.post('/auth-providers/test-discord', async (req: AuthenticatedRequest, re
   const discordConfig: any = db.settings.authProviders?.discord || {};
   const clientId = discordConfig.clientId || process.env.DISCORD_CLIENT_ID || '';
   const clientSecret = discordConfig.clientSecret || process.env.DISCORD_CLIENT_SECRET || '';
-  const redirectUri = discordConfig.redirectUri || process.env.DISCORD_REDIRECT_URI || '';
+  const redirectUri = getDiscordOAuthRedirectUri(req, db.settings);
 
   const isConfigured = Boolean(clientId && clientSecret && redirectUri && !clientSecret.includes('••••'));
 
@@ -1796,8 +1831,7 @@ router.post('/auth-providers/test-discord', async (req: AuthenticatedRequest, re
         message: 'BLOCKED — MISSING PRODUCTION CREDENTIALS',
         requiredConfig: [
           'DISCORD_CLIENT_ID',
-          'DISCORD_CLIENT_SECRET',
-          'DISCORD_REDIRECT_URI'
+          'DISCORD_CLIENT_SECRET'
         ],
         lastCheck: new Date().toISOString()
       }
@@ -1808,7 +1842,7 @@ router.post('/auth-providers/test-discord', async (req: AuthenticatedRequest, re
     success: true,
     data: {
       status: 'CONFIGURED',
-      message: `Discord OAuth configured for Client ID '${clientId}'.`,
+      message: `Discord OAuth configured. Dynamic Redirect URI: ${redirectUri}`,
       requiredConfig: [],
       lastCheck: new Date().toISOString()
     }
@@ -1988,6 +2022,7 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
   const details = await resolveNodeSftpMode('node_local');
   const netDiag = await runNetworkDiagnostics(sftpPort);
   const playitStatus = await getNodePlayitStatus('node_local');
+  const localNode = db.nodes?.find(n => n.id === 'node_local');
 
   const modeLower = details.mode.toLowerCase();
   const statusLower = playitStatus.status.toLowerCase();
@@ -2012,7 +2047,7 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
         discordOAuth: {
           status: isDiscordConfigured ? 'CONFIGURED' : 'NOT_CONFIGURED',
           message: isDiscordConfigured ? `Discord OAuth active for client '${discordClientId}'` : 'BLOCKED — MISSING PRODUCTION CREDENTIALS',
-          requiredConfig: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI']
+          requiredConfig: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET']
         }
       },
       discordBot: {
@@ -2035,10 +2070,10 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
         ipv4Reachability: netDiag.isPublicIpReachable ? 'ONLINE' : 'UNREACHABLE',
         playitBinary: playitStatus.isInstalled ? 'ONLINE' : 'NOT_INSTALLED',
         playitAgent: playitStatus.isRunning ? 'ONLINE' : 'OFFLINE',
-        playitClaim: statusLower === 'connected' || statusLower === 'claiming' || statusLower === 'claimed' || statusLower === 'connecting' ? 'CLAIMED' : 'UNCLAIMED',
-        playitConnection: statusLower === 'connected' ? 'CONNECTED' : 'DISCONNECTED',
-        playitTunnel: statusLower === 'connected' ? 'ONLINE' : 'NOT_ACTIVE',
-        playitEndpoint: playitStatus.sftpTunnelAddress ? `${playitStatus.sftpTunnelAddress}:${playitStatus.sftpTunnelPort}` : 'NOT_CONFIGURED'
+        playitClaim: playitStatus.isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+        playitConnection: playitStatus.isRunning ? (playitStatus.isClaimed ? 'CONNECTED' : 'UNCLAIMED') : 'DISCONNECTED',
+        playitTunnel: playitStatus.isClaimed ? 'MANAGED_EXTERNALLY' : 'NOT_ACTIVE',
+        playitEndpoint: localNode?.playitSftpAddress ? `${localNode.playitSftpAddress}:${localNode.playitSftpPort || sftpPort}` : 'MANAGED_ON_PLAYIT_GG'
       },
       runtime: {
         database: { status: 'ONLINE', type: 'JSON DB / File State', userCount: db.users.length, serverCount: db.servers.length },

@@ -49,12 +49,14 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
   };
 
   const filteredServers = servers.filter((s) => {
-    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-                          s.software.toLowerCase().includes(search.toLowerCase()) ||
-                          s.location.toLowerCase().includes(search.toLowerCase());
+    const name = typeof s.name === 'string' ? s.name.toLowerCase() : '';
+    const software = typeof s.software === 'string' ? s.software.toLowerCase() : '';
+    const location = typeof s.location === 'string' ? s.location.toLowerCase() : '';
+    const q = search.toLowerCase();
+    const matchesSearch = name.includes(q) || software.includes(q) || location.includes(q);
     if (filterType === 'all') return matchesSearch;
-    if (filterType === 'minecraft') return matchesSearch && (s.software.includes('Paper') || s.software.includes('Purpur') || s.software.includes('Spigot') || s.software.includes('Forge'));
-    if (filterType === 'bot') return matchesSearch && (s.software.includes('Node') || s.software.includes('Python') || s.software.includes('Discord'));
+    if (filterType === 'minecraft') return matchesSearch && (software.includes('paper') || software.includes('purpur') || software.includes('spigot') || software.includes('forge'));
+    if (filterType === 'bot') return matchesSearch && (software.includes('node') || software.includes('python') || software.includes('discord') || software.includes('bun'));
     return matchesSearch;
   });
 

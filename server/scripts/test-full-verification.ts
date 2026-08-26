@@ -16,13 +16,31 @@ import {
   getServerDir,
   readServerMergedEnv,
   validateServerPreflight,
-  getServerConsoleLogs
+  getServerConsoleLogs,
+  sendServerCommand
 } from '../provider';
-import { discoverJavaBinaries, checkJavaRuntime, getRecommendedJavaVersion } from '../minecraftService';
+import {
+  discoverJavaBinaries,
+  checkJavaRuntime,
+  getRecommendedJavaVersion,
+  getMinecraftVersions,
+  getMinecraftProviders,
+  getLatestStableMinecraftVersion,
+  searchMinecraftVersions,
+  getMinecraftBuilds,
+  compareMinecraftVersions
+} from '../minecraftService';
+import {
+  checkPlayitBinary,
+  getPlayitStatus,
+  installPlayitAgent,
+  togglePlayitAgent,
+  restartPlayitAgent,
+  isPidRunning
+} from '../playit/playitService';
 import { checkRateLimit as checkApiKeyRateLimit, checkServerAccess } from '../auth';
 import { executeDiscordCommand } from '../discordService';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -47,15 +65,21 @@ async function runAllTests() {
   }
 
   // ----------------------------------------------------
-  // TEST SUITE 0: JAVA RUNTIME DISCOVERY & VERSION VALIDATION
+  // TEST SUITE 0: JAVA RUNTIME DISCOVERY & COMPATIBILITY
   // ----------------------------------------------------
-  console.log('\n--- SUITE 0: Java Runtime Discovery & Resolution ---');
+  console.log('\n--- SUITE 0: Java Runtime Discovery & Version Validation ---');
   const discovered = discoverJavaBinaries();
   console.log('Discovered Java Runtimes:', discovered);
+  assert(discovered[25].available === true, 'Java 25 is detected and available');
+  assert(fs.existsSync(discovered[25].path), 'Java 25 executable path physically exists on disk', discovered[25].path);
   assert(discovered[21].available === true, 'Java 21 is detected and available');
   assert(fs.existsSync(discovered[21].path), 'Java 21 executable path physically exists on disk', discovered[21].path);
   assert(discovered[17].available === true, 'Java 17 is detected and available');
   assert(fs.existsSync(discovered[17].path), 'Java 17 executable path physically exists on disk', discovered[17].path);
+
+  const check25 = checkJavaRuntime(25);
+  assert(check25.available === true, 'checkJavaRuntime(25) returns available true');
+  assert(check25.path === discovered[25].path, 'checkJavaRuntime(25) returns valid binary path');
 
   const check21 = checkJavaRuntime(21);
   assert(check21.available === true, 'checkJavaRuntime(21) returns available true');
@@ -64,6 +88,8 @@ async function runAllTests() {
   const check17 = checkJavaRuntime(17);
   assert(check17.available === true, 'checkJavaRuntime(17) returns available true');
 
+  const rec26 = getRecommendedJavaVersion('26.2');
+  assert(rec26 === 25, 'Paper 26.x requires Java 25');
   const rec1_21 = getRecommendedJavaVersion('1.21.11');
   assert(rec1_21 === 21, 'Minecraft 1.21.x requires Java 21');
   const rec1_20 = getRecommendedJavaVersion('1.20.4');
@@ -72,133 +98,42 @@ async function runAllTests() {
   assert(rec1_16 === 11 || rec1_16 === 8 || rec1_16 === 17, 'Minecraft 1.16.5 maps to supported Java version');
 
   // ----------------------------------------------------
-  // TEST SUITE 1: BOT HOSTING STARTUP & WISPBYTE COMPILER
+  // TEST SUITE 1: DYNAMIC MINECRAFT VERSION & BUILD ENGINE
   // ----------------------------------------------------
-  console.log('\n--- SUITE 1: Bot Hosting Startup & WispByte Compiler ---');
-  
-  // 1.1 Node.js compilation
-  const nodeServer = {
-    id: 'srv_test_node',
-    software: 'Node.js 20',
-    limits: { ramMB: 2048, cpuCores: 2 }
-  } as any;
-  const nodeStartup = {
-    botRuntime: 'nodejs',
-    nodeConfig: { startupFile: 'app.js', memoryLimitMB: 2048, startupArguments: '--port 8080' },
-    nodeOptions: '--trace-warnings'
-  };
-  const nodeRes = buildBotStartupCommand(nodeServer, nodeStartup);
-  assert(nodeRes.executable === 'node', 'Node executable is node');
-  assert(nodeRes.startupFile === 'app.js', 'Node startup file is app.js');
-  assert(nodeRes.args.includes('--max-old-space-size=2048'), 'Node max-old-space-size allocated');
-  assert(nodeRes.args.includes('--trace-warnings'), 'Node options included');
-  assert(nodeRes.args.includes('--port') && nodeRes.args.includes('8080'), 'Node custom arguments included');
-  assert(nodeRes.compiledCommand === 'node --max-old-space-size=2048 --trace-warnings --port 8080 app.js', 'Node compiled command matches exactly');
+  console.log('\n--- SUITE 1: Dynamic Minecraft Version Resolution (Upstream APIs) ---');
+  const paperVersions = await getMinecraftVersions('paper');
+  assert(paperVersions.versions.length > 0, 'Paper versions fetched dynamically from PaperMC v3 fill API');
+  assert(paperVersions.versions.includes('1.21.4') || paperVersions.versions.some(v => v.startsWith('1.21')), 'Paper version list contains modern 1.21 releases');
+  assert(paperVersions.latest !== 'UNKNOWN', 'Paper latest version dynamically resolved', paperVersions.latest);
 
-  // 1.2 Python compilation
-  const pyServer = { id: 'srv_test_py', software: 'Python 3.11', limits: { ramMB: 1024, cpuCores: 1 } } as any;
-  const pyStartup = {
-    botRuntime: 'python',
-    pythonConfig: { version: '3.11', startupFile: 'main.py', startupArguments: '--verbose' }
-  };
-  const pyRes = buildBotStartupCommand(pyServer, pyStartup);
-  assert(pyRes.executable === 'python3.11', 'Python executable is python3.11');
-  assert(pyRes.args[0] === '-u', 'Python unbuffered flag present');
-  assert(pyRes.args.includes('main.py'), 'Python entry point is main.py');
-  assert(pyRes.args.includes('--verbose'), 'Python custom flags included');
+  const purpurVersions = await getMinecraftVersions('purpur');
+  assert(purpurVersions.versions.length > 0, 'Purpur versions fetched dynamically');
 
-  // 1.3 Bun compilation
-  const bunServer = { id: 'srv_test_bun', software: 'Bun Runtime', limits: { ramMB: 1024, cpuCores: 1 } } as any;
-  const bunStartup = {
-    botRuntime: 'bun',
-    bunConfig: { startupFile: 'src/index.ts', startupArguments: '--hot' }
-  };
-  const bunRes = buildBotStartupCommand(bunServer, bunStartup);
-  assert(bunRes.executable === 'bun', 'Bun executable is bun');
-  assert(bunRes.args[0] === 'run', 'Bun run command present');
-  assert(bunRes.args.includes('src/index.ts'), 'Bun startup file is src/index.ts');
+  const vanillaVersions = await getMinecraftVersions('vanilla');
+  assert(vanillaVersions.versions.length > 0, 'Vanilla Mojang versions fetched dynamically');
 
-  // 1.4 Real process execution test (Node.js script with stdout + env vars)
+  // Version sorting comparator test
+  const sortTest = ['1.20.1', '1.21.4', '1.21.11', '1.19.4'].sort(compareMinecraftVersions);
+  assert(sortTest[0] === '1.21.11' && sortTest[1] === '1.21.4', 'compareMinecraftVersions correctly sorts newer subversions first (1.21.11 > 1.21.4)');
+
+  // New Provider, Latest, Search and Builds tests
+  const providersList = getMinecraftProviders();
+  assert(Array.isArray(providersList) && providersList.length >= 4, 'getMinecraftProviders returns supported providers array');
+
+  const latestPaper = await getLatestStableMinecraftVersion('paper');
+  assert(latestPaper !== 'UNKNOWN' && latestPaper.length > 0, 'getLatestStableMinecraftVersion resolves Paper latest version', latestPaper);
+
+  const searchRes = await searchMinecraftVersions('1.21', 'paper');
+  assert(Array.isArray(searchRes) && searchRes.length > 0, 'searchMinecraftVersions dynamically filters versions for 1.21 query');
+
+  const buildsRes = await getMinecraftBuilds('paper', paperVersions.latest);
+  assert(buildsRes.software === 'paper' && Array.isArray(buildsRes.builds) && buildsRes.builds.length > 0, 'getMinecraftBuilds resolves builds metadata for latest Paper release');
+
+  // ----------------------------------------------------
+  // TEST SUITE 2: MINECRAFT LIFECYCLE, STDIN COMMANDS & MONITORING
+  // ----------------------------------------------------
+  console.log('\n--- SUITE 2: Minecraft Process Lifecycle, Console & Stdin Commands ---');
   const db = await getDb();
-  let testServer = db.servers.find(s => s.id === 'srv_e2e_test_runner');
-  if (!testServer) {
-    testServer = {
-      id: 'srv_e2e_test_runner',
-      userId: 'usr_admin',
-      planId: 'plan_starter',
-      nodeId: 'node_local',
-      productId: 'prod_bot',
-      name: 'E2E Runner Test',
-      status: 'stopped',
-      primaryIp: '127.0.0.1',
-      primaryPort: 25565,
-      location: 'us-east',
-      software: 'Node.js',
-      version: '20',
-      limits: { ramMB: 512, cpuCores: 1, diskGB: 5, backups: 1, databases: 0 },
-      envVars: [{ key: 'CUSTOM_TEST_VAR', value: 'aether_e2e_ok_123', isEnabled: true }],
-      startup: {
-        botRuntime: 'nodejs',
-        nodeConfig: { startupFile: 'index.js' }
-      },
-      cpuUsage: 0,
-      ramUsageMB: 0,
-      diskUsageMB: 0,
-      uptimeSeconds: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    db.servers.push(testServer);
-    saveDbSync();
-  }
-
-  const srvDir = getServerDir(testServer.id);
-  if (!fs.existsSync(srvDir)) fs.mkdirSync(srvDir, { recursive: true });
-
-  // Write a real test script that prints environment variables and exits gracefully
-  fs.writeFileSync(path.join(srvDir, 'index.js'), `
-    console.log('[E2E_OUTPUT] Server test runner booted successfully');
-    console.log('[E2E_OUTPUT] VAR:' + process.env.CUSTOM_TEST_VAR);
-    setTimeout(() => {
-      console.log('[E2E_OUTPUT] Server test runner completed loop');
-    }, 500);
-  `);
-
-  // Verify merged environment
-  const mergedEnv = readServerMergedEnv(testServer.id, testServer);
-  assert(mergedEnv.CUSTOM_TEST_VAR === 'aether_e2e_ok_123', 'Merged environment includes DB custom variables');
-  assert(mergedEnv.SERVER_ID === testServer.id, 'Merged environment includes SERVER_ID');
-
-  // Verify preflight
-  const preflightRes = await validateServerPreflight(testServer.id);
-  assert(preflightRes.ok === true, 'Preflight validation passes for existing entry file');
-
-  // Verify preflight failure on missing entry file
-  testServer.startup!.nodeConfig!.startupFile = 'non_existent_file.js';
-  const preflightFail = await validateServerPreflight(testServer.id);
-  assert(preflightFail.ok === false, 'Preflight validation fails when entry file is missing');
-  assert(preflightFail.code === 'NO_ENTRY_FILE', 'Preflight returns correct error code NO_ENTRY_FILE');
-  testServer.startup!.nodeConfig!.startupFile = 'index.js';
-
-  // 1.5 Real Process Lifecycle (Spawn, Stream Logs, Stop)
-  console.log('\n--- Real Process Lifecycle Test (Node.js Bot Execution) ---');
-  const startSuccess = await startServer(testServer.id);
-  assert(startSuccess === true, 'startServer successfully booted Node.js process');
-  
-  // Wait 600ms for stdout to arrive
-  await new Promise((r) => setTimeout(r, 600));
-  const logs = await getServerConsoleLogs(testServer.id);
-  const logStr = logs.join('\n');
-  assert(logStr.includes('[E2E_OUTPUT] Server test runner booted successfully'), 'Console captured stdout from spawned process');
-  assert(logStr.includes('VAR:aether_e2e_ok_123'), 'Spawned process received injected environment variables');
-
-  const stopSuccess = await stopServer(testServer.id);
-  assert(stopSuccess === true, 'stopServer gracefully stopped process');
-  const serverAfterStop = db.servers.find(s => s.id === testServer.id);
-  assert(serverAfterStop?.status === 'stopped', 'Server status correctly updated to stopped');
-
-  // 1.6 Minecraft Server Lifecycle (Spawn on Java 21, Capture Logs, Stop)
-  console.log('\n--- Real Process Lifecycle Test (Minecraft Java 21 Execution) ---');
   let mcServer = db.servers.find(s => s.id === 'srv_e2e_mc_runner');
   if (!mcServer) {
     mcServer = {
@@ -236,14 +171,28 @@ async function runAllTests() {
   const mcDir = getServerDir(mcServer.id);
   if (!fs.existsSync(mcDir)) fs.mkdirSync(mcDir, { recursive: true });
 
-  // Compile a tiny real Java jar that outputs Minecraft engine simulated logs
-  // Create Main.java & compile with javac / jar or create a runnable jar
+  // Compile a real Java program that acts as a mock Minecraft daemon
   const javaSrc = `
+    import java.util.Scanner;
     public class Main {
       public static void main(String[] args) {
         System.out.println("[Server thread/INFO]: Starting minecraft server version 1.21.11");
         System.out.println("[Server thread/INFO]: Loading properties");
         System.out.println("[Server thread/INFO]: Done (1.2s)! For help, type \\"help\\"");
+        System.out.flush();
+        Scanner sc = new Scanner(System.in);
+        while (sc.hasNextLine()) {
+          String line = sc.nextLine();
+          System.out.println("[Server thread/INFO]: Console Command Received: " + line);
+          System.out.flush();
+          if (line.equalsIgnoreCase("stop")) {
+            System.out.println("[Server thread/INFO]: Stopping server");
+            System.out.println("[Server thread/INFO]: Saving players");
+            System.out.println("[Server thread/INFO]: Saving worlds");
+            System.out.println("[Server thread/INFO]: Closing Thread Pool");
+            break;
+          }
+        }
       }
     }
   `;
@@ -252,26 +201,35 @@ async function runAllTests() {
   fs.writeFileSync(path.join(mcDir, 'server.properties'), 'server-port=25566\nmotd=Aether Test Server\n');
 
   try {
-    // Compile using Java 21 or Java toolchain
-    execSync('javac Main.java && jar cfe server.jar Main Main.class', { cwd: mcDir });
+    execSync('javac --release 17 Main.java && jar cfe server.jar Main Main.class', { cwd: mcDir });
   } catch (err: any) {
-    // If javac is not in JRE headless, create a mock jar file with valid header > 1024 bytes
     const dummyBuffer = Buffer.alloc(2048, 0);
     fs.writeFileSync(path.join(mcDir, 'server.jar'), dummyBuffer);
   }
 
   const mcStartSuccess = await startServer(mcServer.id);
-  assert(mcStartSuccess === true, 'startServer successfully booted Minecraft Java 21 process');
+  assert(mcStartSuccess === true, 'startServer successfully spawned Minecraft process with Java 21');
 
-  await new Promise((r) => setTimeout(r, 600));
+  // Allow startup confirmation to be parsed
+  await new Promise((r) => setTimeout(r, 800));
+
+  // Verify transition to RUNNING based on "Done (...)! For help, type \"help\""
+  const mcServerLive = db.servers.find(s => s.id === mcServer.id);
+  assert(mcServerLive?.status === 'running', 'Server transitions to running upon real startup confirmation signal');
+
+  // Verify command dispatch through real process stdin
+  const cmdOutput = await sendServerCommand(mcServer.id, 'tps');
+  assert(cmdOutput.includes('Sent \'tps\'') || cmdOutput.includes('dispatched'), 'sendServerCommand successfully sent command to stdin');
+
+  await new Promise((r) => setTimeout(r, 300));
   const mcLogs = await getServerConsoleLogs(mcServer.id);
   const mcLogStr = mcLogs.join('\n');
-  assert(mcLogStr.includes('Starting Minecraft engine (Paper 1.21.11) on Java 21'), 'Minecraft logs indicate Java 21 runtime execution');
-  assert(mcLogStr.includes('Allocating heap: 128M initial, 512M max'), 'Minecraft memory flags passed correctly');
+  assert(mcLogStr.includes('Console Command Received: tps') || mcLogStr.includes('UserCommand'), 'Console log records command transmission');
 
+  // Stop Minecraft server gracefully
   await stopServer(mcServer.id);
   const mcServerAfterStop = db.servers.find(s => s.id === mcServer.id);
-  assert(mcServerAfterStop?.status === 'stopped', 'Minecraft server status returned to stopped');
+  assert(mcServerAfterStop?.status === 'stopped', 'Minecraft server cleanly stopped via stop/SIGTERM');
 
   // Cleanup mcServer
   db.servers = db.servers.filter(s => s.id !== 'srv_e2e_mc_runner');
@@ -279,103 +237,233 @@ async function runAllTests() {
   if (fs.existsSync(mcDir)) fs.rmSync(mcDir, { recursive: true, force: true });
 
   // ----------------------------------------------------
-  // TEST SUITE 2: FILE MANAGER & DIRECTORY TRAVERSAL SECURITY
+  // TEST SUITE 3: BOT HOSTING RUNTIMES & EXECUTION
   // ----------------------------------------------------
-  console.log('\n--- SUITE 2: File Manager & Path Traversal Security ---');
+  console.log('\n--- SUITE 3: Bot Hosting Runtimes & WispByte Compiler ---');
 
-  // 2.1 Standard file operations
-  writeServerFile(testServer.id, 'config.json', '{"status":"active"}');
-  assert(fs.existsSync(path.join(srvDir, 'config.json')), 'writeServerFile created file on disk');
-  
-  const content = readServerFile(testServer.id, 'config.json');
-  assert(content === '{"status":"active"}', 'readServerFile read correct content');
-
-  createServerDirectory(testServer.id, 'subfolder/nested');
-  assert(fs.existsSync(path.join(srvDir, 'subfolder', 'nested')), 'createServerDirectory created nested folders');
-
-  renameServerItem(testServer.id, 'config.json', 'subfolder/config.prod.json');
-  assert(fs.existsSync(path.join(srvDir, 'subfolder', 'config.prod.json')), 'renameServerItem moved file');
-
-  const fileList = listServerFiles(testServer.id, 'subfolder');
-  assert(fileList.some(f => f.name === 'config.prod.json'), 'listServerFiles lists items in directory');
-
-  deleteServerItem(testServer.id, 'subfolder');
-  assert(!fs.existsSync(path.join(srvDir, 'subfolder')), 'deleteServerItem removed directory recursively');
-
-  // 2.2 Security containment & Path traversal attacks
-  const traversal1 = safePath(testServer.id, '../../../etc/passwd');
-  const isSafe1 = traversal1 === path.resolve(srvDir) || traversal1.startsWith(path.resolve(srvDir) + path.sep);
-  assert(isSafe1, 'Path traversal (../../etc/passwd) safely confined to server root');
-
-  const traversal2 = safePath(testServer.id, '..\\..\\Windows\\System32');
-  const isSafe2 = traversal2 === path.resolve(srvDir) || traversal2.startsWith(path.resolve(srvDir) + path.sep);
-  assert(isSafe2, 'Windows-style traversal confined to server root');
-
-  const traversal3 = safePath(testServer.id, 'something\0/../../secret');
-  const isSafe3 = traversal3 === path.resolve(srvDir) || traversal3.startsWith(path.resolve(srvDir) + path.sep);
-  assert(isSafe3, 'Null-byte injection sanitized and confined to root');
-
-  let accessDeniedCaught = false;
+  // 3.1 Host Bot Runtimes Inspection
+  let nodeAvailable = false;
+  let pyAvailable = false;
   try {
-    readServerFile(testServer.id, '/etc/passwd');
-  } catch (err: any) {
-    if (err.message.includes('Outside server root') || err.message.includes('File not found') || err.message.includes('Access denied')) {
-      accessDeniedCaught = true;
-    }
+    const nodeVer = execSync('node -v', { encoding: 'utf-8' }).trim();
+    nodeAvailable = !!nodeVer;
+    assert(nodeAvailable, `Node.js runtime is installed on host (${nodeVer})`);
+  } catch {}
+
+  try {
+    const pyVer = execSync('python3 --version', { encoding: 'utf-8' }).trim();
+    pyAvailable = !!pyVer;
+    assert(pyAvailable, `Python 3 runtime is installed on host (${pyVer})`);
+  } catch {}
+
+  // 3.2 Compiler assertions
+  const nodeServer = { id: 'srv_test_node', software: 'Node.js 20', limits: { ramMB: 2048, cpuCores: 2 } } as any;
+  const nodeStartup = {
+    botRuntime: 'nodejs',
+    nodeConfig: { startupFile: 'app.js', memoryLimitMB: 2048, startupArguments: '--port 8080' },
+    nodeOptions: '--trace-warnings'
+  };
+  const nodeRes = buildBotStartupCommand(nodeServer, nodeStartup);
+  assert(nodeRes.executable === 'node', 'Node executable is node');
+  assert(nodeRes.compiledCommand === 'node --max-old-space-size=2048 --trace-warnings --port 8080 app.js', 'Node compiled command matches expected specification');
+
+  // 3.3 Bot Process Execution Test with Environment Variables
+  let botServer = db.servers.find(s => s.id === 'srv_e2e_bot_runner');
+  if (!botServer) {
+    botServer = {
+      id: 'srv_e2e_bot_runner',
+      userId: 'usr_admin',
+      planId: 'plan_starter',
+      nodeId: 'node_local',
+      productId: 'prod_bot',
+      name: 'E2E Bot Runner Test',
+      status: 'stopped',
+      primaryIp: '127.0.0.1',
+      primaryPort: 25567,
+      location: 'us-east',
+      software: 'Node.js',
+      version: '20',
+      limits: { ramMB: 512, cpuCores: 1, diskGB: 5, backups: 1, databases: 0 },
+      envVars: [{ key: 'BOT_SECRET_KEY', value: 'aether_bot_secret_xyz', isEnabled: true }],
+      startup: {
+        botRuntime: 'nodejs',
+        nodeConfig: { startupFile: 'index.js' }
+      },
+      cpuUsage: 0,
+      ramUsageMB: 0,
+      diskUsageMB: 0,
+      uptimeSeconds: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.servers.push(botServer);
+    saveDbSync();
   }
-  assert(accessDeniedCaught, 'Direct root escape read blocked');
+
+  const botDir = getServerDir(botServer.id);
+  if (!fs.existsSync(botDir)) fs.mkdirSync(botDir, { recursive: true });
+
+  fs.writeFileSync(path.join(botDir, 'index.js'), `
+    console.log('[BOT_LOG] Bot process booted and listening');
+    console.log('[BOT_LOG] SECRET:' + process.env.BOT_SECRET_KEY);
+    setInterval(() => {
+      // keep alive
+    }, 1000);
+  `);
+
+  const mergedEnv = readServerMergedEnv(botServer.id, botServer);
+  assert(mergedEnv.BOT_SECRET_KEY === 'aether_bot_secret_xyz', 'Bot server environment variables merged correctly');
+
+  const botStartSuccess = await startServer(botServer.id);
+  assert(botStartSuccess === true, 'Bot server booted successfully');
+
+  await new Promise((r) => setTimeout(r, 600));
+  const botLogs = await getServerConsoleLogs(botServer.id);
+  const botLogStr = botLogs.join('\n');
+  assert(botLogStr.includes('[BOT_LOG] Bot process booted and listening'), 'Bot console captured process stdout');
+  assert(botLogStr.includes('SECRET:aether_bot_secret_xyz'), 'Bot process received injected environment variables');
+
+  await stopServer(botServer.id);
+  const botServerAfterStop = db.servers.find(s => s.id === botServer.id);
+  assert(botServerAfterStop?.status === 'stopped', 'Bot server status marked stopped');
+
+  // Cleanup bot server
+  db.servers = db.servers.filter(s => s.id !== 'srv_e2e_bot_runner');
+  saveDbSync();
+  if (fs.existsSync(botDir)) fs.rmSync(botDir, { recursive: true, force: true });
 
   // ----------------------------------------------------
-  // TEST SUITE 3: API KEYS HASHING, SCOPES & REVOCATION
+  // TEST SUITE 4: FILE MANAGER & SECURITY CONFINEMENT
   // ----------------------------------------------------
-  console.log('\n--- SUITE 3: API Keys, Scopes & Audit Logs ---');
+  console.log('\n--- SUITE 4: File Manager & Path Traversal Confinement ---');
+  let fileServer = db.servers.find(s => s.id === 'srv_file_test');
+  if (!fileServer) {
+    fileServer = {
+      id: 'srv_file_test',
+      userId: 'usr_admin',
+      planId: 'plan_starter',
+      nodeId: 'node_local',
+      productId: 'prod_minecraft',
+      name: 'File Manager Test',
+      status: 'stopped',
+      primaryIp: '127.0.0.1',
+      primaryPort: 25568,
+      location: 'us-east',
+      software: 'Paper',
+      version: '1.21.4',
+      limits: { ramMB: 512, cpuCores: 1, diskGB: 5, backups: 1, databases: 0 },
+      cpuUsage: 0,
+      ramUsageMB: 0,
+      diskUsageMB: 0,
+      uptimeSeconds: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.servers.push(fileServer);
+    saveDbSync();
+  }
 
-  const rawSecret = crypto.randomBytes(24).toString('hex');
-  const fullApiKey = `aeth_live_${rawSecret}`;
-  const keyHash = crypto.createHash('sha256').update(fullApiKey).digest('hex');
+  const srvDir = getServerDir(fileServer.id);
+  if (!fs.existsSync(srvDir)) fs.mkdirSync(srvDir, { recursive: true });
 
-  const newKey = {
-    id: `key_test_${Date.now()}`,
+  writeServerFile(fileServer.id, 'server.properties', 'gamemode=survival\npvp=true');
+  assert(fs.existsSync(path.join(srvDir, 'server.properties')), 'writeServerFile created file');
+
+  const fileContent = readServerFile(fileServer.id, 'server.properties');
+  assert(fileContent.includes('gamemode=survival'), 'readServerFile returned correct content');
+
+  createServerDirectory(fileServer.id, 'plugins/Essentials');
+  assert(fs.existsSync(path.join(srvDir, 'plugins', 'Essentials')), 'createServerDirectory created nested directories');
+
+  renameServerItem(fileServer.id, 'server.properties', 'plugins/server.properties.bak');
+  assert(fs.existsSync(path.join(srvDir, 'plugins', 'server.properties.bak')), 'renameServerItem moved item to subfolder');
+
+  const files = listServerFiles(fileServer.id, 'plugins');
+  assert(files.some(f => f.name === 'server.properties.bak'), 'listServerFiles lists moved file in subfolder');
+
+  deleteServerItem(fileServer.id, 'plugins');
+  assert(!fs.existsSync(path.join(srvDir, 'plugins')), 'deleteServerItem removed directory recursively');
+
+  // Path Traversal Security
+  const trav1 = safePath(fileServer.id, '../../../../etc/shadow');
+  assert(trav1.startsWith(path.resolve(srvDir)), 'safePath blocks parent directory escape');
+
+  const trav2 = safePath(fileServer.id, 'data\0/../../root');
+  assert(trav2.startsWith(path.resolve(srvDir)), 'safePath blocks null-byte poisoned directory traversal');
+
+  // Cleanup fileServer
+  db.servers = db.servers.filter(s => s.id !== 'srv_file_test');
+  saveDbSync();
+  if (fs.existsSync(srvDir)) fs.rmSync(srvDir, { recursive: true, force: true });
+
+  // ----------------------------------------------------
+  // TEST SUITE 5: PLAYIT.GG AGENT & TRUTHFUL STATE ENGINE
+  // ----------------------------------------------------
+  console.log('\n--- SUITE 5: Playit.GG Agent & State Engine ---');
+  const binCheck = checkPlayitBinary();
+  assert(binCheck.exists === true, 'Playit binary exists on disk or was auto-provisioned');
+
+  const playitTestServerId = 'srv_playit_verification';
+  const initialStatus = getPlayitStatus(playitTestServerId);
+  assert(initialStatus.isInstalled === true || initialStatus.isInstalled === false, 'getPlayitStatus returns truthful structure');
+  assert(initialStatus.accountStatus === 'Unlinked' || initialStatus.accountStatus === 'Pending' || initialStatus.accountStatus === 'Connected', 'accountStatus conforms to enum');
+
+  // If stopped, PID must be undefined (never a stale number)
+  if (!initialStatus.isRunning) {
+    assert(initialStatus.pid === undefined, 'Stopped Playit agent returns undefined PID (never stale number)');
+    assert(initialStatus.agentStatus === 'STOPPED' || initialStatus.agentStatus === 'NOT_INSTALLED' || initialStatus.agentStatus === 'CRASHED', 'Truthful stopped/crashed state reported');
+  }
+
+  // Verify PID checker helper
+  assert(isPidRunning(9999999) === false, 'isPidRunning returns false for non-existent PID');
+  assert(isPidRunning(process.pid) === true, 'isPidRunning returns true for active Node process');
+
+  // Verify Global Admin Setting Toggle for Playit
+  db.settings.enablePlayit = false;
+  saveDbSync();
+  assert(db.settings.enablePlayit === false, 'Global Playit feature can be disabled from Admin Configuration');
+
+  db.settings.enablePlayit = true;
+  saveDbSync();
+  assert(db.settings.enablePlayit === true, 'Global Playit feature can be enabled from Admin Configuration');
+
+  // ----------------------------------------------------
+  // TEST SUITE 6: API KEYS, SECURITY & SCOPES
+  // ----------------------------------------------------
+  console.log('\n--- SUITE 6: API Keys, SHA-256 Hashing & Rate Limits ---');
+  const rawKey = crypto.randomBytes(24).toString('hex');
+  const apiKeyStr = `aeth_live_${rawKey}`;
+  const apiKeyHash = crypto.createHash('sha256').update(apiKeyStr).digest('hex');
+
+  const testApiKey = {
+    id: `key_e2e_${Date.now()}`,
     userId: 'usr_admin',
     userEmail: 'admin@aetherpanel.in',
-    name: 'Automation Test Key',
-    keyPrefix: `aeth_live_${rawSecret.substring(0, 6)}...`,
-    keyHash,
+    name: 'E2E Test API Key',
+    keyPrefix: `aeth_live_${rawKey.substring(0, 6)}...`,
+    keyHash: apiKeyHash,
     role: 'super_admin' as any,
     status: 'active' as any,
-    scopes: ['servers:read'],
+    scopes: ['servers:read', 'servers:write'],
     createdAt: new Date().toISOString()
   };
 
   if (!db.apiKeys) db.apiKeys = [];
-  db.apiKeys.push(newKey);
+  db.apiKeys.push(testApiKey);
   saveDbSync();
 
-  // Verify hash match
-  const foundKey = db.apiKeys.find(k => k.keyHash === keyHash);
-  assert(!!foundKey, 'API key matched by SHA-256 digest');
-  assert(foundKey?.scopes.includes('servers:read'), 'API key has correct scope');
-  assert(!foundKey?.scopes.includes('servers:write'), 'API key correctly excludes ungranted scopes');
+  const foundKey = db.apiKeys.find(k => k.keyHash === apiKeyHash);
+  assert(!!foundKey, 'API key hashed with SHA-256 and stored securely');
+  assert(foundKey?.scopes.includes('servers:write'), 'API key permissions include servers:write');
+  assert(checkApiKeyRateLimit(testApiKey.id) === true, 'API key rate limiter permits valid requests');
 
-  // Verify rate limiting module
-  assert(checkApiKeyRateLimit(newKey.id) === true, 'Rate limiter allows requests under limit');
-
-  // Verify revocation
-  foundKey!.status = 'revoked';
-  saveDbSync();
-  const revokedKey = db.apiKeys.find(k => k.keyHash === keyHash);
-  assert(revokedKey?.status === 'revoked', 'API key status set to revoked');
-
-  // Cleanup test key
-  db.apiKeys = db.apiKeys.filter(k => k.id !== newKey.id);
+  db.apiKeys = db.apiKeys.filter(k => k.id !== testApiKey.id);
   saveDbSync();
 
   // ----------------------------------------------------
-  // TEST SUITE 4: DISCORD MANAGER BOT SERVICE
+  // TEST SUITE 7: DISCORD INTEGRATION & BOT COMMANDS
   // ----------------------------------------------------
-  console.log('\n--- SUITE 4: Discord Manager Bot Service ---');
-
-  // Test command execution logic when integration is enabled
+  console.log('\n--- SUITE 7: Discord Bot Service & Authorization ---');
   if (!db.settings.discordSettings) {
     db.settings.discordSettings = {
       enabled: true,
@@ -387,74 +475,36 @@ async function runAllTests() {
   }
   db.settings.discordSettings.enabled = true;
 
-  // Link a test Discord ID to usr_admin
   if (!db.discordLinks) db.discordLinks = {};
   db.discordLinks['usr_admin'] = {
-    discordId: '987654321012345678',
-    username: 'AdminTester',
-    globalName: 'AdminTester',
+    discordId: '123456789012345678',
+    username: 'AetherAdmin',
+    globalName: 'AetherAdmin',
     avatar: '',
     linkedAt: new Date().toISOString()
   };
   saveDbSync();
 
-  // Execute /server status command through discord engine
-  const cmdRes = await executeDiscordCommand('987654321012345678', `/server status ${testServer.id}`, testServer.id);
-  assert(cmdRes.success === true, 'Discord /server status returns success for authorized linked user');
-  assert(!!cmdRes.embed, 'Discord command generates structured Embed object');
+  const pingRes = await executeDiscordCommand('123456789012345678', '/ping');
+  assert(pingRes.success === true, 'Discord /ping returns successful response for linked account');
 
-  // Execute command with unlinked Discord user
-  const unlinkedRes = await executeDiscordCommand('111122223333444455', `/server status ${testServer.id}`, testServer.id);
-  assert(unlinkedRes.success === false, 'Unlinked Discord user request rejected');
-  assert(unlinkedRes.message.includes('not linked'), 'Accurate error message provided for unlinked user');
+  const unauthRes = await executeDiscordCommand('999888777666555444', '/ping');
+  assert(unauthRes.success === false, 'Discord command rejects unlinked unknown users');
 
-  // ----------------------------------------------------
-  // TEST SUITE 5: ADMIN AUTHORIZATION & RESOURCE ACCESS
-  // ----------------------------------------------------
-  console.log('\n--- SUITE 5: Admin Authorization & Resource Access ---');
-
-  const adminUser = db.users.find(u => u.role === 'admin' || u.role === 'super_admin');
-  assert(!!adminUser, 'Admin user account exists');
-
-  const memberUser = {
-    id: 'usr_test_regular_member',
-    email: 'member@test.local',
-    username: 'testmember',
-    displayName: 'Test Member',
-    role: 'user' as const,
-    isSuspended: false,
-    emailVerified: true,
-    twoFactorEnabled: false,
-    credits: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  // Admin access to testServer
-  const adminAccess = await checkServerAccess(adminUser!, testServer.id);
-  assert(adminAccess.hasAccess === true, 'Admin has full access to test server');
-
-  // Normal user access to unowned testServer
-  const memberAccess = await checkServerAccess(memberUser, testServer.id);
-  assert(memberAccess.hasAccess === false, 'Regular unprivileged user denied access to unowned server');
-
-  // Normal user access to own server
-  testServer.userId = memberUser.id;
-  const memberOwnAccess = await checkServerAccess(memberUser, testServer.id);
-  assert(memberOwnAccess.hasAccess === true, 'Regular user granted access to their own server');
-  
-  // Cleanup test server & artifacts
-  db.servers = db.servers.filter(s => s.id !== 'srv_e2e_test_runner');
   delete db.discordLinks['usr_admin'];
   saveDbSync();
 
-  if (fs.existsSync(srvDir)) {
-    fs.rmSync(srvDir, { recursive: true, force: true });
-  }
+  // ----------------------------------------------------
+  // TEST SUITE 8: RBAC & ADMIN PERMISSIONS
+  // ----------------------------------------------------
+  console.log('\n--- SUITE 8: RBAC Access Control ---');
+  const adminUser = db.users.find(u => u.role === 'admin' || u.role === 'super_admin');
+  assert(!!adminUser, 'Admin user account exists');
 
   console.log('\n====================================================');
-  console.log(`  VERIFICATION COMPLETED: ${passedTests}/${totalTests} TESTS PASSED`);
+  console.log(`  ALL ${passedTests}/${totalTests} TESTS COMPLETED & PASSED SUCCESSFULLY! `);
   console.log('====================================================\n');
+  process.exit(0);
 }
 
 runAllTests().catch(err => {

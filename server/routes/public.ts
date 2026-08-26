@@ -77,7 +77,7 @@ router.get('/announcements', async (req: Request, res: Response) => {
 // GET /api/v1/public/settings
 router.get('/settings', async (req: Request, res: Response) => {
   const db = await getDb();
-  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor } = db.settings;
+  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit } = db.settings;
 
   res.json({
     success: true,
@@ -92,7 +92,8 @@ router.get('/settings', async (req: Request, res: Response) => {
       maintenanceMode,
       maintenanceMessage,
       defaultTheme,
-      accentColor
+      accentColor,
+      enablePlayit: enablePlayit !== false
     }
   });
 });

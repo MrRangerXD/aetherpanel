@@ -3,7 +3,7 @@ import {
   Sliders, Save, Check, QrCode, CreditCard, Building, CheckCircle2,
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
-  AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink
+  AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
@@ -19,6 +19,8 @@ export const AdminSettings: React.FC = () => {
   const [currencySymbol, setCurrencySymbol] = useState('$');
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [enablePlayit, setEnablePlayit] = useState(true);
+  const [togglingGlobalPlayit, setTogglingGlobalPlayit] = useState(false);
 
   // Auth Provider Settings
   const [authProviders, setAuthProviders] = useState<AuthProviderSettings>({
@@ -47,6 +49,7 @@ export const AdminSettings: React.FC = () => {
   const [googleTestResult, setGoogleTestResult] = useState<any>(null);
   const [testingDiscord, setTestingDiscord] = useState(false);
   const [discordTestResult, setDiscordTestResult] = useState<any>(null);
+  const [copiedDiscordUri, setCopiedDiscordUri] = useState(false);
 
   // Anti-Abuse & VPN Protection Settings
   const [antiAbuse, setAntiAbuse] = useState({
@@ -109,10 +112,7 @@ export const AdminSettings: React.FC = () => {
 
   // Network & SFTP Tab States
   const [networkSftpDetails, setNetworkSftpDetails] = useState<any>(null);
-  const [playitAgentStatus, setPlayitAgentStatus] = useState<any>(null);
   const [fetchingNetwork, setFetchingNetwork] = useState(false);
-  const [togglingPlayit, setTogglingPlayit] = useState(false);
-  const [installingPlayit, setInstallingPlayit] = useState(false);
 
   const fetchNetworkSftpData = async () => {
     setFetchingNetwork(true);
@@ -121,41 +121,8 @@ export const AdminSettings: React.FC = () => {
       if (sftpRes.success) {
         setNetworkSftpDetails(sftpRes.data);
       }
-      const playitRes = await apiRequest('/admin/nodes/node_local/playit');
-      if (playitRes.success) {
-        setPlayitAgentStatus(playitRes.data);
-      }
     } catch {}
     setFetchingNetwork(false);
-  };
-
-  const handleTogglePlayit = async (enable: boolean) => {
-    setTogglingPlayit(true);
-    const res = await apiRequest('/admin/nodes/node_local/playit/toggle', {
-      method: 'POST',
-      body: JSON.stringify({ enable })
-    });
-    setTogglingPlayit(false);
-    if (res.success) {
-      setPlayitAgentStatus(res.data);
-      fetchNetworkSftpData();
-    } else {
-      alert(res.error?.message || 'Failed to toggle Playit agent');
-    }
-  };
-
-  const handleInstallPlayit = async () => {
-    setInstallingPlayit(true);
-    const res = await apiRequest('/admin/nodes/node_local/playit/install', {
-      method: 'POST'
-    });
-    setInstallingPlayit(false);
-    if (res.success) {
-      setPlayitAgentStatus(res.data);
-      fetchNetworkSftpData();
-    } else {
-      alert(res.error?.message || 'Failed to install Playit agent');
-    }
   };
 
   const fetchSettings = async () => {
@@ -167,6 +134,7 @@ export const AdminSettings: React.FC = () => {
       setCurrencySymbol(res.data.currencySymbol || '$');
       setRegistrationEnabled(res.data.registrationEnabled ?? true);
       setMaintenanceMode(res.data.maintenanceMode ?? false);
+      setEnablePlayit(res.data.enablePlayit ?? true);
       if (res.data.paymentGateways) {
         setGateways(res.data.paymentGateways);
       }
@@ -298,7 +266,7 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
-  const { updateBrandNameLocally, refreshBranding } = useBranding();
+  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally } = useBranding();
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,16 +278,45 @@ export const AdminSettings: React.FC = () => {
         supportEmail,
         currencySymbol,
         registrationEnabled,
-        maintenanceMode
+        maintenanceMode,
+        enablePlayit
       })
     });
     if (res.success) {
       updateBrandNameLocally(brandName);
+      setEnablePlayitLocally(enablePlayit);
       await refreshBranding();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } else {
       setActionMsg(res.error?.message || 'Failed to save settings');
+    }
+  };
+
+  const handleToggleGlobalPlayit = async (enabled: boolean) => {
+    setTogglingGlobalPlayit(true);
+    setEnablePlayit(enabled);
+    const res = await apiRequest('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        brandName,
+        brandTagline,
+        supportEmail,
+        currencySymbol,
+        registrationEnabled,
+        maintenanceMode,
+        enablePlayit: enabled
+      })
+    });
+    setTogglingGlobalPlayit(false);
+    if (res.success) {
+      setEnablePlayitLocally(enabled);
+      await refreshBranding();
+      setActionMsg(enabled ? 'Playit.GG has been enabled globally.' : 'Playit.GG has been disabled globally.');
+      setTimeout(() => setActionMsg(null), 4000);
+    } else {
+      setEnablePlayit(!enabled); // revert state on error
+      alert(res.error?.message || 'Failed to update Playit setting');
     }
   };
 
@@ -510,6 +507,47 @@ export const AdminSettings: React.FC = () => {
               onChange={(e) => setMaintenanceMode(e.target.checked)}
               className="h-4 w-4 accent-rose-500 rounded"
             />
+          </div>
+
+          {/* Playit.GG Global Integration Toggle */}
+          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Globe className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white">Playit.GG Integration</h3>
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                    enablePlayit
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${enablePlayit ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                    {enablePlayit ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-zinc-200">Enable Playit.GG</div>
+                <p className="text-[11px] text-zinc-400">
+                  Allow customers and servers to use Playit.GG agent connectivity and claiming features.
+                </p>
+                <p className="text-[11px] text-zinc-500">
+                  {enablePlayit
+                    ? 'Playit.GG features are available throughout the panel.'
+                    : 'Playit.GG features are hidden from customers.'}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                <input
+                  type="checkbox"
+                  disabled={togglingGlobalPlayit}
+                  checked={enablePlayit}
+                  onChange={(e) => handleToggleGlobalPlayit(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
           </div>
 
           <div className="flex justify-end pt-2">
@@ -741,10 +779,33 @@ export const AdminSettings: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="text-[11px] text-zinc-500 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                  <strong>Discord OAuth2 Redirect URI:</strong>{' '}
-                  <code className="text-amber-400 font-mono">{typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '/api/v1/auth/discord/callback'}</code>
-                  <div className="mt-1">Add this redirect URI to your application inside Discord Developer Portal → OAuth2 → Redirects.</div>
+                <div className="text-[11px] text-zinc-400 p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-zinc-200">Discord OAuth2 Redirect URI (Current Installation):</strong>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const uriToCopy = authProviders.discord?.redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '');
+                        if (uriToCopy) {
+                          navigator.clipboard.writeText(uriToCopy);
+                          setCopiedDiscordUri(true);
+                          setTimeout(() => setCopiedDiscordUri(false), 2000);
+                        }
+                      }}
+                      className="text-amber-400 hover:text-amber-300 flex items-center gap-1 font-medium transition-colors"
+                    >
+                      {copiedDiscordUri ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedDiscordUri ? 'Copied' : 'Copy URI'}</span>
+                    </button>
+                  </div>
+                  <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                    <code className="text-amber-400 font-mono text-xs break-all">
+                      {authProviders.discord?.redirectUri || (typeof window !== 'undefined' ? `${window.location.origin}/api/v1/auth/discord/callback` : '/api/v1/auth/discord/callback')}
+                    </code>
+                  </div>
+                  <div className="text-[10px] text-zinc-500">
+                    Add this exact dynamic URI to your application inside Discord Developer Portal → OAuth2 → Redirects.
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -1373,145 +1434,6 @@ export const AdminSettings: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Playit Integration Panel */}
-              <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
-                <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-400" /> Playit.GG Tunnel Agent
-                  </h2>
-                  <p className="text-xs text-zinc-400 mt-0.5">Enables absolute zero port-forwarding secure SFTP access. Essential for systems behind CGNAT or local NAT firewalls.</p>
-                </div>
-
-                {!playitAgentStatus?.isInstalled ? (
-                  <div className="p-6 rounded-2xl bg-zinc-950/60 border border-zinc-800 flex flex-col items-center justify-center text-center space-y-4">
-                    <div className="p-3 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                      <Globe className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Playit Agent Not Initialized</h3>
-                      <p className="text-[11px] text-zinc-400 max-w-md mt-1">Configure and start the Playit daemon locally on this node to bypass complex NAT/Firewall systems automatically.</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={installingPlayit}
-                      onClick={handleInstallPlayit}
-                      className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5"
-                    >
-                      {installingPlayit ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" /> Initializing Agent...
-                        </>
-                      ) : (
-                        <>
-                          Initialize Playit Agent
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Controls */}
-                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-[10px] font-mono uppercase text-zinc-500">Agent Process status</div>
-                            <div className="text-xs font-bold text-white mt-1">
-                              {playitAgentStatus?.isRunning ? (
-                                <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> RUNNING (PID {playitAgentStatus?.pid})</span>
-                              ) : (
-                                <span className="text-zinc-500 flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> STOPPED</span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={togglingPlayit}
-                            onClick={() => handleTogglePlayit(!playitAgentStatus?.isRunning)}
-                            className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
-                              playitAgentStatus?.isRunning
-                                ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20'
-                                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
-                            }`}
-                          >
-                            {togglingPlayit ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : playitAgentStatus?.isRunning ? (
-                              'Stop Agent'
-                            ) : (
-                              'Start Agent'
-                            )}
-                          </button>
-                        </div>
-
-                        {playitAgentStatus?.errorReason && (
-                          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] font-mono text-rose-400">
-                            <strong>Agent Error:</strong> {playitAgentStatus.errorReason}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Claim and Tunnels */}
-                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
-                        <div>
-                          <div className="text-[10px] font-mono uppercase text-zinc-500">Claiming Status</div>
-                          <div className="text-xs font-bold text-white mt-1">
-                            {String(playitAgentStatus?.status).toUpperCase() === 'CONNECTED' ? (
-                              <span className="text-emerald-400 font-bold uppercase tracking-wide">CLAIMED & ACTIVE</span>
-                            ) : String(playitAgentStatus?.status).toUpperCase() === 'WAITING_FOR_CONFIGURATION' ? (
-                              <span className="text-amber-400 font-bold uppercase tracking-wide animate-pulse">WAITING FOR CONFIGURATION</span>
-                            ) : String(playitAgentStatus?.status).toUpperCase() === 'CLAIMING' || playitAgentStatus?.claimUrl ? (
-                              <span className="text-amber-400 font-bold uppercase tracking-wide animate-pulse">WAITING FOR CLAIM</span>
-                            ) : (
-                              <span className="text-zinc-500 font-bold uppercase tracking-wide">UNCONFIGURED</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {playitAgentStatus?.claimUrl && playitAgentStatus?.status !== 'connected' && (
-                          <div className="flex flex-col gap-2 pt-1 border-t border-zinc-900">
-                            <p className="text-[11px] text-zinc-400">To route your SFTP through Playit.GG, click below to claim this agent instance on your Playit account:</p>
-                            <a
-                              href={playitAgentStatus.claimUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs text-center flex items-center justify-center gap-1"
-                            >
-                              Claim Agent on Playit.GG <ExternalLink className="h-3 w-3" />
-                            </a>
-                            {playitAgentStatus?.claimCode && (
-                              <div className="text-center">
-                                <span className="text-[10px] text-zinc-500 font-mono">Claim Code: </span>
-                                <span className="text-xs font-bold text-white font-mono bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{playitAgentStatus.claimCode}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Agent Tail logs console block */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider font-mono">Playit Agent Console Logs</h3>
-                        <span className="text-[10px] font-mono text-zinc-600">Tail logs (15 lines)</span>
-                      </div>
-                      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-[11px] text-zinc-300 max-h-60 overflow-y-auto space-y-1">
-                        {!playitAgentStatus?.logs || playitAgentStatus.logs.length === 0 ? (
-                          <div className="text-zinc-600 italic">No logs generated yet. Ensure the agent is running.</div>
-                        ) : (
-                          playitAgentStatus.logs.map((line: string, idx: number) => (
-                            <div key={idx} className="whitespace-pre-wrap leading-relaxed select-text hover:bg-zinc-900 px-1 py-0.5 rounded transition-all">
-                              {line}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}

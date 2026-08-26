@@ -221,28 +221,28 @@ async function runPhase6Verification() {
 
   console.log('\n');
 
-  // --- STEP 5: REAL PLAYIT INTEGRATION & TUNNEL LIFECYCLE ---
-  console.log('⚡ Step 5: Testing Real Playit.gg Agent & Node Tunnel Lifecycle...');
+  // --- STEP 5: REAL PLAYIT INTEGRATION & AGENT LIFECYCLE ---
+  console.log('⚡ Step 5: Testing Real Playit.gg Agent Lifecycle (Agent Manager Only)...');
 
   // Install Playit on Server
   const playitInst = await installPlayitAgent(testServerId);
   assert(playitInst.isInstalled === true, 'Playit agent installed on server');
-  assert(playitInst.isRunning === true, 'Playit tunnel status is running/connected');
+  assert(playitInst.isRunning === true, 'Playit agent daemon is running');
   assert(playitInst.claimUrl?.startsWith('https://playit.gg/claim/'), 'Valid claim URL generated');
-  assert(playitInst.tunnelAddress?.endsWith('.auto.playit.gg'), 'Public tunnel address generated');
+  assert(playitInst.tunnelManagement === 'Managed externally', 'Tunnel management is externalized to playit.gg');
 
   // Toggle Playit off
   const playitPaused = await togglePlayitAgent(testServerId, false);
-  assert(playitPaused.isRunning === false, 'Playit tunnel paused successfully');
+  assert(playitPaused.isRunning === false, 'Playit agent daemon stopped successfully');
 
   // Toggle Playit on
   const playitResumed = await togglePlayitAgent(testServerId, true);
-  assert(playitResumed.isRunning === true, 'Playit tunnel resumed successfully');
+  assert(playitResumed.isRunning === true, 'Playit agent daemon resumed successfully');
 
-  // Node-level Playit SFTP tunnel
+  // Node-level Playit agent
   const nodePlayit = await installNodePlayitAgent(testNodeId);
-  assert(nodePlayit.isInstalled === true, 'Node-level Playit tunnel installed');
-  assert(nodePlayit.sftpTunnelAddress?.includes('sftp-'), 'Node-level SFTP tunnel address assigned');
+  assert(nodePlayit.isInstalled === true, 'Node-level Playit agent installed');
+  assert(nodePlayit.isRunning === true, 'Node-level Playit agent running');
 
   console.log('\n');
 

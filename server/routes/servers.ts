@@ -18,7 +18,7 @@ import {
 } from '../provider';
 import { closeServerConsoleClients } from '../consoleWs';
 import {
-  getPlayitStatus, installPlayitAgent, togglePlayitAgent, provisionPlayitSecret, uninstallPlayitAgent
+  getPlayitStatus, installPlayitAgent, togglePlayitAgent, restartPlayitAgent, provisionPlayitSecret, claimPlayitAgent, uninstallPlayitAgent
 } from '../playitService';
 import { searchRealPlugins, downloadPluginJar } from '../pluginProviders';
 import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProcess, getBackupFilePath } from '../backups';
@@ -1205,8 +1205,27 @@ router.post('/:id/install-dependencies', authMiddleware, async (req: Authenticat
   }
 });
 
+// Helper to check if Playit is globally enabled
+async function checkPlayitEnabled(req: AuthenticatedRequest, res: Response): Promise<boolean> {
+  const db = await getDb();
+  if (db.settings.enablePlayit === false && req.user?.role !== 'admin') {
+    res.status(403).json({
+      success: false,
+      error: {
+        code: 'PLAYIT_DISABLED',
+        message: 'Playit.GG is currently disabled by the administrator.'
+      }
+    });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/v1/servers/:id/playit - Get Playit agent & tunnel status
 router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -1216,6 +1235,9 @@ router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res:
 
 // POST /api/v1/servers/:id/playit/install - Install Playit agent
 router.post('/:id/playit/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -1227,22 +1249,44 @@ router.post('/:id/playit/install', authMiddleware, async (req: AuthenticatedRequ
   }
 });
 
-// POST /api/v1/servers/:id/playit/toggle - Start / Stop Playit tunnel
+// POST /api/v1/servers/:id/playit/toggle - Start / Stop Playit agent
 router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
   const { enable } = req.body;
   try {
     const status = await togglePlayitAgent(req.params.id, Boolean(enable));
-    res.json({ success: true, message: `Playit tunnel ${enable ? 'activated' : 'paused'}.`, data: status });
+    res.json({ success: true, message: `Playit agent ${enable ? 'started' : 'stopped'}.`, data: status });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
   }
 });
 
+// POST /api/v1/servers/:id/playit/restart - Restart Playit agent
+router.post('/:id/playit/restart', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const status = await restartPlayitAgent(req.params.id);
+    res.json({ success: true, message: 'Playit agent restarted successfully.', data: status });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'PLAYIT_RESTART_FAILED', message: err.message } });
+  }
+});
+
 // POST /api/v1/servers/:id/playit/secret - Provision Playit secret key
 router.post('/:id/playit/secret', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
@@ -1260,8 +1304,27 @@ router.post('/:id/playit/secret', authMiddleware, async (req: AuthenticatedReque
   }
 });
 
+// POST /api/v1/servers/:id/playit/claim - Explicitly initiate Playit claim action
+router.post('/:id/playit/claim', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  try {
+    const claimRes = await claimPlayitAgent(req.params.id);
+    res.json({ success: true, data: claimRes });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'PLAYIT_CLAIM_FAILED', message: err.message } });
+  }
+});
+
 // POST /api/v1/servers/:id/playit/uninstall - Remove Playit agent
 router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const isEnabled = await checkPlayitEnabled(req, res);
+  if (!isEnabled) return;
+
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 

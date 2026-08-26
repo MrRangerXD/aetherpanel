@@ -172,17 +172,25 @@ export const UserSettings: React.FC = () => {
           }, 1000);
 
           const handleMsg = (event: MessageEvent) => {
-            if (event.data?.type === 'DISCORD_AUTH_SUCCESS') {
+            if (event.origin !== window.location.origin) return;
+            const type = event.data?.type;
+            if (type === 'AETHERPANEL_DISCORD_OAUTH_SUCCESS' || type === 'DISCORD_AUTH_SUCCESS') {
               clearInterval(checkTimer);
               window.removeEventListener('message', handleMsg);
+              if (event.data?.token) {
+                localStorage.setItem('aether_token', event.data.token);
+              }
+              if (event.data?.discordAccount) {
+                setDiscordAccount(event.data.discordAccount);
+              }
               fetchDiscordStatus();
               refreshUser();
               setDiscordNotice('✅ Discord account authorized and linked successfully!');
               setConnectingDiscord(false);
-            } else if (event.data?.type === 'DISCORD_AUTH_ERROR') {
+            } else if (type === 'AETHERPANEL_DISCORD_OAUTH_ERROR' || type === 'DISCORD_AUTH_ERROR') {
               clearInterval(checkTimer);
               window.removeEventListener('message', handleMsg);
-              setDiscordNotice(`Authorization Cancelled or Failed: ${event.data.error || 'User declined access'}`);
+              setDiscordNotice(`Authorization Cancelled or Failed: ${event.data?.error || 'User declined access'}`);
               setConnectingDiscord(false);
             }
           };
