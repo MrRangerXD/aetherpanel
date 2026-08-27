@@ -43,10 +43,10 @@ export function getCurrentInstallationPublicUrl(
   req?: Request | any,
   settings?: Partial<SystemSettings> | Partial<DiscordBotSettings> | any
 ): string {
-  // 1. Check explicit environment variable configuration
+  // 1. Check explicit environment variable configuration (PANEL_URL prioritized)
   const envUrl =
-    process.env.APP_URL ||
     process.env.PANEL_URL ||
+    process.env.APP_URL ||
     process.env.AETHER_PUBLIC_URL ||
     process.env.PUBLIC_URL;
 
@@ -58,6 +58,12 @@ export function getCurrentInstallationPublicUrl(
   }
 
   // Check explicit database setting if present
+  if (settings && (settings as any).panelUrl) {
+    const panelUrl = String((settings as any).panelUrl).trim().replace(/\/+$/, '');
+    if (panelUrl.startsWith('http://') || panelUrl.startsWith('https://')) {
+      return panelUrl;
+    }
+  }
   if (settings && (settings as any).appUrl) {
     const appUrl = String((settings as any).appUrl).trim().replace(/\/+$/, '');
     if (appUrl.startsWith('http://') || appUrl.startsWith('https://')) {

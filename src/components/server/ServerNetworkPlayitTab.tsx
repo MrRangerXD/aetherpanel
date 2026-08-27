@@ -21,6 +21,8 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const [installingPlayit, setInstallingPlayit] = useState<boolean>(false);
   const [togglingAgent, setTogglingAgent] = useState<boolean>(false);
   const [restartingAgent, setRestartingAgent] = useState<boolean>(false);
+  const [repairingAgent, setRepairingAgent] = useState<boolean>(false);
+  const [repairMsg, setRepairMsg] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
   // Advanced Manual Secret
@@ -130,6 +132,24 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
       }
     } finally {
       setRestartingAgent(false);
+    }
+  };
+
+  const handleRepairAgent = async () => {
+    setRepairingAgent(true);
+    setRepairMsg(null);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/playit/repair`, { method: 'POST' });
+      if (res.success && res.data) {
+        if (res.data.status) setPlayit(res.data.status);
+        const count = res.data.diagnostics?.filter((d: any) => d.status === 'REPAIRED').length || 0;
+        setRepairMsg(count > 0 ? `Repair completed: ${count} issue(s) fixed.` : 'Repair complete. Diagnostics passed.');
+        fetchPlayitStatus();
+      }
+    } catch (err: any) {
+      setRepairMsg(`Repair failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setRepairingAgent(false);
     }
   };
 
@@ -534,6 +554,17 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
               </div>
             </div>
 
+            {/* Repair Message Notice if any */}
+            {repairMsg && (
+              <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-amber-400 shrink-0" />
+                  <span>{repairMsg}</span>
+                </div>
+                <button onClick={() => setRepairMsg(null)} className="text-xs text-zinc-400 hover:text-white">Dismiss</button>
+              </div>
+            )}
+
             {/* Error / Crash Notice if any */}
             {playit.errorReason && (
               <div className="p-3.5 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
@@ -742,6 +773,16 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRepairAgent}
+                  disabled={repairingAgent}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  title="Run Diagnostics & Repair Playit Agent"
+                >
+                  <Shield className={`h-3.5 w-3.5 ${repairingAgent ? 'animate-spin' : ''}`} />
+                  <span>{repairingAgent ? 'Diagnosing...' : 'Repair Agent'}</span>
+                </button>
+
                 <button
                   onClick={handleRestartAgent}
                   disabled={restartingAgent || !isRunning}

@@ -127,6 +127,65 @@ prompt_input() {
   echo "$result"
 }
 
+normalize_url() {
+  local u="${1:-}"
+  # Strip surrounding whitespace
+  u=$(echo "$u" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  # Strip trailing slashes
+  u=$(echo "$u" | sed -e 's:/*$::')
+  echo "$u"
+}
+
+validate_url() {
+  local u="${1:-}"
+  if [ -z "$u" ]; then
+    return 1
+  fi
+  # Disallow dangerous characters: spaces, quotes, newlines, semicolons, dollar signs, backticks, backslashes, angle brackets, braces
+  if echo "$u" | grep -qE '[[:space:]'\''\"\;\|\&\`\$\<\>\\\{\}]'; then
+    return 1
+  fi
+  # Must begin with http:// or https://
+  if [[ ! "$u" =~ ^https?:// ]]; then
+    return 1
+  fi
+  # Host part must be present and not empty
+  local without_proto="${u#*://}"
+  local host_part="${without_proto%%/*}"
+  if [ -z "$host_part" ]; then
+    return 1
+  fi
+  # Valid characters for host/port
+  local host_regex="^[-a-zA-Z0-9.:_]+$"
+  if [[ ! "$host_part" =~ $host_regex ]]; then
+    return 1
+  fi
+  return 0
+}
+
+set_env_var() {
+  local file="${1:-}"
+  local key="${2:-}"
+  local val="${3:-}"
+
+  if [ -z "$file" ] || [ -z "$key" ]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$file")" 2>/dev/null || true
+  touch "$file" 2>/dev/null || true
+
+  if grep -q "^${key}=" "$file" 2>/dev/null; then
+    local tmp_file
+    tmp_file=$(mktemp 2>/dev/null || echo "${file}.tmp.$$")
+    grep -v "^${key}=" "$file" > "$tmp_file" || true
+    echo "${key}=${val}" >> "$tmp_file"
+    mv "$tmp_file" "$file"
+  else
+    echo "${key}=${val}" >> "$file"
+  fi
+}
+
 # ==============================================================================
 # 3. ASCII BRANDING & HEADER
 # ==============================================================================
@@ -478,6 +537,38 @@ install_playit_binary() {
   fi
 }
 
+prepare_java_runtime_manager() {
+  local target_dir="${1:-/opt/aetherpanel}"
+  mkdir -p "${target_dir}/data/runtimes"
+  log_msg "Preparing Java Runtime Manager subsystem at ${target_dir}/data/runtimes"
+
+  echo -e "${CYAN}    Detecting operating system...${NC}"
+  local os_type="Linux"
+  if [ -f /etc/os-release ]; then
+    os_type=$(grep "^PRETTY_NAME=" /etc/os-release | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "Linux")
+  fi
+  echo -e "${CYAN}    Detected OS: ${os_type}${NC}"
+
+  local pkg_mgr="unknown"
+  if command -v apt-get &> /dev/null; then
+    pkg_mgr="apt-get"
+  elif command -v dnf &> /dev/null; then
+    pkg_mgr="dnf"
+  elif command -v yum &> /dev/null; then
+    pkg_mgr="yum"
+  elif command -v apk &> /dev/null; then
+    pkg_mgr="apk"
+  fi
+  echo -e "${CYAN}    Package manager: ${pkg_mgr}${NC}"
+
+  local sys_arch
+  sys_arch=$(uname -m 2>/dev/null || echo "x86_64")
+  echo -e "${CYAN}    Architecture: ${sys_arch}${NC}"
+
+  echo -e "${CYAN}    Preparing Java runtime manager...${NC}"
+  echo -e "${GREEN}[✓] Java runtime provisioning is ready.${NC}"
+}
+
 # ==============================================================================
 # 7. OPTION 1: PANEL INSTALLATION (8-STEP PROGRESS)
 # ==============================================================================
@@ -510,8 +601,37 @@ install_panel() {
   fi
 
   print_banner
-  echo -e "${PURPLE}${BOLD}=== AETHERPANEL CONTROL PLANE INSTALLATION ===${NC}\n"
-  
+  echo -e "Starting AetherPanel Panel Installation...\n"
+
+  if [ -z "${PANEL_URL:-}" ]; then
+    echo -e "Enter your Panel URL"
+    echo -e "Examples:"
+    echo -e "https://panel.example.com"
+    echo -e "http://123.123.123.123:3000\n"
+
+    while true; do
+      local input_url
+      input_url=$(prompt_input "Panel URL: ")
+      input_url=$(normalize_url "$input_url")
+
+      if [ -z "$input_url" ]; then
+        echo -e "${RED}[ERROR] Panel URL cannot be empty.${NC}"
+        echo -e "Examples:\n  https://panel.example.com\n  http://123.123.123.123:3000\n"
+        continue
+      fi
+
+      if validate_url "$input_url"; then
+        PANEL_URL="$input_url"
+        break
+      else
+        echo -e "${RED}[ERROR] Invalid Panel URL format. Must start with http:// or https:// and contain a valid hostname or IP address.${NC}"
+        echo -e "Examples:\n  https://panel.example.com\n  http://123.123.123.123:3000\n"
+      fi
+    done
+  else
+    PANEL_URL=$(normalize_url "$PANEL_URL")
+  fi
+
   if [ -z "${PANEL_PORT:-}" ]; then
     USER_PORT=$(prompt_input "Enter preferred Panel Web Port [Default: 3000]: ")
     PANEL_PORT="${USER_PORT:-3000}"
@@ -572,40 +692,35 @@ install_panel() {
   mkdir -p "$INSTALL_DIR/data"
   mkdir -p /var/log/aetherpanel
 
-  if [ ! -f "$INSTALL_DIR/.env" ]; then
-    if [ -f "$INSTALL_DIR/.env.example" ]; then
-      cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
-    else
-      cat <<EOF > "$INSTALL_DIR/.env"
-PORT=${PANEL_PORT:-3000}
-NODE_ENV=production
-AETHER_STORAGE_PATH=${INSTALL_DIR}/data
-EOF
-    fi
+  if [ ! -f "$INSTALL_DIR/.env" ] && [ -f "$INSTALL_DIR/.env.example" ]; then
+    cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+  fi
 
-    # Save initial admin credentials if specified
-    if [ -n "${ADMIN_EMAIL:-}" ]; then
-      echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
-    fi
-    if [ -n "${ADMIN_PASS:-}" ]; then
-      echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
-    fi
+  set_env_var "$INSTALL_DIR/.env" "PORT" "${PANEL_PORT:-3000}"
+  set_env_var "$INSTALL_DIR/.env" "NODE_ENV" "production"
+  set_env_var "$INSTALL_DIR/.env" "AETHER_STORAGE_PATH" "${INSTALL_DIR}/data"
+  set_env_var "$INSTALL_DIR/.env" "PANEL_URL" "${PANEL_URL}"
+  set_env_var "$INSTALL_DIR/.env" "APP_URL" "${PANEL_URL}"
+  set_env_var "$INSTALL_DIR/.env" "ALLOWED_ORIGINS" "${PANEL_URL},http://localhost:3000,http://127.0.0.1:3000"
+  set_env_var "$INSTALL_DIR/.env" "JAVA_RUNTIME_AUTO_INSTALL" "true"
+  set_env_var "$INSTALL_DIR/.env" "JAVA_RUNTIME_STORAGE_PATH" "${INSTALL_DIR}/data/runtimes"
+  set_env_var "$INSTALL_DIR/.env" "JAVA_RUNTIME_INSTALL_TIMEOUT" "900"
 
-    # Generate secure random secret if crypto/openssl is available
+  if [ -n "${ADMIN_EMAIL:-}" ]; then
+    set_env_var "$INSTALL_DIR/.env" "AETHER_ADMIN_EMAIL" "${ADMIN_EMAIL}"
+  fi
+  if [ -n "${ADMIN_PASS:-}" ]; then
+    set_env_var "$INSTALL_DIR/.env" "AETHER_ADMIN_PASSWORD" "${ADMIN_PASS}"
+  fi
+
+  # Generate secure random secret if crypto/openssl is available
+  if ! grep -q "^JWT_SECRET=" "$INSTALL_DIR/.env" 2>/dev/null; then
     if command -v openssl &> /dev/null; then
       SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "aether_secret_$(date +%s 2>/dev/null || echo "random")")
-      echo "JWT_SECRET=${SESSION_SECRET}" >> "$INSTALL_DIR/.env"
-    fi
-  else
-    # Maintain or append admin credentials if missing
-    if [ -n "${ADMIN_EMAIL:-}" ] && ! grep -q "AETHER_ADMIN_EMAIL" "$INSTALL_DIR/.env" 2>/dev/null; then
-      echo "AETHER_ADMIN_EMAIL=${ADMIN_EMAIL}" >> "$INSTALL_DIR/.env"
-    fi
-    if [ -n "${ADMIN_PASS:-}" ] && ! grep -q "AETHER_ADMIN_PASSWORD" "$INSTALL_DIR/.env" 2>/dev/null; then
-      echo "AETHER_ADMIN_PASSWORD=${ADMIN_PASS}" >> "$INSTALL_DIR/.env"
+      set_env_var "$INSTALL_DIR/.env" "JWT_SECRET" "${SESSION_SECRET}"
     fi
   fi
-  echo -e "${GREEN}[✓] Step 5 complete: Environment configured at ${INSTALL_DIR}/.env.${NC}\n"
+  echo -e "${GREEN}[✓] Step 5 complete: Environment configured at ${INSTALL_DIR}/.env (PANEL_URL=${PANEL_URL}).${NC}\n"
 
   # [6/8] Database setup
   echo -e "${YELLOW}[6/8] Initializing database storage schemas...${NC}"
@@ -626,7 +741,9 @@ EOF
     "siteName": "AetherPanel",
     "theme": "dark",
     "allowRegistrations": true,
-    "panelPort": ${PANEL_PORT:-3000}
+    "panelPort": ${PANEL_PORT:-3000},
+    "panelUrl": "${PANEL_URL}",
+    "appUrl": "${PANEL_URL}"
   },
   "nodeInstallTokens": [],
   "serverDiscordLinks": [],
@@ -650,6 +767,9 @@ EOF
 
   # Install/Verify Playit Binary
   install_playit_binary "$INSTALL_DIR/bin/playit"
+
+  # Prepare Java Runtime Subsystem
+  prepare_java_runtime_manager "$INSTALL_DIR"
 
   # Create / update systemd service
   cat <<EOF > /etc/systemd/system/aetherpanel.service
@@ -712,6 +832,7 @@ EOF
   # Final Verification Screen
   SERVER_IP=$(curl -s -m 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
   SERVER_IP="${SERVER_IP:-localhost}"
+  local display_panel_url="${PANEL_URL:-http://${SERVER_IP}:${PANEL_PORT:-3000}}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
   echo -e "${GREEN}${BOLD}   🎉 AetherPanel Control Plane Installed Successfully from GitHub!${NC}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
@@ -719,13 +840,13 @@ EOF
   echo -e "Source:          ${BOLD}Official GitHub Repository${NC}"
   echo -e "Repository:      ${BOLD}${REPO_URL}${NC}"
   echo -e "Install Dir:     ${BOLD}${INSTALL_DIR}${NC}"
-  echo -e "Web Panel URL:   ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT:-3000}${NC}"
+  echo -e "Web Panel URL:   ${CYAN}${BOLD}${display_panel_url}${NC}"
   echo -e "Admin Account:   ${BOLD}${ADMIN_EMAIL:-admin@aetherpanel.in}${NC}"
   echo -e "Admin Password:  ${BOLD}${ADMIN_PASS:-adminopp}${NC}"
   echo -e "Service Status:  ${GREEN}● active (running)${NC}"
   echo -e "Logs Location:   ${BOLD}/var/log/aetherpanel/panel.log${NC}"
   echo -e "Installer Log:   ${BOLD}${LOG_FILE}${NC}\n"
-  log_msg "Installation successfully finalized."
+  log_msg "Installation successfully finalized with Web Panel URL: ${display_panel_url}"
 }
 
 # ==============================================================================

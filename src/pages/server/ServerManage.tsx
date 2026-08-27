@@ -1146,10 +1146,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <Activity className="h-3.5 w-3.5 text-cyan-400" />
           </div>
           <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {isRunning ? `${(server.ramUsageMB / 1024).toFixed(1)}GB` : '0GB'} / {(server.limits.ramMB / 1024).toFixed(0)}GB
+            {isRunning ? `${(server.ramUsageMB / 1024).toFixed(1)}GB` : '0GB'} / {((server.limits?.ramMB || 1024) / 1024).toFixed(0)}GB
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (server.ramUsageMB / server.limits.ramMB) * 100) : 0}%` }} />
+            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (server.ramUsageMB / (server.limits?.ramMB || 1024)) * 100) : 0}%` }} />
           </div>
         </div>
 
@@ -1159,10 +1159,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <HardDrive className="h-3.5 w-3.5 text-emerald-400" />
           </div>
           <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {(server.diskUsageMB / 1024).toFixed(1)}GB / {server.limits.diskGB}GB
+            {(server.diskUsageMB / 1024).toFixed(1)}GB / {server.limits?.diskGB || 10}GB
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (server.diskUsageMB / (server.limits.diskGB * 1024)) * 100)}%` }} />
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (server.diskUsageMB / ((server.limits?.diskGB || 10) * 1024)) * 100)}%` }} />
           </div>
         </div>
 

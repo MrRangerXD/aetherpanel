@@ -229,7 +229,7 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
   });
 }
 
-import { checkJavaRuntime, getRecommendedJavaVersion } from './minecraftService';
+import { checkJavaRuntime, getRecommendedJavaVersion, provisionJavaRuntime } from './minecraftService';
 
 // Remote command queue for servers running on remote nodes
 const remoteCommandQueues: Map<string, string[]> = new Map();
@@ -297,7 +297,25 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
 
   if (category === 'minecraft') {
     const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
-    const javaCheck = checkJavaRuntime(reqJava);
+    let javaCheck = checkJavaRuntime(reqJava);
+    if (!javaCheck.available && process.env.JAVA_RUNTIME_AUTO_INSTALL !== 'false') {
+      try {
+        appendConsoleLog(serverId, `[AetherRuntime/INFO]: Required Java ${reqJava} is missing on target node. Triggering automatic Java ${reqJava} provisioning...`);
+        const autoProv = await provisionJavaRuntime(reqJava, {
+          nodeId: server.nodeId,
+          onLog: (line) => appendConsoleLog(serverId, line)
+        });
+        if (autoProv.success) {
+          appendConsoleLog(serverId, `[AetherRuntime/SUCCESS]: Java ${reqJava} auto-provisioning completed successfully.`);
+          javaCheck = checkJavaRuntime(reqJava);
+        } else {
+          appendConsoleLog(serverId, `[AetherRuntime/ERROR]: Java ${reqJava} auto-provisioning failed: ${autoProv.message}`);
+        }
+      } catch (err: any) {
+        appendConsoleLog(serverId, `[AetherRuntime/ERROR]: Java ${reqJava} auto-provisioning exception: ${err.message}`);
+      }
+    }
+
     if (!javaCheck.available) {
       if (javaCheck.code === 'JAVA_VERSION_MISMATCH') {
         return {
@@ -559,7 +577,19 @@ export async function startServer(serverId: string): Promise<boolean> {
   } else {
     // Minecraft Server Runtime Runner
     const reqJava = server.startup?.javaVersion || getRecommendedJavaVersion(server.version);
-    const javaCheck = checkJavaRuntime(reqJava);
+    let javaCheck = checkJavaRuntime(reqJava);
+    if (!javaCheck.available && process.env.JAVA_RUNTIME_AUTO_INSTALL !== 'false') {
+      try {
+        const autoProv = await provisionJavaRuntime(reqJava, {
+          nodeId: server.nodeId,
+          onLog: (line) => appendConsoleLog(serverId, line)
+        });
+        if (autoProv.success) {
+          javaCheck = checkJavaRuntime(reqJava);
+        }
+      } catch {}
+    }
+
     if (!javaCheck.available) {
       appendConsoleLog(serverId, `[Server thread/ERROR]: Java Runtime check failed! ${javaCheck.message}`);
       if (javaCheck.code === 'JAVA_VERSION_MISMATCH') {

@@ -1,5 +1,5 @@
 {
-  "installationId": "aep_mta1hcicbb3f0fa39b25f7dd",
+  "installationId": "aep_mtbj7b8ldb098efa281fa3c6",
   "users": [
     {
       "id": "usr_admin",
@@ -14,33 +14,14 @@
       "mustChangePassword": false,
       "serverLimit": 50,
       "credits": 500,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd",
-      "createdAt": "2026-08-26T12:06:11.715Z",
-      "updatedAt": "2026-08-26T12:09:54.608Z",
-      "tokenVersion": 3
-    },
-    {
-      "id": "usr_1787746190435_eyed",
-      "username": "user_1787746190407",
-      "displayName": "Test Customer",
-      "email": "test_user_1787746190406@aether.local",
-      "role": "user",
-      "avatarUrl": "https://api.dicebear.com/7.x/identicon/svg?seed=user_1787746190407",
-      "isSuspended": false,
-      "emailVerified": true,
-      "twoFactorEnabled": false,
-      "authProvider": "local",
-      "serverLimit": 1,
-      "credits": 10,
-      "createdAt": "2026-08-26T12:09:50.532Z",
-      "updatedAt": "2026-08-26T12:09:50.532Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6",
+      "createdAt": "2026-08-27T13:01:19.854Z",
+      "updatedAt": "2026-08-27T13:01:19.854Z",
+      "tokenVersion": 1
     }
   ],
   "passwords": {
-    "usr_admin": "$2b$10$0ox2mH1NCdTYd1Eq4gHiz.YhldBETYWHL0F2CeZUrqNqIzVoU.tAC",
-    "usr_1787746190435_eyed": "$2b$10$xzr/I85dxJt19BhGtRMQYOPc9jqBFD2gWeQFB6yw274sCsazzJaQe",
-    "usr_1787746194136_k21a": "$2b$10$Sd8w2mMgVDEJB6QeqD927OqZHsAO67SmfGjpnCdMpjmxh8B1KFmSm"
+    "usr_admin": "$2b$10$GZvLqiY88Dsp/AxUsTFbzOnmF13VbqMvs7yDTYbQM59NDoRZVv5zK"
   },
   "products": [
     {
@@ -351,8 +332,8 @@
         "SERVER_JARFILE": "paper.jar",
         "BUILD_NUMBER": "latest"
       },
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z",
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z",
       "theme": {
         "id": "stt_minecraft_java",
         "serverTypeId": "st_minecraft_java",
@@ -369,8 +350,8 @@
           "ram": "RAM",
           "disk": "Disk"
         },
-        "createdAt": "2026-08-26T12:06:10.573Z",
-        "updatedAt": "2026-08-26T12:06:10.573Z"
+        "createdAt": "2026-08-27T13:01:18.718Z",
+        "updatedAt": "2026-08-27T13:01:18.718Z"
       }
     },
     {
@@ -389,8 +370,8 @@
         "GAMEMODE": "survival",
         "DIFFICULTY": "easy"
       },
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z",
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z",
       "theme": {
         "id": "stt_minecraft_bedrock",
         "serverTypeId": "st_minecraft_bedrock",
@@ -407,8 +388,8 @@
           "ram": "RAM",
           "disk": "Disk"
         },
-        "createdAt": "2026-08-26T12:06:10.573Z",
-        "updatedAt": "2026-08-26T12:06:10.573Z"
+        "createdAt": "2026-08-27T13:01:18.718Z",
+        "updatedAt": "2026-08-27T13:01:18.718Z"
       }
     },
     {
@@ -426,8 +407,8 @@
       "defaultEnvVars": {
         "NODE_ENV": "production"
       },
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z",
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z",
       "theme": {
         "id": "stt_nodejs",
         "serverTypeId": "st_nodejs",
@@ -444,8 +425,8 @@
           "ram": "RAM",
           "disk": "Disk"
         },
-        "createdAt": "2026-08-26T12:06:10.573Z",
-        "updatedAt": "2026-08-26T12:06:10.573Z"
+        "createdAt": "2026-08-27T13:01:18.718Z",
+        "updatedAt": "2026-08-27T13:01:18.718Z"
       }
     },
     {
@@ -463,8 +444,8 @@
       "defaultEnvVars": {
         "BUN_ENV": "production"
       },
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z",
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z",
       "theme": {
         "id": "stt_bun",
         "serverTypeId": "st_bun",
@@ -481,8 +462,8 @@
           "ram": "RAM",
           "disk": "Disk"
         },
-        "createdAt": "2026-08-26T12:06:10.573Z",
-        "updatedAt": "2026-08-26T12:06:10.573Z"
+        "createdAt": "2026-08-27T13:01:18.718Z",
+        "updatedAt": "2026-08-27T13:01:18.718Z"
       }
     },
     {
@@ -500,8 +481,8 @@
       "defaultEnvVars": {
         "PYTHONUNBUFFERED": "1"
       },
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z",
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z",
       "theme": {
         "id": "stt_python",
         "serverTypeId": "st_python",
@@ -518,8 +499,8 @@
           "ram": "RAM",
           "disk": "Disk"
         },
-        "createdAt": "2026-08-26T12:06:10.573Z",
-        "updatedAt": "2026-08-26T12:06:10.573Z"
+        "createdAt": "2026-08-27T13:01:18.718Z",
+        "updatedAt": "2026-08-27T13:01:18.718Z"
       }
     }
   ],
@@ -575,7 +556,7 @@
       "locationName": "Primary Control Plane VPS",
       "flagCode": "LOCAL",
       "totalRamMB": 4096,
-      "usedRamMB": 763,
+      "usedRamMB": 2164,
       "totalCpuCores": 2,
       "usedCpuCores": 0.1,
       "totalDiskGB": 504,
@@ -596,14 +577,14 @@
       "isLocalNode": true,
       "serverCount": 0,
       "daemonToken": "daemon_token_local_node_secret_82910",
-      "lastHeartbeatAt": "2026-08-26T12:10:21.584Z",
+      "lastHeartbeatAt": "2026-08-27T14:38:46.853Z",
       "isSecure": true,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd",
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6",
       "uuid": "local-node-00000000-0000-000000000000",
       "bindAddress": "0.0.0.0",
       "scheme": "http",
       "sslEnabled": false,
-      "publicIpv4": "34.96.48.22"
+      "publicIpv4": "34.34.254.54"
     }
   ],
   "nodeInstallTokens": [],
@@ -614,7 +595,7 @@
       "ip": "127.0.0.1",
       "port": 25565,
       "isAssigned": false,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6"
     },
     {
       "id": "alloc_2",
@@ -622,7 +603,7 @@
       "ip": "127.0.0.1",
       "port": 25566,
       "isAssigned": false,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6"
     },
     {
       "id": "alloc_3",
@@ -630,7 +611,7 @@
       "ip": "127.0.0.1",
       "port": 25567,
       "isAssigned": false,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6"
     },
     {
       "id": "alloc_4",
@@ -638,7 +619,7 @@
       "ip": "127.0.0.1",
       "port": 8080,
       "isAssigned": false,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6"
     },
     {
       "id": "alloc_5",
@@ -646,7 +627,7 @@
       "ip": "127.0.0.1",
       "port": 3001,
       "isAssigned": false,
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6"
     }
   ],
   "backups": [],
@@ -655,46 +636,17 @@
   "activities": [],
   "orders": [
     {
-      "id": "ord_1787746194266",
-      "userId": "usr_1787746194136_k21a",
-      "userEmail": "quota_test_1787746194134@aether.local",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
-      "billingCycle": "monthly",
-      "amount": 0,
-      "currency": "USD",
-      "status": "paid",
-      "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-26T12:09:54.266Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "ord_1787746194257",
-      "userId": "usr_1787746194136_k21a",
-      "userEmail": "quota_test_1787746194134@aether.local",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
-      "billingCycle": "monthly",
-      "amount": 0,
-      "currency": "USD",
-      "status": "paid",
-      "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-26T12:09:54.257Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "ord_1787746190802",
+      "id": "ord_1787839975393",
       "userId": "usr_admin",
       "userEmail": "admin@aetherpanel.in",
-      "planId": "plan_bot_free",
-      "planName": "Discord Bot Hosting - Free Bot Tier",
+      "planId": "plan_mc_free",
+      "planName": "Minecraft Hosting - Free Tier",
       "billingCycle": "monthly",
       "amount": 0,
       "currency": "USD",
       "status": "paid",
       "paymentMethod": "Aether Account Credits",
-      "createdAt": "2026-08-26T12:09:50.802Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "createdAt": "2026-08-27T14:12:55.393Z"
     }
   ],
   "coupons": [
@@ -704,7 +656,7 @@
       "discountType": "percent",
       "discountValue": 20,
       "usageLimit": 100,
-      "timesUsed": 0,
+      "timesUsed": 1,
       "isActive": true
     },
     {
@@ -725,84 +677,45 @@
       "content": "Your high-performance game and bot hosting control panel is initialized and ready for production provisioning.",
       "type": "update",
       "isPublished": true,
-      "createdAt": "2026-08-26T12:06:11.716Z"
+      "createdAt": "2026-08-27T13:01:19.855Z"
     }
   ],
   "auditLogs": [
     {
-      "id": "aud_1787746194842_zif3",
+      "id": "aud_1787840674516_6plw",
       "actorId": "usr_admin",
       "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_USER",
-      "targetResource": "usr_1787746194829",
-      "details": "Deleted user account admin_created_1787746194726@aether.local",
+      "action": "DELETE_SERVER",
+      "targetResource": "srv_1787839975393_wwd0",
+      "details": "Deleted server Paper Instance",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.842Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "createdAt": "2026-08-27T14:24:34.516Z"
     },
     {
-      "id": "aud_1787746194838_sufm",
+      "id": "aud_1787840001317_84la",
       "actorId": "usr_admin",
       "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
-      "action": "ADMIN_ADJUST_CREDITS",
-      "targetResource": "usr_1787746194829",
-      "details": "Adjusted credits for admin_created_1787746194726@aether.local (remove: $10) -> Balance: $40",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.838Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194834_ewj5",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_SUSPEND_USER",
-      "targetResource": "usr_1787746194829",
-      "details": "Suspended user admin_created_1787746194726@aether.local",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.834Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194830_m6nq",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_CREATE_USER",
-      "targetResource": "usr_1787746194829",
-      "details": "Admin created user admin_created_1787746194726@aether.local with role user",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.830Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194723_48sa",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_SETTINGS",
+      "action": "INSTALL_JAVA",
       "targetResource": "SYSTEM",
-      "details": "Updated system settings",
+      "details": "Triggered installation of Java 21",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.723Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "createdAt": "2026-08-27T14:13:21.317Z"
     },
     {
-      "id": "aud_1787746194718_rl6a",
+      "id": "aud_1787839976594_74pg",
       "actorId": "usr_admin",
       "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_SETTINGS",
-      "targetResource": "SYSTEM",
-      "details": "Updated system settings",
+      "action": "SERVER_PROVISION",
+      "targetResource": "srv_1787839975393_wwd0",
+      "details": "Provisioned server 'Paper Instance' from template 'Paper' ($0.00)",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.718Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "createdAt": "2026-08-27T14:12:56.594Z"
     },
     {
-      "id": "aud_1787746194714_wlyc",
+      "id": "aud_1787839953703_ahbh",
       "actorId": "usr_admin",
       "actorEmail": "admin@aetherpanel.in",
       "actorRole": "super_admin",
@@ -810,248 +723,7 @@
       "targetResource": "SESSION",
       "details": "Successful user authentication",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.714Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194608_ewls",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_FORCE_PASSWORD_RESET",
-      "targetResource": "usr_admin",
-      "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.608Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194501_8d6n",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.501Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194397_e47h",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_FORCE_PASSWORD_RESET",
-      "targetResource": "usr_admin",
-      "details": "Admin reset password for user admin@aetherpanel.in (usr_admin)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.397Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194278_8phb",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_USER",
-      "targetResource": "usr_1787746194136_k21a",
-      "details": "Deleted user account quota_test_1787746194134@aether.local",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.278Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194274_s5y3",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787746194265_dcdo",
-      "details": "Admin deleted server 'Quota Server 2 Allowed' (srv_1787746194265_dcdo) owned by user usr_1787746194136_k21a",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.274Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194271_ct8v",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787746194257_j0vo",
-      "details": "Admin deleted server 'Quota Server 1' (srv_1787746194257_j0vo) owned by user usr_1787746194136_k21a",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.271Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194267_ck4e",
-      "actorId": "usr_1787746194136_k21a",
-      "actorEmail": "quota_test_1787746194134@aether.local",
-      "actorRole": "user",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787746194265_dcdo",
-      "details": "Provisioned server 'Quota Server 2 Allowed' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.267Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194263_j0dw",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_UPDATE_USER_ALLOCATION",
-      "targetResource": "usr_1787746194136_k21a",
-      "details": "Updated server allocation limit for quota_test_1787746194134@aether.local to 2",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.263Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194258_uvma",
-      "actorId": "usr_1787746194136_k21a",
-      "actorEmail": "quota_test_1787746194134@aether.local",
-      "actorRole": "user",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787746194257_j0vo",
-      "details": "Provisioned server 'Quota Server 1' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.258Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194254_yyz5",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_ADJUST_CREDITS",
-      "targetResource": "usr_1787746194136_k21a",
-      "details": "Adjusted credits for quota_test_1787746194134@aether.local (add: $100) -> Balance: $110",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.254Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194250_7qkx",
-      "actorId": "usr_1787746194136_k21a",
-      "actorEmail": "quota_test_1787746194134@aether.local",
-      "actorRole": "user",
-      "action": "USER_REGISTER",
-      "targetResource": "ACCOUNT",
-      "details": "User registered account",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.250Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194132_umvd",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "ADMIN_DELETE_SERVER",
-      "targetResource": "srv_1787746190801_twwq",
-      "details": "Admin deleted server 'Verification Bot Server' (srv_1787746190801_twwq) owned by user usr_admin",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.132Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194123_3ljm",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_STOP",
-      "targetResource": "srv_1787746190801_twwq",
-      "details": "Executed stop on server Verification Bot Server",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.123Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746194113_e0qi",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_POWER_START",
-      "targetResource": "srv_1787746190801_twwq",
-      "details": "Executed start on server Verification Bot Server",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:54.113Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190805_r576",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "SERVER_PROVISION",
-      "targetResource": "srv_1787746190801_twwq",
-      "details": "Provisioned server 'Verification Bot Server' from template 'Node.js' ($0.00)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.805Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190794_lorc",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "API_KEY_DELETED",
-      "targetResource": "key_1787746190778_118ae840",
-      "details": "Permanently deleted API key metadata for 'Automated Audit Verification Key' (aep_live_67cffe...2f1c)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.794Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190789_xohu",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "API_KEY_REVOKED",
-      "targetResource": "key_1787746190778_118ae840",
-      "details": "Revoked API key 'Automated Audit Verification Key' (aep_live_67cffe...2f1c)",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.789Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190779_dj4m",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "API_KEY_CREATED",
-      "targetResource": "key_1787746190778_118ae840",
-      "details": "Generated production API key 'Automated Audit Verification Key' (aep_live_67cffe...2f1c) with scopes: server:read, server:write, server:control",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.779Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190648_fh3c",
-      "actorId": "usr_admin",
-      "actorEmail": "admin@aetherpanel.in",
-      "actorRole": "super_admin",
-      "action": "USER_LOGIN",
-      "targetResource": "SESSION",
-      "details": "Successful user authentication",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.648Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
-    },
-    {
-      "id": "aud_1787746190535_u6yw",
-      "actorId": "usr_1787746190435_eyed",
-      "actorEmail": "test_user_1787746190406@aether.local",
-      "actorRole": "user",
-      "action": "USER_REGISTER",
-      "targetResource": "ACCOUNT",
-      "details": "User registered account",
-      "ipAddress": "127.0.0.1",
-      "createdAt": "2026-08-26T12:09:50.535Z",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd"
+      "createdAt": "2026-08-27T14:12:33.703Z"
     },
     {
       "id": "aud_1",
@@ -1062,8 +734,8 @@
       "targetResource": "DATABASE",
       "details": "AetherPanel database initialized with security policies and installation isolation.",
       "ipAddress": "127.0.0.1",
-      "installationId": "aep_mta1hcicbb3f0fa39b25f7dd",
-      "createdAt": "2026-08-26T12:06:11.716Z"
+      "installationId": "aep_mtbj7b8ldb098efa281fa3c6",
+      "createdAt": "2026-08-27T13:01:19.855Z"
     }
   ],
   "settings": {
@@ -1187,7 +859,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 99.99,
-      "lastCheckedAt": "2026-08-26T12:06:10.572Z",
+      "lastCheckedAt": "2026-08-27T13:01:18.718Z",
       "latencyMs": 12,
       "details": "Serving via high-speed Edge CDN with HTTP/2 and zero latency spikes.",
       "order": 1,
@@ -1201,7 +873,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 99.98,
-      "lastCheckedAt": "2026-08-26T12:06:10.573Z",
+      "lastCheckedAt": "2026-08-27T13:01:18.718Z",
       "latencyMs": 18,
       "details": "WebSocket streaming and API response times under 25ms nominal.",
       "order": 2,
@@ -1215,7 +887,7 @@
       "group": "Core Platform",
       "status": "operational",
       "uptimePercent90Days": 100,
-      "lastCheckedAt": "2026-08-26T12:06:10.573Z",
+      "lastCheckedAt": "2026-08-27T13:01:18.718Z",
       "latencyMs": 4,
       "details": "Zero replication lag, read/write I/O performance nominal.",
       "order": 3,
@@ -1229,7 +901,7 @@
       "group": "Storage Subsystems",
       "status": "operational",
       "uptimePercent90Days": 99.95,
-      "lastCheckedAt": "2026-08-26T12:06:10.573Z",
+      "lastCheckedAt": "2026-08-27T13:01:18.718Z",
       "latencyMs": 8,
       "details": "ZFS/Btrfs pools healthy with ample storage reserve.",
       "order": 4,
@@ -1243,7 +915,7 @@
       "group": "External Integrations",
       "status": "operational",
       "uptimePercent90Days": 99.92,
-      "lastCheckedAt": "2026-08-26T12:06:10.573Z",
+      "lastCheckedAt": "2026-08-27T13:01:18.718Z",
       "latencyMs": 35,
       "details": "Gateway connection established with Discord API.",
       "order": 5,
@@ -1266,23 +938,23 @@
           "id": "inc_upd_3",
           "status": "resolved",
           "message": "All transit routes stabilized. Network jitter and packet loss returned to baseline nominal values.",
-          "timestamp": "2026-08-25T00:06:10.573Z"
+          "timestamp": "2026-08-26T01:01:18.718Z"
         },
         {
           "id": "inc_upd_2",
           "status": "monitoring",
           "message": "Traffic successfully rerouted through secondary BGP transits. Monitoring packet loss metrics.",
-          "timestamp": "2026-08-24T22:06:10.573Z"
+          "timestamp": "2026-08-25T23:01:18.718Z"
         },
         {
           "id": "inc_upd_1",
           "status": "investigating",
           "message": "Engineers are investigating elevated latency reports from APAC users.",
-          "timestamp": "2026-08-24T20:06:10.573Z"
+          "timestamp": "2026-08-25T21:01:18.718Z"
         }
       ],
-      "startedAt": "2026-08-24T20:06:10.573Z",
-      "resolvedAt": "2026-08-25T00:06:10.573Z",
+      "startedAt": "2026-08-25T21:01:18.718Z",
+      "resolvedAt": "2026-08-26T01:01:18.718Z",
       "isPublic": true
     }
   ],
@@ -1295,10 +967,10 @@
         "Compute Nodes Cluster",
         "API Gateway & Daemon Stream"
       ],
-      "scheduledStartTime": "2026-08-28T12:06:10.573Z",
-      "scheduledEndTime": "2026-08-28T14:06:10.573Z",
+      "scheduledStartTime": "2026-08-29T13:01:18.718Z",
+      "scheduledEndTime": "2026-08-29T15:01:18.718Z",
       "status": "scheduled",
-      "createdAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z"
     }
   ],
   "alertRules": [
@@ -1313,8 +985,8 @@
       "cooldownMinutes": 15,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z"
     },
     {
       "id": "rule_node_high_cpu",
@@ -1327,8 +999,8 @@
       "cooldownMinutes": 30,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z"
     },
     {
       "id": "rule_node_high_ram",
@@ -1341,8 +1013,8 @@
       "cooldownMinutes": 30,
       "notificationChannel": "all",
       "isEnabled": true,
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z"
     },
     {
       "id": "rule_server_crash",
@@ -1355,8 +1027,8 @@
       "cooldownMinutes": 10,
       "notificationChannel": "discord",
       "isEnabled": true,
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z"
     },
     {
       "id": "rule_storage_high",
@@ -1369,27 +1041,14 @@
       "cooldownMinutes": 60,
       "notificationChannel": "panel",
       "isEnabled": true,
-      "createdAt": "2026-08-26T12:06:10.573Z",
-      "updatedAt": "2026-08-26T12:06:10.573Z"
+      "createdAt": "2026-08-27T13:01:18.718Z",
+      "updatedAt": "2026-08-27T13:01:18.718Z"
     }
   ],
   "alertIncidents": [],
   "telemetryHistory": {},
   "apiKeys": [],
-  "apiAuditLogs": [
-    {
-      "id": "apiaud_1787746190784_2edb5a",
-      "apiKeyId": "key_1787746190778_118ae840",
-      "userId": "usr_admin",
-      "userEmail": "admin@aetherpanel.in",
-      "endpoint": "/api/v1/servers",
-      "method": "GET",
-      "statusCode": 200,
-      "ipAddress": "127.0.0.1",
-      "userAgent": "API-Client",
-      "createdAt": "2026-08-26T12:09:50.784Z"
-    }
-  ],
+  "apiAuditLogs": [],
   "webhooks": [],
   "legalPages": [
     {
@@ -1399,7 +1058,7 @@
       "summary": "Rules, resource usage terms, service availability, and account governance on AetherPanel.",
       "version": "2.4.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-26T12:06:10.573Z",
+      "lastUpdatedAt": "2026-08-27T13:01:18.718Z",
       "updatedBy": "Aether Legal Compliance",
       "content": "# AetherPanel Terms of Service\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nWelcome to **AetherPanel**. These Terms of Service (\"Terms\", \"Agreement\") govern your access to and usage of the AetherPanel hosting control plane, APIs, virtualized server environments, compute nodes, and related cloud services provided by AetherPanel (\"we\", \"us\", \"our\").\n\nBy registering an account, purchasing or deploying a hosting instance, or using our platform, you agree to be bound by these Terms in full.\n\n---\n\n## 1. Eligibility & Account Responsibilities\n- You must be at least 13 years of age (or the minimum legal age in your jurisdiction) to establish an account.\n- You are strictly responsible for maintaining the confidentiality of your authentication credentials, 2FA recovery keys, and API tokens.\n- Any activity, process, or network traffic originating from your provisioned game or bot instances is legally attributable to your account.\n\n---\n\n## 2. Service Provisioning & Resource Limits\n- **Resource Allocations:** Dedicated memory (RAM), virtual CPU cores (vCPU), NVMe storage, port allocations, and backup quotas are allocated strictly according to your active plan tier.\n- **Fair Use:** Free and shared tier instances must adhere to fair usage policies. Processes that deliberately attempt to evade container limits, starve host memory, or exploit background kernel vulnerabilities are subject to immediate suspension.\n- **Node Relocation & Maintenance:** We reserve the right to migrate instances between hardware hypervisors during scheduled maintenance windows to maintain infrastructure stability and security.\n\n---\n\n## 3. Billing, Invoicing & Refunds\n- **Subscription Billing:** Paid plans are billed on a recurring monthly or yearly cycle according to your chosen payment method.\n- **Credits & Balance:** Account credits earned via AFK rewards, manual vouchers, or promotions are non-transferable and possess no standalone cash redemption value.\n- **Refund Policy:** If you encounter persistent infrastructure downtime (>24 hours non-maintenance outage), you may request a pro-rated account credit refund within 7 days of the billing incident.\n\n---\n\n## 4. User Content & Data Security\n- You retain all ownership rights to world saves, bot scripts, database contents, configuration files, and custom plugins uploaded to your virtual filesystem.\n- We maintain isolated, multi-tenant container barriers (cgroups, namespaces, chroot jail SFTP) to prevent cross-account data access.\n- You are responsible for scheduling periodic backups using the integrated Backup & Snapshot engine before performing major server upgrades or software re-installations.\n\n---\n\n## 5. Termination & Suspension\nWe reserve the right to suspend or terminate service without prior notice if an instance is found in violation of our **Acceptable Use Policy (AUP)**, including but not limited to participating in Denial of Service (DDoS) campaigns, unauthorized cryptocurrency mining, or distributing malicious payloads.\n\n---\n\n## 6. Limitation of Liability\nTO THE MAXIMUM EXTENT PERMITTED BY LAW, AETHERPANEL DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED. UNDER NO CIRCUMSTANCES SHALL AETHERPANEL BE LIABLE FOR INDIRECT, INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES RESULTING FROM DATA LOSS, INTERRUPTED GAMEPLAY, OR UPSTREAM TRANSIT OUTAGES."
     },
@@ -1410,7 +1069,7 @@
       "summary": "How AetherPanel collects, protects, isolates, and handles your account and telemetry data.",
       "version": "2.1.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-26T12:06:10.573Z",
+      "lastUpdatedAt": "2026-08-27T13:01:18.718Z",
       "updatedBy": "Aether Data Privacy Office",
       "content": "# AetherPanel Privacy Policy\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nAetherPanel values your privacy and data autonomy. This Privacy Policy details how we collect, process, store, and safeguard your personal information and server data when using our platform.\n\n---\n\n## 1. Information We Collect\nWe collect only the minimum required information necessary to provide reliable hosting services:\n1. **Account Identification:** Email address, username, display name, and hashed credentials (salted using bcrypt).\n2. **Infrastructure Telemetry:** CPU utilization, memory consumption, disk storage metrics, network I/O, uptime timestamps, and node status indicators collected by our local and remote node agents.\n3. **Audit & Security Logs:** IP addresses, login timestamps, API key requests, and administrative actions for security tracking.\n\n---\n\n## 2. Server Filesystem & Code Privacy\n- **Strict Isolation:** Your server files (Minecraft worlds, Discord bot scripts, `.env` configurations, and databases) are stored in sandboxed directories.\n- **No Unsolicited Scanning:** We do not read, inspect, or commercialize the contents of your private server files or application source code, except when strictly necessary to execute automated virus/malware scans or when compelled by law.\n\n---\n\n## 3. Cryptographic Storage & Security Measures\n- Authentication tokens and session cookies are signed using industry-standard HMAC-SHA256 signatures with expiration limits.\n- SSH/SFTP connections are authenticated through standard public key cryptography and secure host key verification.\n- Passwords are never stored in plaintext and cannot be retrieved in unhashed format by administrators.\n\n---\n\n## 4. Third-Party Integrations\n- **Discord Webhooks:** When configured by you, event payloads (start, stop, crash alerts) are securely dispatched to your chosen Discord channel endpoints.\n- **Payment Providers:** Sensitive credit card details are handled directly by PCI-DSS compliant payment gateways (Stripe, UPI providers); AetherPanel does not store raw payment card numbers.\n\n---\n\n## 5. Data Retention & Deletion Rights\n- When you delete a server instance, its associated virtual disk, SFTP permissions, and local backup archives are permanently unlinked and erased from the node filesystem.\n- You may request complete account deletion at any time by contacting our support team or opening a ticket in the Support Center."
     },
@@ -1421,7 +1080,7 @@
       "summary": "Prohibited activities, bot guidelines, game server standards, and security obligations.",
       "version": "2.3.0",
       "isPublished": true,
-      "lastUpdatedAt": "2026-08-26T12:06:10.573Z",
+      "lastUpdatedAt": "2026-08-27T13:01:18.718Z",
       "updatedBy": "Aether Security Operations",
       "content": "# AetherPanel Acceptable Use Policy (AUP)\n\n**Effective Date:** January 1, 2025  \n**Last Revised:** August 15, 2026  \n\nThis Acceptable Use Policy outlines mandatory rules and prohibited activities across all AetherPanel compute nodes, virtual instances, and networking infrastructure. Violations will result in immediate suspension, termination, and potential reporting to law enforcement authorities.\n\n---\n\n## 1. Strictly Prohibited Activities\nYou may NOT use AetherPanel infrastructure for:\n- **Network Attacks:** Launching, participating in, or orchestrating Distributed Denial of Service (DDoS), SYN floods, UDP amplification attacks, or port-scanning operations.\n- **Botnets & Command & Control (C2):** Hosting botnet controllers, malware distribution hubs, trojans, ransomware, or keyloggers.\n- **Cryptocurrency Mining:** Running CPU, GPU, or memory-intensive cryptocurrency miners (e.g., XMRig, Monero miners) on shared or standard compute nodes without written enterprise permission.\n- **Phishing & Fraud:** Hosting counterfeit login portals, credential harvesting schemes, or fraudulent billing sites.\n- **Mass Spam & Mail Abuse:** Operating unauthenticated SMTP relays, unsolicited spam bots, or automated mass-messaging scrapers.\n\n---\n\n## 2. Minecraft & Game Server Standards\n- **Minecraft EULA Compliance:** All Minecraft server instances must comply with Mojang Studios' Commercial Usage Guidelines and End User License Agreement (EULA).\n- **Anti-Exploitation:** Running deliberate lag machines or malicious crash-spigot plugins designed to exhaust hypervisor shared resources is prohibited.\n\n---\n\n## 3. Discord & API Bot Standards\n- **Platform Terms:** Bot hosting instances must comply with the Discord Developer Terms of Service and Policy Guidelines.\n- **Token Security:** Users must not embed publicly leaked or hijacked bot tokens.\n- **Resource Discipline:** Bots must implement proper gateway reconnect backoff intervals and rate-limiting handling.\n\n---\n\n## 4. Enforcement & Abuse Reporting\n- Automated watchdog processes continuously monitor for abnormal outbound traffic spikes, high raw packet rates, and unauthorized binary signatures.\n- If abuse is detected, the affected instance will be immediately stopped and quarantined.\n- To report abuse originating from our IP ranges, please contact **abuse@aetherpanel.com** with relevant log excerpts and timestamps."
     }

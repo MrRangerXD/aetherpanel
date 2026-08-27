@@ -484,6 +484,27 @@ export function downloadFile(url: string, destPath: string): Promise<boolean> {
 import { execSync } from 'child_process';
 
 // Centralized Java Runtime Discovery
+const RUNTIMES_JSON_PATH = path.join(process.cwd(), 'data', 'runtimes', 'runtimes.json');
+
+export function persistRuntimeState(version: number, execPath: string) {
+  try {
+    const dir = path.dirname(RUNTIMES_JSON_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    let data: Record<string, any> = {};
+    if (fs.existsSync(RUNTIMES_JSON_PATH)) {
+      try { data = JSON.parse(fs.readFileSync(RUNTIMES_JSON_PATH, 'utf8')); } catch {}
+    }
+    data[String(version)] = {
+      version,
+      status: 'INSTALLED',
+      executablePath: execPath,
+      installedAt: new Date().toISOString(),
+      verified: true
+    };
+    fs.writeFileSync(RUNTIMES_JSON_PATH, JSON.stringify(data, null, 2), 'utf8');
+  } catch {}
+}
+
 export function discoverJavaBinaries(): Record<number, { available: boolean; path: string }> {
   const runtimes: Record<number, { available: boolean; path: string }> = {
     8: { available: false, path: '' },
@@ -528,35 +549,51 @@ export function discoverJavaBinaries(): Record<number, { available: boolean; pat
     } catch {}
   }
 
-  // 4. Scan other typical directories
-  const commonDirs = ['/usr/java', '/opt', '/usr/local'];
+  // 4. Scan custom AetherPanel runtime directories and common directories
+  const storageBase = process.env.JAVA_RUNTIME_STORAGE_PATH || path.join(process.cwd(), 'data', 'runtimes');
+  const commonDirs = ['/usr/java', '/opt', '/usr/local', storageBase, '/opt/aetherpanel/java', '/opt/aetherpanel/data/runtimes', path.join(process.cwd(), 'data', 'nodes', 'local', 'runtimes')];
   for (const cDir of commonDirs) {
     if (fs.existsSync(cDir)) {
       try {
         const subs = fs.readdirSync(cDir);
         for (const sub of subs) {
-          const full = path.join(cDir, sub, 'bin', 'java');
-          if (fs.existsSync(full)) {
-            candidates.add(full);
-          }
+          const direct = path.join(cDir, sub, 'bin', 'java');
+          if (fs.existsSync(direct)) candidates.add(direct);
+          const javaSub = path.join(cDir, sub, 'java', 'bin', 'java');
+          if (fs.existsSync(javaSub)) candidates.add(javaSub);
         }
       } catch {}
     }
+  }
+
+  // Load persisted runtime JSON
+  if (fs.existsSync(RUNTIMES_JSON_PATH)) {
+    try {
+      const persisted = JSON.parse(fs.readFileSync(RUNTIMES_JSON_PATH, 'utf8'));
+      for (const k of Object.keys(persisted)) {
+        const item = persisted[k];
+        if (item?.executablePath && fs.existsSync(item.executablePath)) {
+          candidates.add(item.executablePath);
+        }
+      }
+    } catch {}
   }
 
   // Evaluate each candidate and cache real physical paths
   for (const c of candidates) {
     try {
       if (!fs.existsSync(c)) continue;
-      // Check execute permission
       fs.accessSync(c, fs.constants.X_OK);
       const real = fs.realpathSync(c);
       if (!fs.existsSync(real)) continue;
       fs.accessSync(real, fs.constants.X_OK);
 
       const out = execSync(`"${real}" -version 2>&1`, { env: process.env, encoding: 'utf8' });
-      // Match both 1.8.x and major version structures (e.g. "21.0.1" or "1.8.0_292" or "openjdk 17.0.10")
-      const match = out.match(/(?:openjdk|java)(?:\s+version\s+)?\s*"?(?:1\.)?(\d+)/i);
+      // Robust regex for openjdk/java version formats
+      const match = out.match(/(?:openjdk|java)(?:\s+version\s+)?\s*"?(?:1\.)?(\d+)/i) ||
+                    out.match(/build\s+(?:1\.)?(\d+)/i) ||
+                    out.match(/(?:JDK|JRE)\s+(?:1\.)?(\d+)/i);
+
       if (match) {
         const major = parseInt(match[1], 10);
         if (!runtimes[major] || !runtimes[major].available) {
@@ -567,6 +604,175 @@ export function discoverJavaBinaries(): Record<number, { available: boolean; pat
   }
 
   return runtimes;
+}
+
+// Active installation locks per (nodeId:version)
+const activeJavaInstallations = new Map<string, Promise<{ success: boolean; path?: string; message: string; logs: string[] }>>();
+
+export async function provisionJavaRuntime(
+  version: number | string,
+  options?: { nodeId?: string; onLog?: (line: string) => void }
+): Promise<{ success: boolean; path?: string; message: string; logs: string[] }> {
+  const targetVersion = typeof version === 'number' ? version : (parseInt(String(version).replace(/[^0-9]/g, ''), 10) || 21);
+  const nodeId = options?.nodeId || 'node_local';
+  const lockKey = `${nodeId}:${targetVersion}`;
+
+  if (activeJavaInstallations.has(lockKey)) {
+    return activeJavaInstallations.get(lockKey)!;
+  }
+
+  const installPromise = (async () => {
+    const logs: string[] = [];
+    const log = (msg: string) => {
+      logs.push(msg);
+      options?.onLog?.(msg);
+    };
+
+    log(`[AetherInstaller/INFO]: Requesting runtime provisioning for Java ${targetVersion}...`);
+
+    // Check existing
+    const current = discoverJavaBinaries();
+    if (current[targetVersion]?.available && current[targetVersion]?.path) {
+      log(`[AetherInstaller/SUCCESS]: Java ${targetVersion} is already installed and verified at ${current[targetVersion].path}`);
+      persistRuntimeState(targetVersion, current[targetVersion].path);
+      return { success: true, path: current[targetVersion].path, message: `Java ${targetVersion} available`, logs };
+    }
+
+    // Step 1: Package Manager (non-interactive)
+    const isDebian = fs.existsSync('/usr/bin/apt-get');
+    const isRhel = fs.existsSync('/usr/bin/dnf') || fs.existsSync('/usr/bin/yum');
+    const isAlpine = fs.existsSync('/sbin/apk') || fs.existsSync('/usr/bin/apk');
+
+    if (isDebian) {
+      log(`[AetherInstaller/INFO]: Operating System: Debian/Ubuntu. Package manager: apt-get.`);
+      const pkgNames = [
+        `openjdk-${targetVersion}-jre-headless`,
+        `openjdk-${targetVersion}-jdk-headless`,
+        `openjdk-${targetVersion}-jre`,
+        `openjdk-${targetVersion}-jdk`
+      ];
+
+      for (const pkg of pkgNames) {
+        try {
+          log(`[AetherInstaller/INFO]: Executing: DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkg}...`);
+          execSync(`DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${pkg}`, {
+            env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' },
+            stdio: 'pipe',
+            timeout: 600000
+          });
+          log(`[AetherInstaller/INFO]: Package manager command completed for ${pkg}.`);
+          break;
+        } catch (e: any) {
+          log(`[AetherInstaller/WARN]: Apt installation failed for ${pkg}. Package might be unavailable in default apt repositories.`);
+        }
+      }
+    } else if (isRhel) {
+      log(`[AetherInstaller/INFO]: Operating System: RHEL/CentOS. Package manager: dnf/yum.`);
+      const pkgMgr = fs.existsSync('/usr/bin/dnf') ? 'dnf' : 'yum';
+      const pkgNames = [`java-${targetVersion}-openjdk-headless`, `java-${targetVersion}-openjdk`];
+
+      for (const pkg of pkgNames) {
+        try {
+          log(`[AetherInstaller/INFO]: Executing: ${pkgMgr} install -y ${pkg}...`);
+          execSync(`${pkgMgr} install -y ${pkg}`, { stdio: 'pipe', timeout: 600000 });
+          log(`[AetherInstaller/INFO]: Package manager command completed for ${pkg}.`);
+          break;
+        } catch (e: any) {
+          log(`[AetherInstaller/WARN]: ${pkgMgr} install failed for ${pkg}.`);
+        }
+      }
+    } else if (isAlpine) {
+      log(`[AetherInstaller/INFO]: Operating System: Alpine. Package manager: apk.`);
+      const pkgNames = [`openjdk${targetVersion}-jre-headless`, `openjdk${targetVersion}`];
+
+      for (const pkg of pkgNames) {
+        try {
+          log(`[AetherInstaller/INFO]: Executing: apk add --no-cache ${pkg}...`);
+          execSync(`apk add --no-cache ${pkg}`, { stdio: 'pipe', timeout: 600000 });
+          log(`[AetherInstaller/INFO]: Package manager command completed for ${pkg}.`);
+          break;
+        } catch (e: any) {
+          log(`[AetherInstaller/WARN]: apk add failed for ${pkg}.`);
+        }
+      }
+    }
+
+    // Verify after package manager
+    let recheck = discoverJavaBinaries();
+    if (recheck[targetVersion]?.available && recheck[targetVersion]?.path) {
+      log(`[AetherInstaller/SUCCESS]: Java ${targetVersion} installed via system package manager and verified at ${recheck[targetVersion].path}`);
+      persistRuntimeState(targetVersion, recheck[targetVersion].path);
+      return { success: true, path: recheck[targetVersion].path, message: `Java ${targetVersion} provisioned successfully`, logs };
+    }
+
+    // Step 2: Fallback Official Distribution Tarball (Adoptium / Eclipse Temurin / OpenJDK)
+    log(`[AetherInstaller/INFO]: Native package repository does not contain Java ${targetVersion}. Initializing official binary distribution fallback...`);
+
+    const rawArch = process.arch;
+    const adoptiumArch = rawArch === 'x64' ? 'x64' : rawArch === 'arm64' ? 'aarch64' : 'x64';
+    const storageBase = process.env.JAVA_RUNTIME_STORAGE_PATH || path.join(process.cwd(), 'data', 'runtimes');
+    const targetDir = path.join(storageBase, `java-${targetVersion}`);
+
+    if (!fs.existsSync(storageBase)) {
+      fs.mkdirSync(storageBase, { recursive: true });
+    }
+
+    const adoptiumUrl = `https://api.adoptium.net/v3/binary/latest/${targetVersion}/ga/linux/${adoptiumArch}/jdk/hotspot/normal/eclipse`;
+    log(`[AetherInstaller/INFO]: Downloading official OpenJDK ${targetVersion} tarball for architecture ${adoptiumArch} from Adoptium CDN...`);
+
+    try {
+      if (fs.existsSync(targetDir)) {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const downloadCmd = `curl -sL "${adoptiumUrl}" | tar -xz -C "${targetDir}" --strip-components=1`;
+      execSync(downloadCmd, { stdio: 'pipe', timeout: 900000 });
+
+      const javaBinPath = path.join(targetDir, 'bin', 'java');
+      if (fs.existsSync(javaBinPath)) {
+        fs.chmodSync(javaBinPath, 0o755);
+        const out = execSync(`"${javaBinPath}" -version 2>&1`, { encoding: 'utf8' });
+        const match = out.match(/(?:openjdk|java)(?:\s+version\s+)?\s*"?(?:1\.)?(\d+)/i) ||
+                      out.match(/build\s+(?:1\.)?(\d+)/i);
+        const parsedMajor = match ? parseInt(match[1], 10) : 0;
+
+        if (parsedMajor === targetVersion || (targetVersion === 8 && parsedMajor === 8)) {
+          log(`[AetherInstaller/SUCCESS]: Official Java ${targetVersion} distribution extracted & verified at ${javaBinPath}`);
+          persistRuntimeState(targetVersion, javaBinPath);
+          return { success: true, path: javaBinPath, message: `Java ${targetVersion} provisioned via official binary release`, logs };
+        } else {
+          log(`[AetherInstaller/ERROR]: Extracted binary version mismatch: expected ${targetVersion}, detected ${parsedMajor}`);
+        }
+      } else {
+        log(`[AetherInstaller/ERROR]: Binary executable not found at expected path: ${javaBinPath}`);
+      }
+    } catch (err: any) {
+      log(`[AetherInstaller/ERROR]: Official binary download failed: ${err.message}`);
+    }
+
+    // Final recheck
+    recheck = discoverJavaBinaries();
+    if (recheck[targetVersion]?.available && recheck[targetVersion]?.path) {
+      log(`[AetherInstaller/SUCCESS]: Java ${targetVersion} runtime verified at ${recheck[targetVersion].path}`);
+      persistRuntimeState(targetVersion, recheck[targetVersion].path);
+      return { success: true, path: recheck[targetVersion].path, message: `Java ${targetVersion} provisioned successfully`, logs };
+    }
+
+    log(`[AetherInstaller/ERROR]: Automatic Java ${targetVersion} provisioning failed after all installation attempts.`);
+    return {
+      success: false,
+      message: `JAVA_RUNTIME_INSTALL_FAILED: Could not provision Java ${targetVersion} on node ${nodeId}. OS: ${isDebian ? 'Debian' : isRhel ? 'RHEL' : isAlpine ? 'Alpine' : 'Other'}, Arch: ${adoptiumArch}`,
+      logs
+    };
+  })();
+
+  activeJavaInstallations.set(lockKey, installPromise);
+  try {
+    return await installPromise;
+  } finally {
+    activeJavaInstallations.delete(lockKey);
+  }
 }
 
 // Java Runtime Checker with backwards compatibility matching
@@ -663,75 +869,29 @@ export let javaInstallProgress: JavaInstallProgress = {
   logs: []
 };
 
-// Spawn background child process to install Java with live logging
-import { spawn as spawnProcess } from 'child_process';
-
 export function runJavaInstallation(version: number) {
   javaInstallProgress = {
     status: 'installing',
     version,
-    logs: [`[AetherInstaller/INFO]: Starting background installation for Java ${version}...`]
+    logs: [`[AetherInstaller/INFO]: Starting Java ${version} installation sequence...`]
   };
 
-  const isDebian = fs.existsSync('/usr/bin/apt-get');
-  let cmd = '';
-  let args: string[] = [];
-
-  if (isDebian) {
-    cmd = 'bash';
-    let pkgName = `openjdk-${version}-jre-headless`;
-    if (version === 8) pkgName = 'openjdk-8-jre-headless';
-    else if (version === 11) pkgName = 'openjdk-11-jre-headless';
-    else if (version === 17) pkgName = 'openjdk-17-jre-headless';
-    else if (version === 21) pkgName = 'openjdk-21-jre-headless';
-    else if (version === 25) pkgName = 'openjdk-25-jre-headless';
-
-    args = ['-c', `DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgName}`];
-  } else {
-    javaInstallProgress.status = 'failed';
-    javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Unsupported system. Apt package manager not found.`);
-    return;
-  }
-
-  try {
-    const child = spawnProcess(cmd, args, { env: process.env });
-
-    child.stdout?.on('data', (data) => {
-      const lines = data.toString().split('\n');
-      for (const line of lines) {
-        if (line.trim()) {
-          javaInstallProgress.logs.push(`[STDOUT]: ${line.trim()}`);
-        }
-      }
-    });
-
-    child.stderr?.on('data', (data) => {
-      const lines = data.toString().split('\n');
-      for (const line of lines) {
-        if (line.trim()) {
-          javaInstallProgress.logs.push(`[STDERR]: ${line.trim()}`);
-        }
-      }
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        javaInstallProgress.status = 'success';
-        javaInstallProgress.logs.push(`[AetherInstaller/SUCCESS]: Java ${version} installation finished successfully.`);
-      } else {
-        javaInstallProgress.status = 'failed';
-        javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Package installation failed with exit code: ${code}`);
-      }
-    });
-
-    child.on('error', (err) => {
+  provisionJavaRuntime(version, {
+    onLog: (line) => {
+      javaInstallProgress.logs.push(line);
+    }
+  }).then((res) => {
+    if (res.success) {
+      javaInstallProgress.status = 'success';
+      javaInstallProgress.logs.push(`[AetherInstaller/SUCCESS]: Java ${version} installation finished successfully.`);
+    } else {
       javaInstallProgress.status = 'failed';
-      javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Process launch error: ${err.message}`);
-    });
-  } catch (err: any) {
+      javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: ${res.message}`);
+    }
+  }).catch((err) => {
     javaInstallProgress.status = 'failed';
-    javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: Exec error: ${err.message}`);
-  }
+    javaInstallProgress.logs.push(`[AetherInstaller/ERROR]: ${err.message}`);
+  });
 }
 
 // Resolve and download real server JAR artifact

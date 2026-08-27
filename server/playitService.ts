@@ -23,5 +23,11 @@ export {
   restartNodePlayitAgent,
   provisionNodePlayitSecret,
   initializePlayitOnBoot,
-  queryIpc
+  queryIpc,
+  repairPlayitAgent,
+  repairNodePlayitAgent,
+  getPlayitLogs,
+  PlayitConflictError,
+  acquirePlayitLock,
+  releasePlayitLock
 } from './playit/playitService';

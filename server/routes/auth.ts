@@ -744,7 +744,7 @@ router.get('/discord/url', async (req, res) => {
 
 // GET /api/v1/auth/discord/callback - OAuth2 callback handler (Popup postMessage & session creation)
 router.get('/discord/callback', async (req, res) => {
-  let targetOrigin = 'http://localhost:3000';
+  let targetOrigin = getCurrentInstallationPublicUrl(req);
   try {
     const db = await getDb();
     targetOrigin = getCurrentInstallationPublicUrl(req, db.settings);

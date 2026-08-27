@@ -767,6 +767,15 @@ rl.on('line', (line) => {
     // 5.7 Arbitrary command injection safety test
     // Start Node server to test stdin escaping
     await startServer(nodeServerId);
+    // Wait for server to transition to running
+    for (let i = 0; i < 40; i++) {
+      const currentDb = await getDb();
+      const currentServer = currentDb.servers.find(s => s.id === nodeServerId);
+      if (currentServer && currentServer.status === 'running') {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
     const injectionProbe = '; cat /etc/passwd && $(touch /tmp/p5_exploit) || `rm -rf /`';
     const injectionAck = await sendServerCommand(nodeServerId, injectionProbe);
     assert(

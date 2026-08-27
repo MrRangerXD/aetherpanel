@@ -1,0 +1,9 @@
+{
+  "25": {
+    "version": 25,
+    "status": "INSTALLED",
+    "executablePath": "/app/applet/data/runtimes/java-25/bin/java",
+    "installedAt": "2026-08-27T14:37:40.572Z",
+    "verified": true
+  }
+}

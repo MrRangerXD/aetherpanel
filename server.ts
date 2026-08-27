@@ -12,6 +12,7 @@ import billingRoutes from './server/routes/billing';
 import supportRoutes from './server/routes/support';
 import adminRoutes from './server/routes/admin';
 import nodeApiRoutes, { startHeartbeatMonitor } from './server/routes/nodeApi';
+import nodePlayitRoutes from './server/routes/nodePlayit';
 import adsRoutes from './server/routes/ads';
 import afkRoutes from './server/routes/afk';
 import discordRoutes from './server/routes/discord';
@@ -55,6 +56,35 @@ async function startServer() {
     next();
   });
 
+  // CORS & Allowed Origins Middleware
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const allowedEnv = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean) : [];
+    const panelUrl = process.env.PANEL_URL ? process.env.PANEL_URL.trim().replace(/\/+$/, '') : null;
+    const appUrl = process.env.APP_URL ? process.env.APP_URL.trim().replace(/\/+$/, '') : null;
+
+    const allowedSet = new Set([
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5173',
+      ...(panelUrl ? [panelUrl] : []),
+      ...(appUrl ? [appUrl] : []),
+      ...allowedEnv
+    ]);
+
+    if (origin && (allowedSet.has(origin) || allowedSet.has('*') || process.env.NODE_ENV !== 'production')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Daemon-Token');
+    }
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   // Health endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'AetherPanel Control Plane', timestamp: new Date().toISOString() });
@@ -69,6 +99,7 @@ async function startServer() {
   app.use('/api/v1/support', supportRoutes);
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/node', nodeApiRoutes);
+  app.use('/api/v1/nodes', nodePlayitRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/afk', afkRoutes);
   app.use('/api/v1/discord', discordRoutes);
