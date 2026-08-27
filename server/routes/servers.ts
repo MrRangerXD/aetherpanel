@@ -1243,7 +1243,7 @@ router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res:
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const status = getPlayitStatus(req.params.id);
+  const status = await getPlayitStatus(req.params.id);
   res.json({ success: true, data: status });
 });
 

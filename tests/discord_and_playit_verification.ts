@@ -130,7 +130,7 @@ async function runTests() {
   assert(savedCfg.claimCode === claimResult.claimCode, 'claimCode persisted in playit.json');
 
   // Verify getPlayitStatus returns persistent claim data
-  const statusCheck = getPlayitStatus(testServerId);
+  const statusCheck = await getPlayitStatus(testServerId);
   assert(statusCheck.claimUrl === claimResult.claimUrl, 'getPlayitStatus reflects persistent claimUrl');
   assert(statusCheck.claimCode === claimResult.claimCode, 'getPlayitStatus reflects persistent claimCode');
 

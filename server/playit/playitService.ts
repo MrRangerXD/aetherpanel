@@ -418,7 +418,7 @@ function resolveTruthfulState(
 // SERVER-LEVEL PLAYIT AGENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getPlayitStatus(serverId: string): PlayitStatus {
+export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
   const playitDir = getPlayitDir(serverId);
   const configFile = path.join(playitDir, 'playit.json');
   const secretFile = path.join(playitDir, 'playit.toml');
@@ -477,21 +477,40 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
 
   // Check IPC socket if running
   let socketClaimed = false;
+  let ipcStatusKnown = false;
   if (running && fs.existsSync(socketFile)) {
-    queryIpc(socketFile, { type: 'get_status' }, 1000).then((res) => {
-      if (res && res.data && (res.data.has_secret || res.data.phase === 'account_linked')) {
-        socketClaimed = true;
+    try {
+      const res = await queryIpc(socketFile, { type: 'get_status' }, 1000);
+      if (res && res.data) {
+        ipcStatusKnown = true;
+        if (res.data.has_secret === true || res.data.phase === 'account_linked') {
+          socketClaimed = true;
+        } else if (res.data.phase === 'waiting_for_secret' || res.data.has_secret === false) {
+          socketClaimed = false;
+        }
       }
-    }).catch(() => {});
+    } catch {}
   }
 
-  const isClaimed = socketClaimed || isAgentSecretClaimed(secretFile);
+  const isClaimed = ipcStatusKnown ? socketClaimed : isAgentSecretClaimed(secretFile);
 
   // Parse logs for real Playit-generated claim metadata
   let claimCode: string | undefined = undefined;
   let claimUrl: string | undefined = undefined;
 
-  if (fs.existsSync(logFile)) {
+  // Query daemon over IPC for real claim URL if running
+  if (running && fs.existsSync(socketFile)) {
+    try {
+      const loginRes = await queryIpc(socketFile, { type: 'get_account_login_url' }, 1000);
+      if (loginRes && (loginRes.url || loginRes.data?.url)) {
+        claimUrl = loginRes.url || loginRes.data?.url;
+        const parsed = parseLogsForMetadata(claimUrl || '');
+        claimCode = parsed.claimCode || undefined;
+      }
+    } catch {}
+  }
+
+  if (!claimUrl && fs.existsSync(logFile)) {
     try {
       const logContent = fs.readFileSync(logFile, 'utf-8');
       const parsed = parseLogsForMetadata(logContent);
@@ -499,6 +518,13 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
       if (parsed.claimCode) claimCode = parsed.claimCode;
     } catch {}
   }
+
+  // Filter out any stale/fake claim URLs
+  const realSavedUrl = savedConfig.claimUrl && !savedConfig.claimUrl.includes('/claim/agent-') ? savedConfig.claimUrl : undefined;
+  const realSavedCode = savedConfig.claimCode && !savedConfig.claimCode.startsWith('agent-') ? savedConfig.claimCode : undefined;
+
+  const finalClaimUrl = isClaimed ? undefined : (claimUrl || realSavedUrl);
+  const finalClaimCode = isClaimed ? undefined : (claimCode || realSavedCode);
 
   const hasError = !!savedConfig.errorReason || !binCheck.runnable;
   const states = resolveTruthfulState(
@@ -508,7 +534,7 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
     isStarting,
     !!isCrashed,
     hasError,
-    !!claimUrl,
+    !!finalClaimUrl,
     !!savedConfig.isClaiming
   );
 
@@ -523,8 +549,8 @@ export function getPlayitStatus(serverId: string): PlayitStatus {
     claimStatus: states.claimStatus,
     accountStatus: states.accountStatus,
     tunnelManagement: 'Managed externally',
-    claimUrl: isClaimed ? undefined : (claimUrl || savedConfig.claimUrl),
-    claimCode: isClaimed ? undefined : (claimCode || savedConfig.claimCode),
+    claimUrl: finalClaimUrl,
+    claimCode: finalClaimCode,
     agentVersion: binCheck.version || '1.0.10',
     pid: finalPid,
     logs,
@@ -603,15 +629,12 @@ export async function installPlayitAgent(serverId: string): Promise<PlayitStatus
       try { fs.unlinkSync(logFile); } catch {}
     }
 
-    const defaultCode = `agent-${serverId.slice(0, 12)}`;
-    const defaultUrl = `https://playit.gg/claim/${defaultCode}`;
-
     const initialStatus = {
       isInstalled: true,
       isRunning: true,
       crashed: false,
-      claimCode: defaultCode,
-      claimUrl: defaultUrl,
+      claimCode: undefined,
+      claimUrl: undefined,
       agentVersion: '1.0.10',
       lastCheckedAt: new Date().toISOString()
     };
@@ -619,7 +642,7 @@ export async function installPlayitAgent(serverId: string): Promise<PlayitStatus
     fs.writeFileSync(configFile, JSON.stringify(initialStatus, null, 2), 'utf-8');
 
     await togglePlayitAgentInternal(serverId, true);
-    return getPlayitStatus(serverId);
+    return await getPlayitStatus(serverId);
   } finally {
     releasePlayitLock(serverId);
   }
@@ -632,7 +655,7 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
   const socketFile = path.join(playitDir, 'playit.sock');
   const logFile = path.join(playitDir, 'playit.log');
 
-  const current = getPlayitStatus(serverId);
+  const current = await getPlayitStatus(serverId);
   if (!current.isInstalled) {
     throw new Error('Playit agent is not installed.');
   }
@@ -654,8 +677,8 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
           try {
             if (fs.existsSync(configFile)) {
               const fileData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-              if (meta.claimUrl) fileData.claimUrl = meta.claimUrl;
-              if (meta.claimCode) fileData.claimCode = meta.claimCode;
+              if (meta.claimUrl && !meta.claimUrl.includes('/claim/agent-')) fileData.claimUrl = meta.claimUrl;
+              if (meta.claimCode && !meta.claimCode.startsWith('agent-')) fileData.claimCode = meta.claimCode;
               fs.writeFileSync(configFile, JSON.stringify(fileData, null, 2));
             }
           } catch {}
@@ -741,7 +764,7 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
     } catch {}
   }
 
-  return getPlayitStatus(serverId);
+  return await getPlayitStatus(serverId);
 }
 
 export async function togglePlayitAgent(serverId: string, enable: boolean): Promise<PlayitStatus> {
@@ -804,7 +827,7 @@ export async function claimPlayitAgent(serverId: string): Promise<{
 }> {
   acquirePlayitLock(serverId);
   try {
-    const current = getPlayitStatus(serverId);
+    const current = await getPlayitStatus(serverId);
     if (current.isClaimed) {
       return {
         success: true,
@@ -855,17 +878,12 @@ export async function claimPlayitAgent(serverId: string): Promise<{
       if (fs.existsSync(configFile)) {
         try {
           const cfgData = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-          if (cfgData.claimUrl) {
+          if (cfgData.claimUrl && !cfgData.claimUrl.includes('/claim/agent-')) {
             foundClaimUrl = cfgData.claimUrl;
-            foundClaimCode = cfgData.claimCode || `agent-${serverId.slice(0, 12)}`;
+            foundClaimCode = cfgData.claimCode && !cfgData.claimCode.startsWith('agent-') ? cfgData.claimCode : null;
           }
         } catch {}
       }
-    }
-
-    if (!foundClaimUrl) {
-      foundClaimCode = `agent-${serverId.slice(0, 12)}`;
-      foundClaimUrl = `https://playit.gg/claim/${foundClaimCode}`;
     }
 
     if (foundClaimUrl) {
@@ -895,7 +913,7 @@ export async function claimPlayitAgent(serverId: string): Promise<{
       claimStatus: 'UNCLAIMED',
       claimUrl: null,
       claimCode: null,
-      message: 'Playit agent is running, but Playit has not provided a claim URL yet.'
+      message: 'Playit agent is running, but Playit daemon has not provided a claim URL yet.'
     };
   } finally {
     releasePlayitLock(serverId);
@@ -981,7 +999,7 @@ export async function repairPlayitAgent(serverId: string): Promise<{
       success: true,
       repaired,
       diagnostics,
-      status: getPlayitStatus(serverId)
+      status: await getPlayitStatus(serverId)
     };
   } finally {
     releasePlayitLock(serverId);

@@ -22,6 +22,7 @@ import {
 import {
   discoverJavaBinaries,
   checkJavaRuntime,
+  provisionJavaRuntime,
   getRecommendedJavaVersion,
   getMinecraftVersions,
   getMinecraftProviders,
@@ -68,6 +69,9 @@ async function runAllTests() {
   // TEST SUITE 0: JAVA RUNTIME DISCOVERY & COMPATIBILITY
   // ----------------------------------------------------
   console.log('\n--- SUITE 0: Java Runtime Discovery & Version Validation ---');
+  await provisionJavaRuntime(25).catch(() => {});
+  await provisionJavaRuntime(21).catch(() => {});
+  await provisionJavaRuntime(17).catch(() => {});
   const discovered = discoverJavaBinaries();
   console.log('Discovered Java Runtimes:', discovered);
   assert(discovered[25].available === true, 'Java 25 is detected and available');
@@ -201,7 +205,9 @@ async function runAllTests() {
   fs.writeFileSync(path.join(mcDir, 'server.properties'), 'server-port=25566\nmotd=Aether Test Server\n');
 
   try {
-    execSync('javac --release 17 Main.java && jar cfe server.jar Main Main.class', { cwd: mcDir });
+    const javacPath = fs.existsSync('/usr/lib/jvm/java-17-openjdk-amd64/bin/javac') ? '/usr/lib/jvm/java-17-openjdk-amd64/bin/javac' : 'javac';
+    const jarPath = fs.existsSync('/usr/lib/jvm/java-17-openjdk-amd64/bin/jar') ? '/usr/lib/jvm/java-17-openjdk-amd64/bin/jar' : 'jar';
+    execSync(`${javacPath} --release 17 Main.java && ${jarPath} cfe server.jar Main Main.class`, { cwd: mcDir });
   } catch (err: any) {
     const dummyBuffer = Buffer.alloc(2048, 0);
     fs.writeFileSync(path.join(mcDir, 'server.jar'), dummyBuffer);
@@ -404,7 +410,7 @@ async function runAllTests() {
   assert(binCheck.exists === true, 'Playit binary exists on disk or was auto-provisioned');
 
   const playitTestServerId = 'srv_playit_verification';
-  const initialStatus = getPlayitStatus(playitTestServerId);
+  const initialStatus = await getPlayitStatus(playitTestServerId);
   assert(initialStatus.isInstalled === true || initialStatus.isInstalled === false, 'getPlayitStatus returns truthful structure');
   assert(initialStatus.accountStatus === 'Unlinked' || initialStatus.accountStatus === 'Pending' || initialStatus.accountStatus === 'Connected', 'accountStatus conforms to enum');
 
@@ -416,7 +422,7 @@ async function runAllTests() {
 
   // Verify PID checker helper
   assert(isPidRunning(9999999) === false, 'isPidRunning returns false for non-existent PID');
-  assert(isPidRunning(process.pid) === true, 'isPidRunning returns true for active Node process');
+  assert(isPidRunning(process.pid, false) === true, 'isPidRunning returns true for active Node process');
 
   // Verify Global Admin Setting Toggle for Playit
   db.settings.enablePlayit = false;

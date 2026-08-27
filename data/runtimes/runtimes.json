@@ -1,9 +1,23 @@
 {
+  "17": {
+    "version": 17,
+    "status": "INSTALLED",
+    "executablePath": "/usr/lib/jvm/java-17-openjdk-amd64/bin/java",
+    "installedAt": "2026-08-27T16:24:26.061Z",
+    "verified": true
+  },
+  "21": {
+    "version": 21,
+    "status": "INSTALLED",
+    "executablePath": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+    "installedAt": "2026-08-27T16:24:25.667Z",
+    "verified": true
+  },
   "25": {
     "version": 25,
     "status": "INSTALLED",
-    "executablePath": "/app/applet/data/runtimes/java-25/bin/java",
-    "installedAt": "2026-08-27T14:37:40.572Z",
+    "executablePath": "/usr/lib/jvm/java-25-openjdk-amd64/bin/java",
+    "installedAt": "2026-08-27T16:24:25.269Z",
     "verified": true
   }
 }
