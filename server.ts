@@ -27,10 +27,14 @@ import { setupConsoleWebSocket } from './server/consoleWs';
 import { startSftpDaemon } from './server/sftpServer';
 import { reconcileServerStatesOnBoot } from './server/provider';
 import { initializePlayitOnBoot } from './server/playitService';
+import { initializeRuntime } from './server/init';
 
 dotenv.config();
 
 async function startServer() {
+  // Ensure runtime filesystem is healthy before any service starts
+  await initializeRuntime();
+
   const app = express();
   const PORT = 3000;
 
@@ -92,6 +96,7 @@ async function startServer() {
 
   // API Routes FIRST
   app.use('/api/v1/auth', authRoutes);
+  app.use('/api/v1/account', authRoutes);
   app.use('/api/v1/public', publicRoutes);
   app.use('/api/v1/servers', serverRoutes);
   app.use('/api/v1/deploy', deployRoutes);
@@ -108,6 +113,17 @@ async function startServer() {
   app.use('/api/v1/api-keys', apiKeysRoutes);
   app.use('/api/v1/minecraft', minecraftRoutes);
   app.use('/api/v1/server-types', serverTypesRoutes);
+
+  // Catch-all for missing API routes - must return JSON, not HTML
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: {
+        code: 'API_NOT_FOUND',
+        message: `The API endpoint '${req.originalUrl}' does not exist on this server.`
+      }
+    });
+  });
 
   // Vite Integration for SPA Development and Production Serving
   if (process.env.NODE_ENV !== 'production') {

@@ -7,6 +7,7 @@ import { generateToken, authMiddleware, createAuditLog, AuthenticatedRequest, JW
 import { User, DiscordAccount } from '../../src/types';
 import { evaluateIpRisk, AntiAbuseConfig } from '../utils/ipRiskProvider';
 import { getDiscordOAuthRedirectUri, getCurrentInstallationPublicUrl } from '../oauthUrlResolver';
+import { getUserAllocationStatus } from '../services/allocationService';
 
 const router = Router();
 
@@ -256,6 +257,9 @@ router.post('/register', async (req, res) => {
       emailVerified: true,
       twoFactorEnabled: false,
       authProvider: 'local',
+      plan: 'free',
+      baseServerAllocations: 1,
+      adminGrantedAllocations: 0,
       serverLimit: 1,
       credits: 10.0, // Welcome credit
       createdAt: new Date().toISOString(),
@@ -521,6 +525,9 @@ router.post('/firebase-verify', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'google',
       googleId: cleanGoogleId,
+      plan: 'free',
+      baseServerAllocations: 1,
+      adminGrantedAllocations: 0,
       serverLimit: 1,
       credits: 10.0,
       createdAt: new Date().toISOString(),
@@ -648,6 +655,9 @@ router.post('/firebase-google', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'google',
       googleId: cleanGoogleId,
+      plan: 'free',
+      baseServerAllocations: 1,
+      adminGrantedAllocations: 0,
       serverLimit: 1,
       credits: 10.0, // Welcome credit
       createdAt: new Date().toISOString(),
@@ -1002,6 +1012,9 @@ router.get('/discord/callback', async (req, res) => {
       twoFactorEnabled: false,
       authProvider: 'discord',
       discordId,
+      plan: 'free',
+      baseServerAllocations: 1,
+      adminGrantedAllocations: 0,
       serverLimit: 1,
       credits: 10.0,
       createdAt: new Date().toISOString(),
@@ -1066,12 +1079,28 @@ router.get('/discord/callback', async (req, res) => {
 });
 
 // GET /api/v1/auth/me
-router.get('/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const allocationStatus = req.user ? getUserAllocationStatus(db, req.user) : null;
   res.json({
     success: true,
     data: {
-      user: req.user
+      user: req.user,
+      allocations: allocationStatus
     }
+  });
+});
+
+// GET /api/v1/auth/allocations
+router.get('/allocations', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+  }
+  const db = await getDb();
+  const status = getUserAllocationStatus(db, req.user);
+  res.json({
+    success: true,
+    data: status
   });
 });
 

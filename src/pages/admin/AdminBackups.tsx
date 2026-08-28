@@ -74,7 +74,7 @@ export const AdminBackups: React.FC<AdminBackupsProps> = ({ onNavigate }) => {
     setSavingSettings(true);
     setSavedSuccess(false);
     try {
-      const res = await apiRequest('/api/v1/admin/backup-settings', {
+      const res = await apiRequest('/admin/backup-settings', {
         method: 'PUT',
         body: settings
       });

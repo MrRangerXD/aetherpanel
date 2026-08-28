@@ -4,6 +4,7 @@ import {
   Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame
 } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
 interface HomeProps {
@@ -15,14 +16,20 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const [plans, setPlans] = useState<Plan[]>([]);
 
   useEffect(() => {
-    fetch('/api/v1/public/plans')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          setPlans(data.data);
+    const loadPlans = async () => {
+      try {
+        const res = await apiRequest('/public/plans');
+        if (res.success && Array.isArray(res.data)) {
+          setPlans(res.data);
+        } else if (res.error) {
+          console.error('Failed to load plans on home:', res.error.message);
         }
-      })
-      .catch(err => console.error('Failed to load plans on home:', err));
+      } catch (err: any) {
+        console.error('Failed to load plans on home:', err.message || err);
+      }
+    };
+
+    loadPlans();
   }, []);
 
   const mcPlans = plans.filter(p => p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc_'));

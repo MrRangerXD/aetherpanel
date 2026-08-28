@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, CheckCircle2, Terminal, Cpu, Zap, ArrowRight } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
 interface BotHostingProps {
@@ -14,16 +15,21 @@ export const BotHosting: React.FC<BotHostingProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/v1/public/plans')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          const botPlans = data.data.filter((p: Plan) => p.productId === 'prod_bot' || p.id.startsWith('plan_bot_'));
+    const loadPlans = async () => {
+      try {
+        const res = await apiRequest('/public/plans');
+        if (res.success && Array.isArray(res.data)) {
+          const botPlans = res.data.filter((p: Plan) => p.productId === 'prod_bot' || p.id.startsWith('plan_bot_'));
           setPlans(botPlans);
         }
-      })
-      .catch(err => console.error('Failed to load bot plans:', err))
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error('Failed to load bot plans:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPlans();
   }, []);
 
   return (

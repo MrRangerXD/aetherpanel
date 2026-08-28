@@ -19,6 +19,10 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
   const isRunning = server.status === 'running';
   const fullIp = `${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}`;
 
+  const canStart = !server.isSubuser || server.permissions?.includes('server.start');
+  const canStop = !server.isSubuser || server.permissions?.includes('server.stop');
+  const canRestart = !server.isSubuser || server.permissions?.includes('server.restart');
+
   const serverType = server.serverType;
   const theme = serverType?.theme || {};
   const accentColor = theme.accentColor || '#8B5CF6';
@@ -127,12 +131,19 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
 
         {/* Top Header: Category Badge & Status Badge */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-          <span
-            className={getBadgeClasses()}
-            style={{ backgroundColor: badgeStyle === 'outline' ? undefined : `${accentColor}DD` }}
-          >
-            {serverType?.category || 'Hosting'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={getBadgeClasses()}
+              style={{ backgroundColor: badgeStyle === 'outline' ? undefined : `${accentColor}DD` }}
+            >
+              {serverType?.category || 'Hosting'}
+            </span>
+            {server.isSubuser && (
+              <span className="px-2 py-1 rounded-md bg-violet-600/80 backdrop-blur-md text-[9px] font-bold uppercase tracking-widest text-white shadow-lg border border-violet-400/30">
+                Shared
+              </span>
+            )}
+          </div>
 
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border backdrop-blur-md ${
             isRunning
@@ -217,51 +228,64 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
 
         {/* Quick Power Actions Bar */}
         <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
-          <span className="text-[10px] text-zinc-500 font-mono">
-            ID: {server.id}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-zinc-500 font-mono">
+              ID: {server.id}
+            </span>
+            {server.isSubuser && server.owner && (
+              <span className="text-[9px] text-violet-400 font-medium">
+                Shared by: {server.owner.displayName || server.owner.username}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
             {!isRunning ? (
-              <button
-                disabled={!!powerLoadingAction}
-                onClick={e => handlePowerClick(e, 'start')}
-                className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
-                title="Start Server"
-              >
-                {powerLoadingAction === 'start' ? (
-                  <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
-                ) : (
-                  <Play className="h-3 w-3" />
-                )}
-                <span>Start</span>
-              </button>
+              canStart && (
+                <button
+                  disabled={!!powerLoadingAction}
+                  onClick={e => handlePowerClick(e, 'start')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
+                  title="Start Server"
+                >
+                  {powerLoadingAction === 'start' ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                  ) : (
+                    <Play className="h-3 w-3" />
+                  )}
+                  <span>Start</span>
+                </button>
+              )
             ) : (
               <>
-                <button
-                  disabled={!!powerLoadingAction}
-                  onClick={e => handlePowerClick(e, 'restart')}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
-                  title="Restart Server"
-                >
-                  {powerLoadingAction === 'restart' ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
-                  ) : (
-                    <RotateCw className="h-3 w-3" />
-                  )}
-                </button>
-                <button
-                  disabled={!!powerLoadingAction}
-                  onClick={e => handlePowerClick(e, 'stop')}
-                  className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
-                  title="Stop Server"
-                >
-                  {powerLoadingAction === 'stop' ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-rose-400" />
-                  ) : (
-                    <Square className="h-3 w-3" />
-                  )}
-                </button>
+                {canRestart && (
+                  <button
+                    disabled={!!powerLoadingAction}
+                    onClick={e => handlePowerClick(e, 'restart')}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
+                    title="Restart Server"
+                  >
+                    {powerLoadingAction === 'restart' ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-amber-400" />
+                    ) : (
+                      <RotateCw className="h-3 w-3" />
+                    )}
+                  </button>
+                )}
+                {canStop && (
+                  <button
+                    disabled={!!powerLoadingAction}
+                    onClick={e => handlePowerClick(e, 'stop')}
+                    className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors font-medium text-xs flex items-center gap-1 disabled:opacity-50"
+                    title="Stop Server"
+                  >
+                    {powerLoadingAction === 'stop' ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-rose-400" />
+                    ) : (
+                      <Square className="h-3 w-3" />
+                    )}
+                  </button>
+                )}
               </>
             )}
           </div>

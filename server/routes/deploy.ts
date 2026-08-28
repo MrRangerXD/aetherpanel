@@ -6,12 +6,14 @@ import { downloadMinecraftServerJar, writeMinecraftEula, writeServerProperties }
 import { Server, Order, Allocation } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { RESERVED_SYSTEM_PORTS, isPortReserved, resolveNodePublicEndpoint, resolveServerPublicEndpoint } from '../network/endpointResolver';
+import { getUserAllocationStatus, canUserDeployServer } from '../services/allocationService';
 
 const router = Router();
 
-// GET /api/v1/deploy/options - Get products, plans, locations, nodes, templates
+// GET /api/v1/deploy/options - Get products, plans, locations, nodes, templates, allocations
 router.get('/options', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
+  const allocationStatus = req.user ? getUserAllocationStatus(db, req.user) : null;
   res.json({
     success: true,
     data: {
@@ -20,7 +22,8 @@ router.get('/options', authMiddleware, async (req: AuthenticatedRequest, res: Re
       nodes: db.nodes.filter(n => n.status === 'online' && !n.isMaintenanceMode),
       templates: (db.templates || []).filter(t => t.status === 'active'),
       userCredits: req.user!.credits,
-      currentServerCount: db.servers.filter(s => s.userId === req.user!.id).length
+      currentServerCount: db.servers.filter(s => s.userId === req.user!.id).length,
+      allocations: allocationStatus
     }
   });
 });
@@ -90,17 +93,21 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
       const template = templateId ? (db.templates || []).find(t => t.id === templateId) : null;
 
-      const userLimit = typeof freshUser.serverLimit === 'number'
-        ? freshUser.serverLimit
-        : (plan.serverLimit > 0 ? plan.serverLimit : 1);
-      const userServers = db.servers.filter(s => s.userId === freshUser.id);
-      if (userServers.length >= userLimit) {
+      // Authoritative Server Allocation Verification
+      const deployCheck = canUserDeployServer(db, freshUser);
+      if (!deployCheck.allowed) {
         return res.status(403).json({
           success: false,
           error: {
-            code: 'SERVER_LIMIT_REACHED',
-            message: `You have reached your server allocation quota (${userLimit} max server${userLimit === 1 ? '' : 's'}). Delete an existing server or contact an administrator to increase your allocation quota.`,
-            details: { allowed: userLimit, used: userServers.length }
+            code: deployCheck.errorCode || 'SERVER_ALLOCATION_LIMIT_REACHED',
+            message: deployCheck.errorMessage || 'Your current plan does not support additional server allocations. Upgrade your plan or purchase additional allocations.',
+            details: {
+              allowed: deployCheck.status.limit,
+              used: deployCheck.status.used,
+              remaining: deployCheck.status.remaining,
+              baseAllocations: deployCheck.status.baseServerAllocations,
+              adminGrantedAllocations: deployCheck.status.adminGrantedAllocations
+            }
           }
         });
       }

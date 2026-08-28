@@ -246,15 +246,29 @@ export const requireApiScope = requireApiKeyScope;
 
 export const requireAdmin = requireRole(['admin', 'super_admin']);
 
-export async function checkServerAccess(user: User, serverId: string) {
+export async function checkServerAccess(user: User, serverId: string, requiredPermission?: string) {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
   if (!server) {
     return { hasAccess: false, server: null, error: 'Server not found' };
   }
-  if (user.role === 'admin' || user.role === 'super_admin' || server.userId === user.id) {
-    return { hasAccess: true, server, role: 'owner' };
+
+  const isOwner = server.userId === user.id;
+  const isAdmin = ['admin', 'super_admin'].includes(user.role);
+
+  if (isOwner || isAdmin) {
+    return { hasAccess: true, server, role: isOwner ? 'owner' : 'admin' };
   }
+
+  // Check subuser
+  const subuser = db.subusers?.find(s => s.serverId === serverId && s.userId === user.id);
+  if (subuser) {
+    if (requiredPermission && !subuser.permissions.includes(requiredPermission)) {
+      return { hasAccess: false, server, error: `Required permission '${requiredPermission}' is missing.` };
+    }
+    return { hasAccess: true, server, role: 'subuser', subuser };
+  }
+
   return { hasAccess: false, server: null, error: 'Access denied to this server' };
 }
 

@@ -6,7 +6,7 @@ import {
   Boxes, CheckCircle, RefreshCw, Radio, DollarSign, Activity
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Product, Plan, Node } from '../../types';
+import { Product, Plan, Node, UserAllocationStatus } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 
@@ -152,6 +152,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [paymentMethod, setPaymentMethod] = useState<'balance' | 'stripe'>('balance');
+  const [allocations, setAllocations] = useState<UserAllocationStatus | null>(null);
 
   const [couponCode, setCouponCode] = useState<string>('WELCOME20');
   const [couponDiscount, setCouponDiscount] = useState<{ type: string; value: number } | null>({ type: 'percent', value: 20 });
@@ -172,6 +173,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     const res = await apiRequest('/deploy/options');
     if (res.success && res.data) {
       if (res.data.products) setProducts(res.data.products);
+      if (res.data.allocations) setAllocations(res.data.allocations);
       if (res.data.plans) {
         setPlans(res.data.plans);
         if (!selectedPlanId && res.data.plans.length > 0) {
@@ -358,6 +360,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   };
 
   const filteredSoftware = SOFTWARE_CATALOG.filter(s => s.category === selectedProductCategory);
+  const isAllocationLimitReached = Boolean(allocations && !allocations.unlimited && allocations.remaining !== null && allocations.remaining <= 0);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
@@ -374,32 +377,70 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         </div>
 
         {/* Steps Progress Indicator */}
-        <div className="flex items-center gap-2 text-xs">
-          {[
-            { num: 1, label: 'Software' },
-            { num: 2, label: 'Plan & Tier' },
-            { num: 3, label: 'Config & Region' },
-            { num: 4, label: 'Deploy' }
-          ].map((s, idx) => (
-            <React.Fragment key={s.num}>
-              {idx > 0 && <div className={`w-4 h-0.5 ${step >= s.num ? 'bg-amber-400' : 'bg-zinc-800'}`} />}
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-medium transition ${
-                step === s.num
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                  : step > s.num
-                  ? 'text-zinc-300 bg-zinc-900 border border-zinc-800'
-                  : 'text-zinc-500 bg-zinc-950 border border-zinc-900'
-              }`}>
-                <span className="font-mono">{s.num}.</span>
-                <span className="hidden sm:inline">{s.label}</span>
-              </div>
-            </React.Fragment>
-          ))}
-        </div>
+        {!isAllocationLimitReached && (
+          <div className="flex items-center gap-2 text-xs">
+            {[
+              { num: 1, label: 'Software' },
+              { num: 2, label: 'Plan & Tier' },
+              { num: 3, label: 'Config & Region' },
+              { num: 4, label: 'Deploy' }
+            ].map((s, idx) => (
+              <React.Fragment key={s.num}>
+                {idx > 0 && <div className={`w-4 h-0.5 ${step >= s.num ? 'bg-amber-400' : 'bg-zinc-800'}`} />}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-medium transition ${
+                  step === s.num
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    : step > s.num
+                    ? 'text-zinc-300 bg-zinc-900 border border-zinc-800'
+                    : 'text-zinc-500 bg-zinc-950 border border-zinc-900'
+                }`}>
+                  <span className="font-mono">{s.num}.</span>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* STEP 1: Choose Product & Software */}
-      {step === 1 && (
+      {/* ALLOCATION LIMIT REACHED BANNER & BLOCK */}
+      {isAllocationLimitReached ? (
+        <div className="p-8 sm:p-12 rounded-3xl bg-zinc-900/80 border border-zinc-800 text-center max-w-xl mx-auto space-y-6 shadow-2xl my-8 animate-in fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white tracking-tight">Server Allocation Limit Reached</h2>
+            <p className="text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
+              Your current plan does not support additional server allocations. Upgrade your plan or purchase additional allocations.
+            </p>
+          </div>
+          
+          <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 text-xs font-mono text-zinc-300 flex items-center justify-between">
+            <span className="text-zinc-400">Current Usage:</span>
+            <span className="font-bold text-amber-400 text-sm">{allocations?.used} / {allocations?.limit}</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            <button
+              onClick={() => onNavigate('billing')}
+              className="px-5 py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+            >
+              <span>View Plans</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onNavigate('support')}
+              className="px-5 py-2.5 rounded-xl font-medium text-xs bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 transition"
+            >
+              Contact Administrator
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* STEP 1: Choose Product & Software */}
+          {step === 1 && (
         <div className="space-y-6 animate-in fade-in">
           {/* Category Toggle */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1012,8 +1053,10 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
           )}
         </div>
       )}
+    </>
+  )}
 
-    </div>
+</div>
   );
 };
 

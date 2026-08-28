@@ -38,7 +38,34 @@ export async function apiRequest<T = any>(
       headers
     });
 
-    const data = await res.json();
+    const contentType = res.headers.get('content-type');
+    let data: ApiResponse;
+
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch (parseErr: any) {
+        return {
+          success: false,
+          error: {
+            code: 'JSON_PARSE_ERROR',
+            message: `Failed to parse JSON response: ${parseErr.message}`
+          }
+        };
+      }
+    } else {
+      const text = await res.text();
+      return {
+        success: false,
+        error: {
+          code: 'INVALID_CONTENT_TYPE',
+          message: text.includes('<!doctype') || text.includes('<html') 
+            ? `The server returned an HTML response instead of JSON. This usually happens when an API route is missing and falls back to the SPA index.html. (Status: ${res.status})`
+            : `Server returned non-JSON content type: ${contentType || 'unknown'} (Status: ${res.status})`
+        }
+      };
+    }
+
     if (!res.ok && !data.error) {
       return {
         success: false,

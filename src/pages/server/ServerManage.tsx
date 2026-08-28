@@ -18,6 +18,7 @@ import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
+import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
 import { buildBotStartupCommand } from '../../lib/startup';
 
 function getRecommendedJava(version?: string): number {
@@ -46,17 +47,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const { enablePlayit } = useBranding();
 
   const [server, setServer] = useState<Server | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity'>(
+  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers'>(
     (initialTab as any) || 'console'
   );
 
   useEffect(() => {
-    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity'].includes(initialTab)) {
+    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity', 'subusers'].includes(initialTab)) {
       setActiveTab(initialTab as any);
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity') => {
+  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers') => {
     if (activeTab === 'env' && isEnvDirty) {
       const confirmLeave = window.confirm("You have unsaved environment variable changes. Are you sure you want to leave and discard these changes?");
       if (!confirmLeave) return;
@@ -1020,6 +1021,13 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const isNode = !isMinecraft && !isPython && !isBun;
   const isBot = server.productId === 'prod_bot' || swLower.includes('node') || isPython || isBun || isNode;
 
+  const hasPerm = (perm: string) => {
+    if (user?.role === 'admin' || user?.role === 'super_admin') return true;
+    if (!server?.isSubuser) return true;
+    return server?.permissions?.includes(perm);
+  };
+  const canManageSubusers = user?.role === 'admin' || user?.role === 'super_admin' || !server?.isSubuser || hasPerm('subusers.view') || hasPerm('subusers.create') || hasPerm('subusers.update') || hasPerm('subusers.delete');
+
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
       
@@ -1182,71 +1190,80 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       <div className="space-y-2">
         {/* Mobile / Tablet Quick Select Dropdown (< lg screens) */}
         <div className="lg:hidden">
-          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Select Management View</label>
-          <select
-            value={activeTab}
-            onChange={(e) => handleTabSelect(e.target.value as any)}
-            className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
-          >
-            <option value="console">💻 Console Logs</option>
-            <option value="monitoring">📊 Monitoring & Metrics</option>
-            <option value="network">🌐 {enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</option>
-            <option value="files">📁 File Manager</option>
-            {isMinecraft && <option value="plugins">🧩 Plugins Manager</option>}
-            {isMinecraft && <option value="properties">⚙️ Server Properties</option>}
-            {isBot && <option value="env">🔑 Environment Variables</option>}
-            <option value="backups">💾 Backups ({backups.length})</option>
-            <option value="databases">🗄️ Databases ({databases.length})</option>
-            <option value="schedules">⏱️ Schedules ({schedules.length})</option>
-            <option value="discord">💬 Discord Bot & Alerts</option>
-            <option value="settings">⚡ Startup & Settings</option>
-            <option value="activity">📋 Audit Log</option>
-          </select>
-        </div>
+                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Select Management View</label>
+                <select
+                  value={activeTab}
+                  onChange={(e) => handleTabSelect(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
+                >
+                  {hasPerm('console.view') && <option value="console">💻 Console Logs</option>}
+                  {(hasPerm('console.view') || hasPerm('monitoring.view')) && <option value="monitoring">📊 Monitoring & Metrics</option>}
+                  {hasPerm('files.view') && <option value="network">🌐 {enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</option>}
+                  {hasPerm('files.view') && <option value="files">📁 File Manager</option>}
+                  {isMinecraft && hasPerm('plugins.view') && <option value="plugins">🧩 Plugins Manager</option>}
+                  {isMinecraft && hasPerm('startup.update') && <option value="properties">⚙️ Server Properties</option>}
+                  {isBot && hasPerm('startup.update') && <option value="env">🔑 Environment Variables</option>}
+                  {hasPerm('backups.view') && <option value="backups">💾 Backups ({backups.length})</option>}
+                  {hasPerm('databases.view') && <option value="databases">🗄️ Databases ({databases.length})</option>}
+                  {hasPerm('schedules.view') && <option value="schedules">⏱️ Schedules ({schedules.length})</option>}
+                  {hasPerm('discord.manage') && <option value="discord">💬 Discord Bot & Alerts</option>}
+                  {hasPerm('startup.update') && <option value="settings">⚡ Startup & Settings</option>}
+                  {hasPerm('activity.view') && <option value="activity">📋 Audit Log</option>}
+                  {canManageSubusers && <option value="subusers">👥 Subusers</option>}
+                </select>
+              </div>
 
-        {/* Scrollable Tabs Bar for lg+ screens */}
+              {/* Scrollable Tabs Bar for lg+ screens */}
         <div className="hidden lg:flex items-center gap-1.5 border-b border-zinc-800 overflow-x-auto pb-2 text-xs touch-scroll">
-          <button
-            onClick={() => handleTabSelect('console')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'console' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <TerminalIcon className="h-4 w-4" />
-            <span>Console Logs</span>
-          </button>
+          {hasPerm('console.view') && (
+            <button
+              onClick={() => handleTabSelect('console')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'console' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <TerminalIcon className="h-4 w-4" />
+              <span>Console Logs</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('monitoring')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'monitoring' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <Activity className="h-4 w-4" />
-            <span>Monitoring & Metrics</span>
-          </button>
+          {(hasPerm('console.view') || hasPerm('monitoring.view')) && (
+            <button
+              onClick={() => handleTabSelect('monitoring')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'monitoring' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Activity className="h-4 w-4" />
+              <span>Monitoring & Metrics</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('network')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <Globe className="h-4 w-4" />
-            <span>{enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</span>
-          </button>
+          {hasPerm('files.view') && (
+            <button
+              onClick={() => handleTabSelect('network')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Globe className="h-4 w-4" />
+              <span>{enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('files')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <Folder className="h-4 w-4" />
-            <span>File Manager</span>
-          </button>
+          {hasPerm('files.view') && (
+            <button
+              onClick={() => handleTabSelect('files')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Folder className="h-4 w-4" />
+              <span>File Manager</span>
+            </button>
+          )}
 
-          {isMinecraft && (
+          {isMinecraft && hasPerm('plugins.view') && (
             <button
               onClick={() => handleTabSelect('plugins')}
               className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
@@ -1258,7 +1275,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             </button>
           )}
 
-          {isMinecraft && (
+          {isMinecraft && hasPerm('startup.update') && (
             <button
               onClick={() => handleTabSelect('properties')}
               className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
@@ -1270,7 +1287,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             </button>
           )}
 
-          {isBot && (
+          {isBot && hasPerm('startup.update') && (
             <button
               onClick={() => handleTabSelect('env')}
               className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
@@ -1282,65 +1299,89 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             </button>
           )}
 
-          <button
-            onClick={() => handleTabSelect('backups')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'backups' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <HardDrive className="h-4 w-4" />
-            <span>Backups ({backups.length})</span>
-          </button>
+          {hasPerm('backups.view') && (
+            <button
+              onClick={() => handleTabSelect('backups')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'backups' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <HardDrive className="h-4 w-4" />
+              <span>Backups ({backups.length})</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('databases')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'databases' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <Database className="h-4 w-4" />
-            <span>Databases ({databases.length})</span>
-          </button>
+          {hasPerm('databases.view') && (
+            <button
+              onClick={() => handleTabSelect('databases')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'databases' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Database className="h-4 w-4" />
+              <span>Databases ({databases.length})</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('schedules')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'schedules' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <Clock className="h-4 w-4" />
-            <span>Schedules ({schedules.length})</span>
-          </button>
+          {hasPerm('schedules.view') && (
+            <button
+              onClick={() => handleTabSelect('schedules')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'schedules' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Clock className="h-4 w-4" />
+              <span>Schedules ({schedules.length})</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('discord')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'discord' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span>Discord Bot</span>
-          </button>
+          {hasPerm('discord.manage') && (
+            <button
+              onClick={() => handleTabSelect('discord')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'discord' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>Discord Bot</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('settings')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'settings' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <SettingsIcon className="h-4 w-4" />
-            <span>Startup & Settings</span>
-          </button>
+          {hasPerm('startup.update') && (
+            <button
+              onClick={() => handleTabSelect('settings')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'settings' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <SettingsIcon className="h-4 w-4" />
+              <span>Startup & Settings</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => handleTabSelect('activity')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-              activeTab === 'activity' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-            }`}
-          >
-            <FileText className="h-4 w-4" />
-            <span>Audit Log</span>
-          </button>
+          {hasPerm('activity.view') && (
+            <button
+              onClick={() => handleTabSelect('activity')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'activity' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Audit Log</span>
+            </button>
+          )}
+
+          {canManageSubusers && (
+            <button
+              onClick={() => handleTabSelect('subusers')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'subusers' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <Shield className="h-4 w-4" />
+              <span>Subusers</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1351,6 +1392,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           onRefreshServer={fetchServerDetails}
           onPowerAction={handlePowerAction}
         />
+      )}
+
+      {/* TAB: SUBUSERS */}
+      {activeTab === 'subusers' && (
+        <ServerSubusersTab server={server} />
       )}
 
       {/* TAB: MONITORING & REAL-TIME TELEMETRY */}

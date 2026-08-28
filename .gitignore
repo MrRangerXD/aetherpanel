@@ -10,5 +10,19 @@ coverage/
 .vite/
 .tmp/
 temp/
+
+# Runtime Data
+bin/*
+!bin/.gitkeep
+bin/playit
+data/*
+!data/.gitkeep
+data/db.json
+data/ssh_host_*
+data/nodes/*/playit/playit.sock
+data/nodes/*/playit/playit.log
+data/servers/*/playit/playit.sock
+data/servers/*/playit/playit.log
+data/backups/*.json
 data/backups/aetherpanel_pre_update_*.json
 data/backups/db-snapshot.json

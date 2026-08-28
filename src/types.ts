@@ -23,10 +23,28 @@ export interface User {
   discordId?: string;
   lastLoginIp?: string;
   registrationIp?: string;
-  serverLimit?: number;
+  plan?: string;
+  baseServerAllocations?: number; // Base server allocation (default: 1)
+  adminGrantedAllocations?: number; // Extra allocations granted by admin (default: 0)
+  serverLimit?: number; // Effective limit for backward compatibility
   credits: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserAllocationStatus {
+  userId: string;
+  email: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  plan: string;
+  baseServerAllocations: number;
+  adminGrantedAllocations: number;
+  limit: number | null; // null if admin (unlimited)
+  used: number; // real count of servers owned by this user
+  remaining: number | null; // null if admin (unlimited)
+  unlimited: boolean;
 }
 
 export type ProductCategory = 'minecraft' | 'bot' | 'other';
@@ -216,6 +234,8 @@ export interface Server {
   templateId?: string;
   serverTypeId?: string;
   serverType?: ServerType;
+  isSubuser?: boolean;
+  permissions?: string[];
   deploymentState?: ServerDeploymentState;
   status: ServerStatus;
   primaryIp: string;
@@ -227,6 +247,11 @@ export interface Server {
   startup?: ServerStartupConfig;
   envVars?: ServerEnvVar[];
   selectedEnvPath?: string;
+  owner?: {
+    id: string;
+    username: string;
+    displayName?: string;
+  };
   createdAt: string;
   updatedAt: string;
   // Live stats cache
@@ -236,6 +261,16 @@ export interface Server {
   uptimeSeconds: number;
   playerCount?: number;
   maxPlayers?: number;
+}
+
+export interface ServerSubuser {
+  id: string;
+  installationId?: string;
+  serverId: string;
+  userId: string;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Location {

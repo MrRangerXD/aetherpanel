@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Gamepad2, CheckCircle2, Shield, Cpu, Zap, ArrowRight, Sparkles } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
 interface MinecraftHostingProps {
@@ -14,16 +15,21 @@ export const MinecraftHosting: React.FC<MinecraftHostingProps> = ({ onNavigate }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/v1/public/plans')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          const mcPlans = data.data.filter((p: Plan) => p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc_'));
+    const loadPlans = async () => {
+      try {
+        const res = await apiRequest('/public/plans');
+        if (res.success && Array.isArray(res.data)) {
+          const mcPlans = res.data.filter((p: Plan) => p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc_'));
           setPlans(mcPlans);
         }
-      })
-      .catch(err => console.error('Failed to load MC plans:', err))
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error('Failed to load MC plans:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPlans();
   }, []);
 
   return (

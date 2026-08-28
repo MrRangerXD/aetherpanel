@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Gamepad2, Bot, Check, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
 interface PricingProps {
@@ -15,15 +16,20 @@ export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/v1/public/plans')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          setPlans(data.data);
+    const loadPlans = async () => {
+      try {
+        const res = await apiRequest('/public/plans');
+        if (res.success && Array.isArray(res.data)) {
+          setPlans(res.data);
         }
-      })
-      .catch(err => console.error('Failed to load plans:', err))
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error('Failed to load plans:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPlans();
   }, []);
 
   const activePlans = plans.filter(p => {

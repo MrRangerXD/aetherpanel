@@ -12,11 +12,6 @@ const SFTP_PORT = parseInt(process.env.SFTP_PORT || '2022', 10);
 const HOST_KEY_PATH = path.join(process.cwd(), 'data', 'ssh_host_rsa_key');
 
 function ensureHostKey(): string {
-  const dataDir = path.join(process.cwd(), 'data');
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
   if (fs.existsSync(HOST_KEY_PATH)) {
     const existing = fs.readFileSync(HOST_KEY_PATH, 'utf8');
     if (existing.includes('BEGIN RSA PRIVATE KEY')) {
@@ -24,7 +19,7 @@ function ensureHostKey(): string {
     }
   }
 
-  // Generate 2048-bit RSA private key in PKCS#1 PEM format for ssh2
+  console.warn('[SFTP] Host key missing or invalid, generating emergency fallback key.');
   const { privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
     publicKeyEncoding: { type: 'pkcs1', format: 'pem' },

@@ -73,22 +73,25 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
 
     const isOwner = server.userId === user.id;
     const isAdmin = ['admin', 'super_admin', 'moderator'].includes(user.role);
-    if (!isOwner && !isAdmin) {
+    const subuser = db.subusers?.find(s => s.serverId === serverId && s.userId === user.id);
+    const isSubuserWithConsoleView = subuser && subuser.permissions.includes('console.view');
+
+    if (!isOwner && !isAdmin && !isSubuserWithConsoleView) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req, serverId, user.id);
+      wss.emit('connection', ws, req, serverId, user);
     });
   });
 
-  wss.on('connection', async (ws: WebSocket, req, serverId: string, userId: string) => {
+  wss.on('connection', async (ws: WebSocket, req, serverId: string, user: any) => {
     const clientInfo: WsClientInfo = {
       ws,
       serverId,
-      userId,
+      userId: user.id,
       isAlive: true,
       connectedAt: new Date()
     };
@@ -131,6 +134,22 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
         if (payload.type === 'command' && typeof payload.command === 'string') {
           const cmd = payload.command.trim();
           if (cmd) {
+            // Check authorization
+            const db = await getDb();
+            const server = db.servers.find(s => s.id === serverId);
+            const isOwner = server?.userId === user.id;
+            const isAdmin = ['admin', 'super_admin', 'moderator'].includes(user.role);
+            const subuser = db.subusers?.find(s => s.serverId === serverId && s.userId === user.id);
+            const hasConsoleSend = isOwner || isAdmin || (subuser && subuser.permissions.includes('console.send'));
+
+            if (!hasConsoleSend) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'You do not have permission to send console commands.'
+              }));
+              return;
+            }
+
             const result = await sendServerCommand(serverId, cmd);
             ws.send(JSON.stringify({
               type: 'command_ack',
@@ -236,6 +255,23 @@ export function closeServerConsoleClients(serverId: string, reason: string = 'Se
       try {
         client.ws.send(JSON.stringify({
           type: 'server_deleted',
+          message: reason,
+          serverId,
+          timestamp: new Date().toISOString()
+        }));
+        client.ws.close(1000, reason);
+      } catch {}
+      activeClients.delete(client);
+    }
+  });
+}
+
+export function closeUserConsoleClient(serverId: string, userId: string, reason: string = 'Access revoked'): void {
+  activeClients.forEach((client) => {
+    if (client.serverId === serverId && client.userId === userId) {
+      try {
+        client.ws.send(JSON.stringify({
+          type: 'error',
           message: reason,
           serverId,
           timestamp: new Date().toISOString()

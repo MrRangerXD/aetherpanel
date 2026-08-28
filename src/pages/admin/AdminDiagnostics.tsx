@@ -15,7 +15,7 @@ export const AdminDiagnostics: React.FC = () => {
     setRefreshing(true);
     setError(null);
     try {
-      const res = await apiRequest('/api/v1/admin/diagnostics');
+      const res = await apiRequest('/admin/diagnostics');
       if (res.data) {
         setData(res.data);
       }

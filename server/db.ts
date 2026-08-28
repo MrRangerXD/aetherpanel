@@ -11,8 +11,9 @@ import {
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
   AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage,
-  ServerType, ServerTypeTheme
+  ServerType, ServerTypeTheme, ServerSubuser
 } from '../src/types';
+import { migrateUserAllocations } from './services/allocationService';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -59,6 +60,7 @@ export interface DatabaseSchema {
   apiAuditLogs: ApiAuditLog[];
   webhooks: WebhookSubscription[];
   legalPages: LegalPage[];
+  subusers: ServerSubuser[];
 }
 
 
@@ -792,354 +794,381 @@ export const defaultServerTypes: ServerType[] = [
 ];
 
 let dbCache: DatabaseSchema | null = null;
+let initPromise: Promise<DatabaseSchema> | null = null;
 let isWriting = false;
 let pendingSave: Promise<void> | null = null;
 
 export async function getDb(reload = false): Promise<DatabaseSchema> {
-  if (reload) dbCache = null;
-  if (dbCache) return dbCache;
-
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (reload) {
+    dbCache = null;
+    initPromise = null;
   }
+  
+  if (dbCache) return dbCache;
+  if (initPromise) return initPromise;
 
-  const adminEmail = process.env.AETHER_ADMIN_EMAIL || 'admin@aetherpanel.in';
-  const adminPassword = process.env.AETHER_ADMIN_PASSWORD || 'adminopp';
-
-  if (fs.existsSync(DB_FILE)) {
+  initPromise = (async () => {
     try {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      dbCache = JSON.parse(raw);
-
-      if (!dbCache!.locations || dbCache!.locations.length === 0) {
-        dbCache!.locations = defaultLocations;
-      }
-      if (!dbCache!.templates || dbCache!.templates.length === 0) {
-        dbCache!.templates = defaultTemplates;
-      }
-      if (!dbCache!.serverTypes || dbCache!.serverTypes.length === 0) {
-        dbCache!.serverTypes = defaultServerTypes;
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
       }
 
-      // Auto-migrate existing servers to ensure every server has a valid serverTypeId
-      if (dbCache!.servers && dbCache!.servers.length > 0) {
-        dbCache!.servers.forEach(srv => {
-          if (!srv.serverTypeId) {
-            const sw = (srv.software || '').toLowerCase();
-            const botRt = (srv.startup?.botRuntime || '').toLowerCase();
-            if (sw.includes('bedrock')) {
-              srv.serverTypeId = 'st_minecraft_bedrock';
-            } else if (sw.includes('node') || botRt === 'nodejs') {
-              srv.serverTypeId = 'st_nodejs';
-            } else if (sw.includes('bun') || botRt === 'bun') {
-              srv.serverTypeId = 'st_bun';
-            } else if (sw.includes('python') || botRt === 'python') {
-              srv.serverTypeId = 'st_python';
-            } else {
-              srv.serverTypeId = 'st_minecraft_java';
+      const adminEmail = process.env.AETHER_ADMIN_EMAIL || 'admin@aetherpanel.in';
+      const adminPassword = process.env.AETHER_ADMIN_PASSWORD || 'adminopp';
+
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const raw = fs.readFileSync(DB_FILE, 'utf-8');
+          dbCache = JSON.parse(raw);
+        } catch (readErr) {
+          console.warn('Could not parse db.json, generating new one:', readErr);
+          dbCache = null;
+        }
+      }
+
+      if (dbCache) {
+        if (!dbCache.locations || dbCache.locations.length === 0) {
+          dbCache.locations = defaultLocations;
+        }
+        if (!dbCache.templates || dbCache.templates.length === 0) {
+          dbCache.templates = defaultTemplates;
+        }
+        if (!dbCache.serverTypes || dbCache.serverTypes.length === 0) {
+          dbCache.serverTypes = defaultServerTypes;
+        }
+
+        // Auto-migrate existing servers to ensure every server has a valid serverTypeId
+        if (dbCache.servers && dbCache.servers.length > 0) {
+          dbCache.servers.forEach(srv => {
+            if (!srv.serverTypeId) {
+              const sw = (srv.software || '').toLowerCase();
+              const botRt = (srv.startup?.botRuntime || '').toLowerCase();
+              if (sw.includes('bedrock')) {
+                srv.serverTypeId = 'st_minecraft_bedrock';
+              } else if (sw.includes('node') || botRt === 'nodejs') {
+                srv.serverTypeId = 'st_nodejs';
+              } else if (sw.includes('bun') || botRt === 'bun') {
+                srv.serverTypeId = 'st_bun';
+              } else if (sw.includes('python') || botRt === 'python') {
+                srv.serverTypeId = 'st_python';
+              } else {
+                srv.serverTypeId = 'st_minecraft_java';
+              }
             }
+          });
+        }
+        if (!dbCache.nodeInstallTokens) {
+          dbCache.nodeInstallTokens = [];
+        }
+        if (!dbCache.subusers) {
+          dbCache.subusers = [];
+        }
+        if (!dbCache.ads) {
+          dbCache.ads = [];
+        }
+        if (!dbCache.adEvents) {
+          dbCache.adEvents = [];
+        }
+        if (!dbCache.afkSessions) {
+          dbCache.afkSessions = [];
+        }
+        if (!dbCache.rewardTransactions) {
+          dbCache.rewardTransactions = [];
+        }
+        if (!dbCache.afkSettings) {
+          dbCache.afkSettings = {
+            enabled: true,
+            creditsPerInterval: 5,
+            intervalMinutes: 10,
+            dailyMaxCredits: 100,
+            weeklyMaxCredits: 500,
+            minAccountAgeDays: 0
+          };
+        }
+        if (!dbCache.settings) {
+          dbCache.settings = {
+            platformName: 'AetherPanel',
+            brandName: 'AetherPanel',
+            brandTagline: 'Next-Generation Cloud Platform',
+            supportEmail: 'support@aetherpanel.com',
+            discordUrl: 'https://discord.gg/aetherpanel',
+            currencySymbol: '$',
+            currencyCode: 'USD',
+            registrationEnabled: true,
+            emailVerificationRequired: false,
+            maintenanceMode: false,
+            maintenanceMessage: 'Under maintenance',
+            defaultTheme: 'dark',
+            accentColor: '#8b5cf6',
+            enablePlayit: true
+          };
+        }
+        if (dbCache.settings.enablePlayit === undefined) {
+          dbCache.settings.enablePlayit = true;
+        }
+        if (!dbCache.settings.platformName) {
+          dbCache.settings.platformName = dbCache.settings.brandName || 'AetherPanel';
+        }
+        if (!dbCache.settings.paymentGateways) {
+          dbCache.settings.paymentGateways = {
+            upi: {
+              enabled: true,
+              upiId: 'aetherpay@upi',
+              merchantName: 'AetherPanel Hosting',
+              qrCodeUrl: 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?auto=format&fit=crop&w=400&q=80',
+              instructions: 'Scan the QR code or send payment to the UPI ID. Enter the 12-digit UTR or Transaction Ref ID after payment.'
+            },
+            bank: {
+              enabled: true,
+              bankName: 'HDFC Bank / Global Web Bank',
+              accountNumber: '918237192837',
+              ifsc: 'HDFC0001234',
+              accountHolder: 'Aether Cloud Infrastructure LLC',
+              instructions: 'Transfer to Bank Account and submit your NEFT/IMPS/Wire Reference Number.'
+            },
+            crypto: {
+              enabled: false,
+              walletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+              network: 'USDT (TRC20 / ERC20)',
+              instructions: 'Send USDT to the wallet address and submit TX Hash.'
+            },
+            stripe: {
+              enabled: true,
+              instructions: 'Instant automatic payment via Credit/Debit Card or Wallet.'
+            }
+          };
+        }
+
+        if (!dbCache.settings.authProviders) {
+          dbCache.settings.authProviders = {
+            emailPassword: {
+              enabled: true
+            },
+            google: {
+              enabled: true,
+              firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || '',
+              firebaseAuthDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+              firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
+              firebaseStorageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+              firebaseMessagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+              firebaseAppId: process.env.VITE_FIREBASE_APP_ID || ''
+            },
+            discord: {
+              enabled: true,
+              clientId: process.env.DISCORD_CLIENT_ID || '',
+              clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+              redirectUri: process.env.DISCORD_REDIRECT_URI || ''
+            }
+          };
+        }
+
+        if (!dbCache.settings.themeSettings) {
+          dbCache.settings.themeSettings = {
+            activeThemeId: 'golden',
+            activeFontId: 'Plus Jakarta Sans',
+            cardStyle: 'rounded-2xl',
+            glowIntensity: 'vibrant',
+            allowUserCustomization: true,
+            assets: {
+              logoUrl: '',
+              faviconUrl: '',
+              bgPatternUrl: '',
+              bannerUrl: '',
+              loginBgUrl: ''
+            }
+          };
+        }
+
+        // Filter out demo user and demo customer data
+        const demoUserIds = ['usr_demo', 'usr_demo_customer'];
+        const demoEmails = ['demo@aetherpanel.com', 'demo@example.com'];
+
+        dbCache.users = dbCache.users.filter(u => !demoUserIds.includes(u.id) && !demoEmails.includes(u.email));
+        dbCache.servers = dbCache.servers.filter(s => !demoUserIds.includes(s.userId));
+        dbCache.orders = dbCache.orders.filter(o => !demoUserIds.includes(o.userId));
+        dbCache.tickets = dbCache.tickets.filter(t => !demoUserIds.includes(t.userId));
+
+        // Filter out fake demo nodes if any existed
+        const fakeNodeIds = ['node_us_east', 'node_eu_central', 'node_ap_southeast', 'demo_node', 'test_node'];
+        dbCache.nodes = dbCache.nodes.filter(n => !fakeNodeIds.includes(n.id) && !n.name.toLowerCase().includes('demo') && !n.name.toLowerCase().includes('test'));
+
+        // If no node remains, auto create Local Node with auto-detected OS hardware telemetry
+        if (dbCache.nodes.length === 0) {
+          const hostRamMB = Math.round(os.totalmem() / (1024 * 1024));
+          const hostCpuCores = os.cpus()?.length || 4;
+          const hostName = os.hostname() || 'local-vps';
+
+          const localNode: Node = {
+            id: 'node_local',
+            name: 'Local Node',
+            hostname: hostName,
+            ip: '127.0.0.1',
+            fqdn: hostName,
+            daemonPort: 8080,
+            sftpPort: 2022,
+            location: 'local',
+            locationName: 'Primary Control Plane VPS',
+            flagCode: 'LOCAL',
+            totalRamMB: hostRamMB,
+            usedRamMB: 0,
+            totalCpuCores: hostCpuCores,
+            usedCpuCores: 0,
+            totalDiskGB: 200,
+            usedDiskGB: 5,
+            reservedRamMB: 2048,
+            reservedCpuCores: 1,
+            reservedDiskGB: 10,
+            ramOverallocatePercent: 100,
+            cpuOverallocatePercent: 0,
+            diskOverallocatePercent: 0,
+            maxServers: 100,
+            allowedProducts: ['prod_minecraft', 'prod_bot'],
+            status: 'online',
+            isMaintenanceMode: false,
+            isLocalNode: true,
+            serverCount: dbCache.servers.length,
+            daemonToken: 'daemon_token_local_node_secret_82910',
+            lastHeartbeatAt: new Date().toISOString(),
+            isSecure: true
+          };
+          dbCache.nodes.push(localNode);
+        }
+
+        if (!dbCache.passwords) {
+          dbCache.passwords = {};
+        }
+
+        // Ensure primary admin account exists with admin@aetherpanel.in
+        let admin = dbCache.users.find(u => u.role === 'super_admin' || u.role === 'admin' || u.email === 'admin@aetherpanel.com' || u.email === adminEmail);
+        if (!admin) {
+          const adminHash = bcrypt.hashSync(adminPassword, 10);
+          admin = {
+            id: 'usr_admin',
+            username: 'admin',
+            displayName: 'Aether Administrator',
+            email: adminEmail,
+            role: 'super_admin',
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            isSuspended: false,
+            emailVerified: true,
+            twoFactorEnabled: false,
+            tokenVersion: 1,
+            mustChangePassword: false,
+            serverLimit: 50,
+            credits: 500.0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          dbCache.users.unshift(admin);
+          dbCache.passwords[admin.id] = adminHash;
+        } else {
+          if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
+          if (admin.serverLimit === undefined) admin.serverLimit = 50;
+          // Only initialize password if no password hash exists in database
+          if (!dbCache.passwords[admin.id]) {
+            dbCache.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
+          }
+        }
+        delete dbCache.passwords['usr_demo'];
+
+        // Normalize all existing users: remove any mandatory password change requirements and assign default server limits
+        dbCache.users.forEach(u => {
+          if (u.mustChangePassword) {
+            u.mustChangePassword = false;
           }
         });
-      }
-      if (!dbCache!.nodeInstallTokens) {
-        dbCache!.nodeInstallTokens = [];
-      }
-      if (!dbCache!.ads) {
-        dbCache!.ads = [];
-      }
-      if (!dbCache!.adEvents) {
-        dbCache!.adEvents = [];
-      }
-      if (!dbCache!.afkSessions) {
-        dbCache!.afkSessions = [];
-      }
-      if (!dbCache!.rewardTransactions) {
-        dbCache!.rewardTransactions = [];
-      }
-      if (!dbCache!.afkSettings) {
-        dbCache!.afkSettings = {
-          enabled: true,
-          creditsPerInterval: 5,
-          intervalMinutes: 10,
-          dailyMaxCredits: 100,
-          weeklyMaxCredits: 500,
-          minAccountAgeDays: 0
-        };
-      }
-      if (!dbCache!.settings) {
-        dbCache!.settings = {
-          platformName: 'AetherPanel',
-          brandName: 'AetherPanel',
-          brandTagline: 'Next-Generation Cloud Platform',
-          supportEmail: 'support@aetherpanel.com',
-          discordUrl: 'https://discord.gg/aetherpanel',
-          currencySymbol: '$',
-          currencyCode: 'USD',
-          registrationEnabled: true,
-          emailVerificationRequired: false,
-          maintenanceMode: false,
-          maintenanceMessage: 'Under maintenance',
-          defaultTheme: 'dark',
-          accentColor: '#8b5cf6',
-          enablePlayit: true
-        };
-      }
-      if (dbCache!.settings.enablePlayit === undefined) {
-        dbCache!.settings.enablePlayit = true;
-      }
-      if (!dbCache!.settings.platformName) {
-        dbCache!.settings.platformName = dbCache!.settings.brandName || 'AetherPanel';
-      }
-      if (!dbCache!.settings.paymentGateways) {
-        dbCache!.settings.paymentGateways = {
-          upi: {
-            enabled: true,
-            upiId: 'aetherpay@upi',
-            merchantName: 'AetherPanel Hosting',
-            qrCodeUrl: 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?auto=format&fit=crop&w=400&q=80',
-            instructions: 'Scan the QR code or send payment to the UPI ID. Enter the 12-digit UTR or Transaction Ref ID after payment.'
-          },
-          bank: {
-            enabled: true,
-            bankName: 'HDFC Bank / Global Web Bank',
-            accountNumber: '918237192837',
-            ifsc: 'HDFC0001234',
-            accountHolder: 'Aether Cloud Infrastructure LLC',
-            instructions: 'Transfer to Bank Account and submit your NEFT/IMPS/Wire Reference Number.'
-          },
-          crypto: {
-            enabled: false,
-            walletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-            network: 'USDT (TRC20 / ERC20)',
-            instructions: 'Send USDT to the wallet address and submit TX Hash.'
-          },
-          stripe: {
-            enabled: true,
-            instructions: 'Instant automatic payment via Credit/Debit Card or Wallet.'
+
+        // Run authoritative user allocation migration
+        migrateUserAllocations(dbCache);
+
+        dbCache.nodes.forEach(n => {
+          if (n.daemonPort === undefined) n.daemonPort = 8080;
+          if (n.sftpPort === undefined) n.sftpPort = 2022;
+          if (n.ramOverallocatePercent === undefined) n.ramOverallocatePercent = 0;
+          if (n.cpuOverallocatePercent === undefined) n.cpuOverallocatePercent = 0;
+          if (n.diskOverallocatePercent === undefined) n.diskOverallocatePercent = 0;
+          if (n.maxServers === undefined) n.maxServers = 100;
+          if (!n.allowedProducts) n.allowedProducts = ['prod_minecraft', 'prod_bot'];
+          if (!n.lastHeartbeatAt) n.lastHeartbeatAt = new Date().toISOString();
+        });
+
+        // Templates and Marketplace are completely removed
+        dbCache.templates = [];
+        dbCache.marketplaceItems = [];
+
+        // Strict Data Isolation Check across VPS environments
+        const currentInstId = getInstallationId();
+
+        // If dbCache installationId exists and is different from current VPS installationId, purge stale cross-VPS database and files
+        if (dbCache.installationId && dbCache.installationId !== currentInstId) {
+          console.warn(`[AetherPanel Isolation]: Detected DB state from another installation (${dbCache.installationId}). Purging stale cross-VPS database and files for new installation (${currentInstId}).`);
+          const serversDir = path.join(DATA_DIR, 'servers');
+          if (fs.existsSync(serversDir)) {
+            fs.rmSync(serversDir, { recursive: true, force: true });
+            fs.mkdirSync(serversDir, { recursive: true });
           }
-        };
-      }
-
-      if (!dbCache!.settings.authProviders) {
-        dbCache!.settings.authProviders = {
-          emailPassword: {
-            enabled: true
-          },
-          google: {
-            enabled: true,
-            firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || '',
-            firebaseAuthDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-            firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
-            firebaseStorageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-            firebaseMessagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-            firebaseAppId: process.env.VITE_FIREBASE_APP_ID || ''
-          },
-          discord: {
-            enabled: true,
-            clientId: process.env.DISCORD_CLIENT_ID || '',
-            clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-            redirectUri: process.env.DISCORD_REDIRECT_URI || ''
-          }
-        };
-      }
-
-      if (!dbCache!.settings.themeSettings) {
-        dbCache!.settings.themeSettings = {
-          activeThemeId: 'golden',
-          activeFontId: 'Plus Jakarta Sans',
-          cardStyle: 'rounded-2xl',
-          glowIntensity: 'vibrant',
-          allowUserCustomization: true,
-          assets: {
-            logoUrl: '',
-            faviconUrl: '',
-            bgPatternUrl: '',
-            bannerUrl: '',
-            loginBgUrl: ''
-          }
-        };
-      }
-
-      // Filter out demo user and demo customer data
-      const demoUserIds = ['usr_demo', 'usr_demo_customer'];
-      const demoEmails = ['demo@aetherpanel.com', 'demo@example.com'];
-
-      dbCache!.users = dbCache!.users.filter(u => !demoUserIds.includes(u.id) && !demoEmails.includes(u.email));
-      dbCache!.servers = dbCache!.servers.filter(s => !demoUserIds.includes(s.userId));
-      dbCache!.orders = dbCache!.orders.filter(o => !demoUserIds.includes(o.userId));
-      dbCache!.tickets = dbCache!.tickets.filter(t => !demoUserIds.includes(t.userId));
-
-      // Filter out fake demo nodes if any existed
-      const fakeNodeIds = ['node_us_east', 'node_eu_central', 'node_ap_southeast', 'demo_node', 'test_node'];
-      dbCache!.nodes = dbCache!.nodes.filter(n => !fakeNodeIds.includes(n.id) && !n.name.toLowerCase().includes('demo') && !n.name.toLowerCase().includes('test'));
-
-      // If no node remains, auto create Local Node with auto-detected OS hardware telemetry
-      if (dbCache!.nodes.length === 0) {
-        const hostRamMB = Math.round(os.totalmem() / (1024 * 1024));
-        const hostCpuCores = os.cpus()?.length || 4;
-        const hostName = os.hostname() || 'local-vps';
-
-        const localNode: Node = {
-          id: 'node_local',
-          name: 'Local Node',
-          hostname: hostName,
-          ip: '127.0.0.1',
-          fqdn: hostName,
-          daemonPort: 8080,
-          sftpPort: 2022,
-          location: 'local',
-          locationName: 'Primary Control Plane VPS',
-          flagCode: 'LOCAL',
-          totalRamMB: hostRamMB,
-          usedRamMB: 0,
-          totalCpuCores: hostCpuCores,
-          usedCpuCores: 0,
-          totalDiskGB: 200,
-          usedDiskGB: 5,
-          reservedRamMB: 2048,
-          reservedCpuCores: 1,
-          reservedDiskGB: 10,
-          ramOverallocatePercent: 100,
-          cpuOverallocatePercent: 0,
-          diskOverallocatePercent: 0,
-          maxServers: 100,
-          allowedProducts: ['prod_minecraft', 'prod_bot'],
-          status: 'online',
-          isMaintenanceMode: false,
-          isLocalNode: true,
-          serverCount: dbCache!.servers.length,
-          daemonToken: 'daemon_token_local_node_secret_82910',
-          lastHeartbeatAt: new Date().toISOString(),
-          isSecure: true
-        };
-        dbCache!.nodes.push(localNode);
-      }
-
-      if (!dbCache!.passwords) {
-        dbCache!.passwords = {};
-      }
-
-      // Ensure primary admin account exists with admin@aetherpanel.in
-      let admin = dbCache!.users.find(u => u.role === 'super_admin' || u.role === 'admin' || u.email === 'admin@aetherpanel.com' || u.email === adminEmail);
-      if (!admin) {
-        const adminHash = bcrypt.hashSync(adminPassword, 10);
-        admin = {
-          id: 'usr_admin',
-          username: 'admin',
-          displayName: 'Aether Administrator',
-          email: adminEmail,
-          role: 'super_admin',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          isSuspended: false,
-          emailVerified: true,
-          twoFactorEnabled: false,
-          tokenVersion: 1,
-          mustChangePassword: false,
-          serverLimit: 50,
-          credits: 500.0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        dbCache!.users.unshift(admin);
-        dbCache!.passwords[admin.id] = adminHash;
-      } else {
-        if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
-        if (admin.serverLimit === undefined) admin.serverLimit = 50;
-        // Only initialize password if no password hash exists in database
-        if (!dbCache!.passwords[admin.id]) {
-          dbCache!.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
+          dbCache = await generateInitialDb();
+          saveDbSync();
+          createDbSnapshot();
+          return dbCache;
         }
-      }
-      delete dbCache!.passwords['usr_demo'];
 
-      // Normalize all existing users: remove any mandatory password change requirements and assign default server limits
-      dbCache!.users.forEach(u => {
-        if (u.mustChangePassword) {
-          u.mustChangePassword = false;
-        }
-        if (u.serverLimit === undefined) {
-          u.serverLimit = (u.role === 'admin' || u.role === 'super_admin') ? 50 : 1;
-        }
-      });
+        dbCache.installationId = currentInstId;
 
-      dbCache!.nodes.forEach(n => {
-        if (n.daemonPort === undefined) n.daemonPort = 8080;
-        if (n.sftpPort === undefined) n.sftpPort = 2022;
-        if (n.ramOverallocatePercent === undefined) n.ramOverallocatePercent = 0;
-        if (n.cpuOverallocatePercent === undefined) n.cpuOverallocatePercent = 0;
-        if (n.diskOverallocatePercent === undefined) n.diskOverallocatePercent = 0;
-        if (n.maxServers === undefined) n.maxServers = 100;
-        if (!n.allowedProducts) n.allowedProducts = ['prod_minecraft', 'prod_bot'];
-        if (!n.lastHeartbeatAt) n.lastHeartbeatAt = new Date().toISOString();
-      });
+        dbCache.users.forEach(u => {
+          if (!u.installationId) u.installationId = currentInstId;
+        });
+        dbCache.nodes.forEach(n => {
+          if (!n.installationId) n.installationId = currentInstId;
+        });
+        dbCache.servers.forEach(s => {
+          s.installationId = currentInstId;
+        });
+        dbCache.allocations.forEach(a => {
+          if (!a.installationId) a.installationId = currentInstId;
+        });
+        dbCache.backups.forEach(b => {
+          if (!b.installationId) b.installationId = currentInstId;
+        });
+        dbCache.databases.forEach(d => {
+          if (!d.installationId) d.installationId = currentInstId;
+        });
+        dbCache.schedules.forEach(s => {
+          if (!s.installationId) s.installationId = currentInstId;
+        });
+        dbCache.orders.forEach(o => {
+          if (!o.installationId) o.installationId = currentInstId;
+        });
+        dbCache.tickets.forEach(t => {
+          if (!t.installationId) t.installationId = currentInstId;
+        });
+        dbCache.auditLogs.forEach(l => {
+          if (!l.installationId) l.installationId = currentInstId;
+        });
 
-      // Templates and Marketplace are completely removed
-      dbCache!.templates = [];
-      dbCache!.marketplaceItems = [];
-
-      // Strict Data Isolation Check across VPS environments
-      const currentInstId = getInstallationId();
-
-      // If dbCache installationId exists and is different from current VPS installationId, purge stale cross-VPS database and files
-      if (dbCache!.installationId && dbCache!.installationId !== currentInstId) {
-        console.warn(`[AetherPanel Isolation]: Detected DB state from another installation (${dbCache!.installationId}). Purging stale cross-VPS database and files for new installation (${currentInstId}).`);
-        const serversDir = path.join(DATA_DIR, 'servers');
-        if (fs.existsSync(serversDir)) {
-          fs.rmSync(serversDir, { recursive: true, force: true });
-          fs.mkdirSync(serversDir, { recursive: true });
-        }
-        dbCache = await generateInitialDb();
         saveDbSync();
         createDbSnapshot();
         return dbCache;
       }
 
-      dbCache!.installationId = currentInstId;
-
-      dbCache!.users.forEach(u => {
-        if (!u.installationId) u.installationId = currentInstId;
-      });
-      dbCache!.nodes.forEach(n => {
-        if (!n.installationId) n.installationId = currentInstId;
-      });
-      dbCache!.servers.forEach(s => {
-        s.installationId = currentInstId;
-      });
-      dbCache!.allocations.forEach(a => {
-        if (!a.installationId) a.installationId = currentInstId;
-      });
-      dbCache!.backups.forEach(b => {
-        if (!b.installationId) b.installationId = currentInstId;
-      });
-      dbCache!.databases.forEach(d => {
-        if (!d.installationId) d.installationId = currentInstId;
-      });
-      dbCache!.schedules.forEach(s => {
-        if (!s.installationId) s.installationId = currentInstId;
-      });
-      dbCache!.orders.forEach(o => {
-        if (!o.installationId) o.installationId = currentInstId;
-      });
-      dbCache!.tickets.forEach(t => {
-        if (!t.installationId) t.installationId = currentInstId;
-      });
-      dbCache!.auditLogs.forEach(l => {
-        if (!l.installationId) l.installationId = currentInstId;
-      });
-
+      // If we reach here, it means dbCache is null (file didn't exist or failed to parse)
+      dbCache = await generateInitialDb();
       saveDbSync();
       createDbSnapshot();
-      return dbCache!;
+      return dbCache;
     } catch (e) {
       console.error('Error reading db.json, generating default database:', e);
+      // Fallback to generation if loading fails
+      dbCache = await generateInitialDb();
+      saveDbSync();
+      createDbSnapshot();
+      return dbCache;
+    } finally {
+      initPromise = null;
     }
-  }
+  })();
 
-  // Generate initial database
-  dbCache = await generateInitialDb();
-  saveDbSync();
-  createDbSnapshot();
-  return dbCache;
+  return initPromise;
 }
 
 export function createDbSnapshot(): void {
@@ -1158,16 +1187,25 @@ export function createDbSnapshot(): void {
 
 export function saveDbSync(): void {
   if (!dbCache) return;
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+  
+  const tempFile = `${DB_FILE}.tmp.${process.pid}.${Date.now()}`;
   try {
-    fs.writeFileSync(tempFile, JSON.stringify(dbCache, null, 2), 'utf-8');
+    const data = JSON.stringify(dbCache, null, 2);
+    fs.writeFileSync(tempFile, data, 'utf-8');
+    
+    // Atomically replace the target file
     fs.renameSync(tempFile, DB_FILE);
   } catch (err) {
-    console.error('[Database] Error in atomic write, falling back to direct write:', err);
-    fs.writeFileSync(DB_FILE, JSON.stringify(dbCache, null, 2), 'utf-8');
+    console.error('[Database] CRITICAL: Failed atomic write to db.json:', err);
+    
+    // Attempt cleanup of temp file
+    if (fs.existsSync(tempFile)) {
+      try { fs.unlinkSync(tempFile); } catch {}
+    }
+    
+    // Do not fall back to direct write to avoid partial data corruption
+    // The application should ideally have a retry mechanism or error state
+    throw err;
   }
 }
 
@@ -1208,6 +1246,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     emailVerified: true,
     twoFactorEnabled: false,
     mustChangePassword: false,
+    baseServerAllocations: 50,
+    adminGrantedAllocations: 0,
     serverLimit: 50,
     credits: 500.0,
     installationId: currentInstId,
@@ -1635,7 +1675,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     apiKeys: [],
     apiAuditLogs: [],
     webhooks: [],
-    legalPages: defaultLegalPages
+    legalPages: defaultLegalPages,
+    subusers: []
   };
 }
 

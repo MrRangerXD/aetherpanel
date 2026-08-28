@@ -24,6 +24,8 @@ export const AdminUsers: React.FC = () => {
   // Allocation Modal
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const [allocationLimit, setAllocationLimit] = useState<number>(1);
+  const [allocAction, setAllocAction] = useState<'set' | 'grant' | 'remove'>('set');
+  const [allocAmount, setAllocAmount] = useState<number>(1);
 
   // Create User Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -144,17 +146,22 @@ export const AdminUsers: React.FC = () => {
   const handleAdjustAllocation = async () => {
     if (!selectedUser) return;
     setActionLoading(true);
-    const res = await apiRequest(`/admin/users/${selectedUser.id}/allocation`, {
-      method: 'PATCH',
-      body: JSON.stringify({ serverLimit: allocationLimit })
+    const res = await apiRequest('/admin/allocations/adjust', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: selectedUser.id,
+        action: allocAction,
+        amount: allocAction === 'set' ? undefined : allocAmount,
+        serverLimit: allocAction === 'set' ? allocationLimit : undefined
+      })
     });
     setActionLoading(false);
     if (res.success) {
-      showToast('success', 'User server quota limit successfully updated');
+      showToast('success', res.message || 'User server allocations updated successfully');
       setShowAllocationModal(false);
       fetchUsers();
     } else {
-      showToast('error', res.error?.message || 'Failed to adjust server quota limit');
+      showToast('error', res.error?.message || 'Failed to adjust server allocations');
     }
   };
 
@@ -470,11 +477,11 @@ export const AdminUsers: React.FC = () => {
       {/* Allocation Limit Modal */}
       {showAllocationModal && selectedUser && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-2xl">
+          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-2xl">
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-amber-400" /> Server Allocation Quota
+                  <Cpu className="w-4 h-4 text-amber-400" /> Manage Server Allocations
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">User: <strong className="text-white">{selectedUser.email}</strong></p>
               </div>
@@ -483,20 +490,104 @@ export const AdminUsers: React.FC = () => {
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs text-zinc-300 mb-1">Max Server Allocation Count</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={allocationLimit}
-                onChange={(e) => setAllocationLimit(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
-              />
-              <p className="text-[10px] text-zinc-500 mt-1.5 leading-relaxed">
-                Determines the maximum number of server instances this user is permitted to deploy simultaneously. Set to 0 to suspend deployments.
-              </p>
+            {/* Current Breakdown */}
+            <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-center">
+              <div>
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Base Plan</div>
+                <div className="text-sm font-bold font-mono text-white mt-0.5">
+                  {selectedUser.baseServerAllocations ?? 1}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Extra Granted</div>
+                <div className="text-sm font-bold font-mono text-amber-400 mt-0.5">
+                  +{selectedUser.adminGrantedAllocations ?? 0}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Total Limit</div>
+                <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
+                  {selectedUser.role === 'admin' || selectedUser.role === 'super_admin'
+                    ? 'Unlimited'
+                    : (selectedUser.serverLimit ?? ((selectedUser.baseServerAllocations ?? 1) + (selectedUser.adminGrantedAllocations ?? 0)))}
+                </div>
+              </div>
             </div>
+
+            {/* Action Modes */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-900 rounded-xl border border-zinc-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setAllocAction('grant')}
+                className={`py-1.5 rounded-lg font-medium transition ${
+                  allocAction === 'grant' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                + Grant Extra
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllocAction('remove')}
+                className={`py-1.5 rounded-lg font-medium transition ${
+                  allocAction === 'remove' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                - Remove Extra
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllocAction('set')}
+                className={`py-1.5 rounded-lg font-medium transition ${
+                  allocAction === 'set' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                = Set Limit
+              </button>
+            </div>
+
+            {allocAction === 'set' ? (
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Set Total Allocation Limit</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={allocationLimit}
+                  onChange={(e) => setAllocationLimit(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  {allocAction === 'grant' ? 'Number of Extra Allocations to Grant' : 'Number of Extra Allocations to Remove'}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={allocAmount}
+                    onChange={(e) => setAllocAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                  {[1, 2, 5].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setAllocAmount(amt)}
+                      className="px-2.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-mono text-zinc-300 border border-zinc-800"
+                    >
+                      {allocAction === 'grant' ? `+${amt}` : `-${amt}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Allocations are shared across all server types (Minecraft, Discord bots, etc.). Cannot reduce limits below user's active server count.
+            </p>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -510,10 +601,10 @@ export const AdminUsers: React.FC = () => {
                 type="button"
                 disabled={actionLoading}
                 onClick={handleAdjustAllocation}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-xs text-zinc-950 font-bold rounded-xl flex items-center gap-1.5"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-xs text-zinc-950 font-bold rounded-xl flex items-center gap-1.5 shadow-lg"
               >
                 {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>{actionLoading ? 'Saving...' : 'Save Allocation'}</span>
+                <span>{actionLoading ? 'Saving...' : 'Apply Allocation Changes'}</span>
               </button>
             </div>
           </div>

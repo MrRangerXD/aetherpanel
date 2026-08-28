@@ -106,7 +106,7 @@ router.get('/:software/:version/builds', async (req: Request, res: Response) => 
 });
 
 // Helper for server access check
-async function checkServerAccess(req: AuthenticatedRequest, res: Response, serverId: string) {
+async function checkServerAccess(req: AuthenticatedRequest, res: Response, serverId: string, requiredPermission?: string) {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
 
@@ -117,13 +117,21 @@ async function checkServerAccess(req: AuthenticatedRequest, res: Response, serve
 
   const isOwner = server.userId === req.user!.id;
   const isAdmin = ['admin', 'super_admin', 'moderator'].includes(req.user!.role);
+  const subuser = db.subusers?.find(s => s.serverId === serverId && s.userId === req.user!.id);
 
   if (!isOwner && !isAdmin) {
-    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied to this server.' } });
-    return null;
+    if (!subuser) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied to this server.' } });
+      return null;
+    }
+
+    if (requiredPermission && !subuser.permissions.includes(requiredPermission)) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: `Required permission '${requiredPermission}' is missing.` } });
+      return null;
+    }
   }
 
-  return { server, db };
+  return { server, db, isOwner, isAdmin, subuser };
 }
 
 // GET /api/v1/minecraft/:id/properties - Get parsed server.properties

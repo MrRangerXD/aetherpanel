@@ -210,7 +210,7 @@ export function queryIpc(socketPath: string, req: any, timeoutMs = 2500): Promis
 /**
  * Downloads official Playit agent binary matching system architecture.
  */
-export function downloadPlayitBinarySync(): boolean {
+export function downloadPlayitBinarySync(): { success: boolean; error?: string } {
   const binDir = path.join(process.cwd(), 'bin');
   const binPath = path.join(binDir, 'playit');
   try {
@@ -219,18 +219,25 @@ export function downloadPlayitBinarySync(): boolean {
     }
 
     const arch = os.arch();
-    const downloadUrl = arch === 'arm64'
-      ? 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-aarch64'
-      : 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64';
+    let downloadUrl = '';
+    
+    if (arch === 'arm64' || arch === 'aarch64') {
+      downloadUrl = 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-aarch64';
+    } else if (arch === 'x64' || arch === 'amd64') {
+      downloadUrl = 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64';
+    } else {
+      return { success: false, error: `Unsupported architecture: ${arch}` };
+    }
 
     console.log(`[PLAYIT] Downloading official Playit.GG agent binary (${arch}) from ${downloadUrl}...`);
-    execSync(`curl -fsSL -o "${binPath}" "${downloadUrl}"`, { stdio: 'ignore', timeout: 20000 });
+    execSync(`curl -fsSL -o "${binPath}" "${downloadUrl}"`, { stdio: 'ignore', timeout: 30000 });
     fs.chmodSync(binPath, '755');
     console.log(`[PLAYIT] Binary downloaded and permissions configured at ${binPath}`);
-    return true;
+    return { success: true };
   } catch (err: any) {
-    console.error(`[PLAYIT] Download failed: ${err.message || err}`);
-    return false;
+    const msg = `Download failed: ${err.message || err}`;
+    console.error(`[PLAYIT] ${msg}`);
+    return { success: false, error: msg };
   }
 }
 
@@ -241,44 +248,57 @@ export function checkPlayitBinary(): { exists: boolean; runnable: boolean; versi
   const binPath = path.join(process.cwd(), 'bin', 'playit');
   
   if (!fs.existsSync(binPath)) {
-    const ok = downloadPlayitBinarySync();
-    if (!ok) {
-      return { exists: false, runnable: false, version: '1.0.10', reason: 'Playit agent binary missing and download failed.' };
+    console.warn('[PLAYIT] Binary missing, attempting auto-download...');
+    const result = downloadPlayitBinarySync();
+    if (!result.success) {
+      return { exists: false, runnable: false, version: '1.0.10', reason: result.error || 'Playit agent binary missing and download failed.' };
     }
+  }
+
+  // Double check existence after potential download
+  if (!fs.existsSync(binPath)) {
+    return { exists: false, runnable: false, version: '1.0.10', reason: 'Playit agent binary missing.' };
   }
 
   try {
     fs.accessSync(binPath, fs.constants.X_OK);
   } catch {
     try {
+      console.log('[PLAYIT] Attempting to fix executable permission...');
       fs.chmodSync(binPath, '755');
-    } catch {
-      return { exists: true, runnable: false, version: '1.0.10', reason: 'Binary is not executable.' };
+    } catch (err: any) {
+      return { exists: true, runnable: false, version: '1.0.10', reason: `Binary is not executable and chmod failed: ${err.message}` };
     }
   }
 
   try {
-    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3000 });
+    // Check if the binary actually runs and returns help output
+    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 5000 });
     return { exists: true, runnable: true, version: '1.0.10' };
   } catch (err: any) {
     const errStr = String(err.message || err);
+    
+    // Check for common execution errors
     if (errStr.includes('format error') || errStr.includes('exec format') || err.status === 126 || err.status === 127) {
-      console.warn(`[PLAYIT] Binary execution format mismatch or corruption detected. Re-downloading...`);
-      const ok = downloadPlayitBinarySync();
-      if (ok) {
+      console.warn(`[PLAYIT] Binary execution format mismatch or corruption detected (Arch: ${os.arch()}). Re-downloading...`);
+      const result = downloadPlayitBinarySync();
+      if (result.success) {
         try {
-          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3000 });
+          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 5000 });
           return { exists: true, runnable: true, version: '1.0.10' };
-        } catch {
-          return { exists: true, runnable: false, version: '1.0.10', reason: 'Re-downloaded binary execution check failed.' };
+        } catch (retryErr: any) {
+          return { exists: true, runnable: false, version: '1.0.10', reason: `Re-downloaded binary execution check failed: ${retryErr.message}` };
         }
       }
-      return { exists: true, runnable: false, version: '1.0.10', reason: 'Incompatible architecture or binary corruption.' };
+      return { exists: true, runnable: false, version: '1.0.10', reason: `Incompatible architecture or binary corruption: ${result.error}` };
     }
+
+    // Playit might exit with non-zero on --help in some versions/envs, so we check status codes
     if (err.status === 2 || err.status === 1 || err.status === 0) {
       return { exists: true, runnable: true, version: '1.0.10' };
     }
-    return { exists: true, runnable: false, version: '1.0.10', reason: `Execution verification error: ${err.message || err}` };
+    
+    return { exists: true, runnable: false, version: '1.0.10', reason: `Execution verification error (Code: ${err.status}): ${err.message || err}` };
   }
 }
 

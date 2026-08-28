@@ -15,6 +15,7 @@ import { clearConsoleBuffer, closeServerConsoleClients } from '../consoleWs';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerType } from './serverTypes';
 import { getDiscordOAuthRedirectUri } from '../oauthUrlResolver';
+import { getUserAllocationStatus, adjustUserAllocations, countOwnedServers } from '../services/allocationService';
 
 const router = Router();
 
@@ -78,14 +79,21 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const isTargetAdmin = role === 'admin' || role === 'super_admin';
+  const baseAlloc = isTargetAdmin ? 50 : (typeof req.body.baseServerAllocations === 'number' ? req.body.baseServerAllocations : (typeof req.body.serverLimit === 'number' ? req.body.serverLimit : 1));
+  const extraAlloc = typeof req.body.adminGrantedAllocations === 'number' ? req.body.adminGrantedAllocations : 0;
+
   const newUser: User = {
     id: `usr_${Date.now()}`,
     email: email.trim().toLowerCase(),
     username: username.trim().toLowerCase(),
     displayName: displayName || username.trim(),
     role: role || 'user',
+    plan: 'free',
     credits: parseFloat(credits) || 0,
-    serverLimit: typeof req.body.serverLimit === 'number' ? req.body.serverLimit : (role === 'admin' || role === 'super_admin' ? 50 : 1),
+    baseServerAllocations: baseAlloc,
+    adminGrantedAllocations: extraAlloc,
+    serverLimit: baseAlloc + extraAlloc,
     isSuspended: false,
     emailVerified: true,
     twoFactorEnabled: false,
@@ -102,6 +110,81 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, data: newUser, message: `User ${newUser.email} created successfully` });
 });
 
+// GET /api/v1/admin/allocations - List allocation stats for all users (or filter by ?email= or ?search=)
+router.get('/allocations', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const emailQuery = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+  const searchQuery = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
+
+  let users = db.users;
+  if (emailQuery) {
+    users = users.filter(u => u.email.toLowerCase() === emailQuery);
+  } else if (searchQuery) {
+    users = users.filter(u =>
+      u.email.toLowerCase().includes(searchQuery) ||
+      u.username.toLowerCase().includes(searchQuery) ||
+      u.displayName.toLowerCase().includes(searchQuery) ||
+      u.id.toLowerCase().includes(searchQuery)
+    );
+  }
+
+  const list = users.map(u => getUserAllocationStatus(db, u));
+  res.json({ success: true, data: list });
+});
+
+// GET /api/v1/admin/allocations/user - Search single user by email or id
+router.get('/allocations/user', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const query = typeof req.query.email === 'string' ? req.query.email.trim() : (typeof req.query.userId === 'string' ? req.query.userId.trim() : '');
+
+  if (!query) {
+    return res.status(400).json({ success: false, error: { code: 'MISSING_QUERY', message: 'Please specify an email address or userId.' } });
+  }
+
+  const user = db.users.find(u => u.id === query || u.email.toLowerCase() === query.toLowerCase() || u.username.toLowerCase() === query.toLowerCase());
+  if (!user) {
+    return res.status(404).json({ success: false, error: { code: 'USER_NOT_FOUND', message: `No user found matching '${query}'` } });
+  }
+
+  const status = getUserAllocationStatus(db, user);
+  res.json({ success: true, data: status });
+});
+
+// POST /api/v1/admin/allocations/adjust - Grant, remove, or set allocations
+router.post('/allocations/adjust', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const { email, userId, action, amount, baseServerAllocations, adminGrantedAllocations, serverLimit } = req.body;
+
+  const targetIdentifier = userId || email;
+  if (!targetIdentifier) {
+    return res.status(400).json({ success: false, error: { code: 'MISSING_TARGET', message: 'User ID or email is required.' } });
+  }
+
+  const result = adjustUserAllocations(db, targetIdentifier, {
+    action: action || 'set',
+    amount,
+    baseServerAllocations,
+    adminGrantedAllocations,
+    serverLimit
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ success: false, error: result.error });
+  }
+
+  saveDbSync();
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_USER_ALLOCATION',
+    result.status!.userId,
+    `Admin adjusted server allocations for ${result.status!.email}: action=${action || 'set'}, totalLimit=${result.status!.limit}`
+  );
+
+  res.json({ success: true, data: result.status, message: 'User server allocations updated successfully.' });
+});
+
 // PUT /api/v1/admin/users/:id - Update user role, credits, status, allocation
 router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -109,7 +192,7 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
 
   if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
 
-  const { role, isSuspended, credits, displayName, serverLimit } = req.body;
+  const { role, isSuspended, credits, displayName, serverLimit, baseServerAllocations, adminGrantedAllocations } = req.body;
 
   if (role && ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(role)) {
     user.role = role;
@@ -120,11 +203,19 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (typeof credits === 'number') {
     user.credits = credits;
   }
-  if (typeof serverLimit === 'number') {
-    user.serverLimit = serverLimit;
-  }
   if (displayName) {
     user.displayName = displayName;
+  }
+
+  if (typeof serverLimit === 'number' || typeof baseServerAllocations === 'number' || typeof adminGrantedAllocations === 'number') {
+    const adjResult = adjustUserAllocations(db, user.id, {
+      baseServerAllocations,
+      adminGrantedAllocations,
+      serverLimit
+    });
+    if (!adjResult.success) {
+      return res.status(400).json({ success: false, error: adjResult.error });
+    }
   }
 
   user.updatedAt = new Date().toISOString();
@@ -141,18 +232,36 @@ router.patch('/users/:id/allocation', async (req: AuthenticatedRequest, res: Res
   const user = db.users.find(u => u.id === req.params.id);
   if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
 
-  const { serverLimit } = req.body;
-  if (typeof serverLimit !== 'number' || serverLimit < 0) {
-    return res.status(400).json({ success: false, error: { code: 'INVALID_LIMIT', message: 'Server limit must be a non-negative number' } });
+  const { serverLimit, baseServerAllocations, adminGrantedAllocations, action, amount } = req.body;
+
+  const adjResult = adjustUserAllocations(db, user.id, {
+    action: action || 'set',
+    amount,
+    baseServerAllocations,
+    adminGrantedAllocations,
+    serverLimit
+  });
+
+  if (!adjResult.success) {
+    return res.status(400).json({ success: false, error: adjResult.error });
   }
 
-  user.serverLimit = serverLimit;
-  user.updatedAt = new Date().toISOString();
   saveDbSync();
 
-  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_USER_ALLOCATION', user.id, `Updated server allocation limit for ${user.email} to ${serverLimit}`);
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_USER_ALLOCATION',
+    user.id,
+    `Updated server allocation limit for ${user.email} (Base: ${adjResult.status?.baseServerAllocations}, Extra: ${adjResult.status?.adminGrantedAllocations}, Limit: ${adjResult.status?.limit})`
+  );
 
-  res.json({ success: true, data: { userId: user.id, serverLimit: user.serverLimit } });
+  res.json({
+    success: true,
+    data: adjResult.status,
+    message: 'Server allocation updated successfully.'
+  });
 });
 
 // PATCH /api/v1/admin/users/:id/role

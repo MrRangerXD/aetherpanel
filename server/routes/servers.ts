@@ -16,7 +16,7 @@ import {
   listMinecraftPlugins, toggleMinecraftPlugin, getServerDir, safePath,
   installServerDependencies, clearConsoleBuffer
 } from '../provider';
-import { closeServerConsoleClients } from '../consoleWs';
+import { closeServerConsoleClients, closeUserConsoleClient } from '../consoleWs';
 import {
   getPlayitStatus, installPlayitAgent, togglePlayitAgent, restartPlayitAgent, provisionPlayitSecret, claimPlayitAgent, uninstallPlayitAgent, repairPlayitAgent, getPlayitLogs, PlayitConflictError
 } from '../playitService';
@@ -60,8 +60,8 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit per file
 });
 
-// Helper to check server ownership or admin power
-async function checkServerAccess(req: AuthenticatedRequest, res: Response, serverId: string) {
+// Helper to check server ownership, admin power, or subuser permission
+async function checkServerAccess(req: AuthenticatedRequest, res: Response, serverId: string, requiredPermission?: string) {
   const db = await getDb();
   const server = db.servers.find(s => s.id === serverId);
 
@@ -73,27 +73,76 @@ async function checkServerAccess(req: AuthenticatedRequest, res: Response, serve
   const isOwner = server.userId === req.user!.id;
   const isAdmin = ['admin', 'super_admin', 'moderator'].includes(req.user!.role);
 
+  // Check subuser
+  const subuser = db.subusers?.find(s => s.serverId === serverId && s.userId === req.user!.id);
+
   if (!isOwner && !isAdmin) {
-    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied to this server.' } });
-    return null;
+    if (!subuser) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied to this server.' } });
+      return null;
+    }
+
+    if (requiredPermission) {
+      if (!subuser.permissions.includes(requiredPermission)) {
+        res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: `Required permission '${requiredPermission}' is missing.` } });
+        return null;
+      }
+    }
   }
 
-  return { server, db };
+  return { server, db, isOwner, isAdmin, requesterSubuser: subuser };
 }
 
 // GET /api/v1/servers - List user's servers
 router.get('/', authMiddleware, requireApiKeyScope('servers:read'), async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  const userServers = db.servers.filter(s => s.userId === req.user!.id).map(srv => ({
-    ...srv,
-    serverType: resolveServerType(srv, db.serverTypes || [])
-  }));
-  res.json({ success: true, data: userServers });
+  
+  // Find subuser mapping
+  const subuserEntries = (db.subusers || [])
+    .filter(sub => sub.userId === req.user!.id);
+  
+  const subuserServerIds = subuserEntries.map(sub => sub.serverId);
+
+  const ownedServers = db.servers
+    .filter(s => s.userId === req.user!.id)
+    .map(srv => ({
+      ...srv,
+      serverType: resolveServerType(srv, db.serverTypes || []),
+      isSubuser: false
+    }));
+
+  const sharedServers = db.servers
+    .filter(s => subuserServerIds.includes(s.id) && s.userId !== req.user!.id)
+    .map(srv => {
+      const subuserEntry = subuserEntries.find(sub => sub.serverId === srv.id);
+      const owner = db.users.find(u => u.id === srv.userId);
+      
+      return {
+        ...srv,
+        serverType: resolveServerType(srv, db.serverTypes || []),
+        isSubuser: true,
+        permissions: subuserEntry ? subuserEntry.permissions : [],
+        owner: owner ? {
+          id: owner.id,
+          username: owner.username,
+          displayName: owner.displayName
+        } : undefined
+      };
+    });
+
+  const allServers = [...ownedServers, ...sharedServers];
+
+  res.json({ 
+    success: true, 
+    data: allServers,
+    ownedServers,
+    sharedServers
+  });
 });
 
 // GET /api/v1/servers/:id - Server details
 router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'server.view');
   if (!access) return;
 
   const { server, db } = access;
@@ -105,12 +154,17 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
   const playitStatus = node ? await getNodePlayitStatus(node.id).catch(() => null) : null;
   const publicEndpoint = resolveServerPublicEndpoint(server, node, playitStatus);
 
+  const isSubuser = server.userId !== req.user!.id;
+  const subuserEntry = isSubuser ? (db.subusers || []).find(sub => sub.serverId === server.id && sub.userId === req.user!.id) : null;
+
   res.json({
     success: true,
     data: {
       server: {
         ...server,
         serverType: resolveServerType(server, db.serverTypes || []),
+        isSubuser,
+        permissions: subuserEntry ? subuserEntry.permissions : undefined,
         resolvedPublicEndpoint: publicEndpoint.endpoint,
         endpointSource: publicEndpoint.source,
         isExternallyReachable: publicEndpoint.isExternallyReachable
@@ -136,7 +190,7 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
 
 // GET /api/v1/servers/:id/sftp - Resolved public SFTP Connection details
 router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.view');
   if (!access) return;
 
   const sftpInfo = await resolveServerSftpInfo(req.params.id, req.get('host'));
@@ -148,11 +202,17 @@ router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: R
 
 // POST /api/v1/servers/:id/power - Power actions
 router.post('/:id/power', authMiddleware, requireApiKeyScope('servers:control'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const { action } = req.body; // 'start', 'stop', 'restart', 'kill', 'reinstall'
+  let reqPerm = 'server.start';
+  if (action === 'stop') reqPerm = 'server.stop';
+  else if (action === 'restart') reqPerm = 'server.restart';
+  else if (action === 'kill') reqPerm = 'server.kill';
+  else if (action === 'reinstall') reqPerm = 'server.reinstall';
+
+  const access = await checkServerAccess(req, res, req.params.id, reqPerm);
   if (!access) return;
 
   const { server } = access;
-  const { action } = req.body; // 'start', 'stop', 'restart', 'kill', 'reinstall'
 
   let success = false;
   if (action === 'start') {
@@ -188,7 +248,7 @@ router.post('/:id/power', authMiddleware, requireApiKeyScope('servers:control'),
 
 // GET /api/v1/servers/:id/preflight - Validate environment & runtime preflight
 router.get('/:id/preflight', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'server.view');
   if (!access) return;
 
   const preflight = await validateServerPreflight(req.params.id);
@@ -197,7 +257,7 @@ router.get('/:id/preflight', authMiddleware, async (req: AuthenticatedRequest, r
 
 // PATCH /api/v1/servers/:id - Update server metadata, startup configuration, and environment variables
 router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
   const { server, db } = access;
@@ -244,7 +304,7 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
 
 // GET /api/v1/servers/:id/console - Console logs
 router.get('/:id/console', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'console.view');
   if (!access) return;
 
   const logs = await getServerConsoleLogs(req.params.id);
@@ -253,7 +313,7 @@ router.get('/:id/console', authMiddleware, async (req: AuthenticatedRequest, res
 
 // POST /api/v1/servers/:id/command - Send console command
 router.post('/:id/command', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'console.send');
   if (!access) return;
 
   const { command } = req.body;
@@ -267,7 +327,7 @@ router.post('/:id/command', authMiddleware, async (req: AuthenticatedRequest, re
 
 // GET /api/v1/servers/:id/files - List files
 router.get('/:id/files', authMiddleware, requireApiKeyScope('files:read'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.view');
   if (!access) return;
 
   const relPath = (req.query.path as string) || '';
@@ -281,7 +341,7 @@ router.get('/:id/files', authMiddleware, requireApiKeyScope('files:read'), async
 
 // GET /api/v1/servers/:id/files/content - Read file
 router.get('/:id/files/content', authMiddleware, requireApiKeyScope('files:read'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.view');
   if (!access) return;
 
   const filePath = req.query.path as string;
@@ -297,7 +357,7 @@ router.get('/:id/files/content', authMiddleware, requireApiKeyScope('files:read'
 
 // POST /api/v1/servers/:id/files/content - Write file
 router.post('/:id/files/content', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.edit');
   if (!access) return;
 
   const { path: filePath, content } = req.body;
@@ -313,7 +373,7 @@ router.post('/:id/files/content', authMiddleware, requireApiKeyScope('files:writ
 
 // DELETE /api/v1/servers/:id/files - Delete file or folder (single or multiple)
 router.delete('/:id/files', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.delete');
   if (!access) return;
 
   const filePath = req.query.path as string;
@@ -352,7 +412,7 @@ router.delete('/:id/files', authMiddleware, requireApiKeyScope('files:write'), a
 
 // POST /api/v1/servers/:id/files/bulk-delete - Explicit bulk delete
 router.post('/:id/files/bulk-delete', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.delete');
   if (!access) return;
 
   const { paths } = req.body;
@@ -378,7 +438,7 @@ router.post('/:id/files/bulk-delete', authMiddleware, requireApiKeyScope('files:
 
 // POST /api/v1/servers/:id/files/move - Move file(s) or folder(s)
 router.post('/:id/files/move', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.rename');
   if (!access) return;
 
   const { sources, destinationDir, conflictStrategy } = req.body;
@@ -409,7 +469,7 @@ router.post('/:id/files/move', authMiddleware, requireApiKeyScope('files:write')
 
 // POST /api/v1/servers/:id/files/copy - Copy file(s) or folder(s)
 router.post('/:id/files/copy', authMiddleware, requireApiKeyScope('files:write'), async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.create');
   if (!access) return;
 
   const { sources, destinationDir, conflictStrategy } = req.body;
@@ -440,7 +500,7 @@ router.post('/:id/files/copy', authMiddleware, requireApiKeyScope('files:write')
 
 // POST /api/v1/servers/:id/files/mkdir - Create directory
 router.post('/:id/files/mkdir', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.create');
   if (!access) return;
 
   const { path: dirPath } = req.body;
@@ -456,7 +516,7 @@ router.post('/:id/files/mkdir', authMiddleware, async (req: AuthenticatedRequest
 
 // POST /api/v1/servers/:id/files/upload - Upload file(s)
 router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
   if (!access) return;
 
   upload.array('files', 20)(req, res, async (err: any) => {
@@ -485,7 +545,7 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
 
 // POST /api/v1/servers/:id/files/rename - Rename file or folder
 router.post('/:id/files/rename', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.rename');
   if (!access) return;
 
   const { oldPath, newPath } = req.body;
@@ -503,7 +563,7 @@ router.post('/:id/files/rename', authMiddleware, async (req: AuthenticatedReques
 
 // GET /api/v1/servers/:id/files/download - Download file
 router.get('/:id/files/download', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.download');
   if (!access) return;
 
   const relPath = req.query.path as string;
@@ -522,7 +582,7 @@ router.get('/:id/files/download', authMiddleware, async (req: AuthenticatedReque
 
 // POST /api/v1/servers/:id/files/compress - Create ZIP archive (single or multiple items)
 router.post('/:id/files/compress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.create');
   if (!access) return;
 
   const { path: relPath, paths, outputName, currentDir } = req.body;
@@ -546,7 +606,7 @@ router.post('/:id/files/compress', authMiddleware, async (req: AuthenticatedRequ
 
 // POST /api/v1/servers/:id/files/decompress - Extract ZIP archive
 router.post('/:id/files/decompress', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'files.create');
   if (!access) return;
 
   const { path: zipRelPath, destinationDir } = req.body;
@@ -568,7 +628,7 @@ router.post('/:id/files/decompress', authMiddleware, async (req: AuthenticatedRe
 
 // PATCH /api/v1/servers/:id - Update server name and settings
 router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'settings.manage');
   if (!access) return;
 
   const { server, db } = access;
@@ -593,7 +653,7 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
 
 // POST /api/v1/servers/:id/reinstall - Reinstall server
 router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'server.reinstall');
   if (!access) return;
 
   const { server } = access;
@@ -614,7 +674,7 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
 // --- MINECRAFT PLUGINS ---
 // GET /api/v1/servers/:id/plugins - List installed plugins
 router.get('/:id/plugins', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'plugins.view');
   if (!access) return;
 
   const plugins = listMinecraftPlugins(req.params.id);
@@ -634,7 +694,7 @@ router.post('/:id/plugins/search', authMiddleware, async (req: AuthenticatedRequ
 
 // POST /api/v1/servers/:id/plugins/install - Install plugin by downloading real .jar
 router.post('/:id/plugins/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'plugins.manage');
   if (!access) return;
 
   const { name, downloadUrl, projectId, provider } = req.body;
@@ -660,7 +720,7 @@ router.post('/:id/plugins/install', authMiddleware, async (req: AuthenticatedReq
 
 // POST /api/v1/servers/:id/plugins/toggle - Enable or disable plugin
 router.post('/:id/plugins/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'plugins.manage');
   if (!access) return;
 
   const { filename } = req.body;
@@ -677,7 +737,7 @@ router.post('/:id/plugins/toggle', authMiddleware, async (req: AuthenticatedRequ
 
 // DELETE /api/v1/servers/:id/plugins/:filename - Delete plugin
 router.delete('/:id/plugins/:filename', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'plugins.manage');
   if (!access) return;
 
   const { filename } = req.params;
@@ -694,7 +754,7 @@ router.delete('/:id/plugins/:filename', authMiddleware, async (req: Authenticate
 // --- ENVIRONMENT VARIABLES (BOT HOSTING) ---
 // GET /api/v1/servers/:id/env
 router.get('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
   const { server } = access;
@@ -774,7 +834,7 @@ router.get('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
 // PUT /api/v1/servers/:id/env
 router.put('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
   const { server } = access;
@@ -892,7 +952,7 @@ router.put('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
 // GET /api/v1/servers/:id/activity - Server activity history
 router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'activity.view');
   if (!access) return;
 
   const { db } = access;
@@ -902,7 +962,7 @@ router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, re
 
 // GET /api/v1/servers/:id/backups - List backups
 router.get('/:id/backups', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'backups.view');
   if (!access) return;
 
   const { db } = access;
@@ -912,7 +972,7 @@ router.get('/:id/backups', authMiddleware, async (req: AuthenticatedRequest, res
 
 // POST /api/v1/servers/:id/backups - Create real backup
 router.post('/:id/backups', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'backups.create');
   if (!access) return;
 
   try {
@@ -926,7 +986,7 @@ router.post('/:id/backups', authMiddleware, async (req: AuthenticatedRequest, re
 
 // POST /api/v1/servers/:id/backups/:backupId/restore - Restore real backup
 router.post('/:id/backups/:backupId/restore', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'backups.restore');
   if (!access) return;
 
   try {
@@ -939,7 +999,7 @@ router.post('/:id/backups/:backupId/restore', authMiddleware, async (req: Authen
 
 // GET /api/v1/servers/:id/backups/:backupId/download - Download physical backup archive
 router.get('/:id/backups/:backupId/download', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'backups.download');
   if (!access) return;
 
   const { db } = access;
@@ -962,7 +1022,7 @@ router.get('/:id/backups/:backupId/download', authMiddleware, async (req: Authen
 
 // DELETE /api/v1/servers/:id/backups/:backupId - Delete backup
 router.delete('/:id/backups/:backupId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'backups.delete');
   if (!access) return;
 
   try {
@@ -975,7 +1035,7 @@ router.delete('/:id/backups/:backupId', authMiddleware, async (req: Authenticate
 
 // GET /api/v1/servers/:id/databases - List databases
 router.get('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.view');
   if (!access) return;
 
   const { db } = access;
@@ -985,7 +1045,7 @@ router.get('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, r
 
 // POST /api/v1/servers/:id/databases - Create database
 router.post('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.create');
   if (!access) return;
 
   const { server, db } = access;
@@ -1022,7 +1082,7 @@ router.post('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, 
 
 // DELETE /api/v1/servers/:id/databases/:databaseId
 router.delete('/:id/databases/:databaseId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.delete');
   if (!access) return;
 
   const { db } = access;
@@ -1037,7 +1097,7 @@ router.delete('/:id/databases/:databaseId', authMiddleware, async (req: Authenti
 
 // GET /api/v1/servers/:id/schedules
 router.get('/:id/schedules', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'schedules.view');
   if (!access) return;
 
   const { db } = access;
@@ -1047,7 +1107,7 @@ router.get('/:id/schedules', authMiddleware, async (req: AuthenticatedRequest, r
 
 // POST /api/v1/servers/:id/schedules
 router.post('/:id/schedules', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'schedules.create');
   if (!access) return;
 
   const { server, db } = access;
@@ -1098,7 +1158,7 @@ router.post('/:id/schedules', authMiddleware, async (req: AuthenticatedRequest, 
 
 // PUT /api/v1/servers/:id/schedules/:scheduleId - Update/Toggle Schedule
 router.put('/:id/schedules/:scheduleId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'schedules.update');
   if (!access) return;
 
   const { db } = access;
@@ -1124,7 +1184,7 @@ router.put('/:id/schedules/:scheduleId', authMiddleware, async (req: Authenticat
 
 // POST /api/v1/servers/:id/schedules/:scheduleId/run - Run Schedule Immediately
 router.post('/:id/schedules/:scheduleId/run', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'schedules.update');
   if (!access) return;
 
   const { db } = access;
@@ -1163,7 +1223,7 @@ router.post('/:id/schedules/:scheduleId/run', authMiddleware, async (req: Authen
 
 // DELETE /api/v1/servers/:id/schedules/:scheduleId
 router.delete('/:id/schedules/:scheduleId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'schedules.delete');
   if (!access) return;
 
   const { db } = access;
@@ -1177,7 +1237,7 @@ router.delete('/:id/schedules/:scheduleId', authMiddleware, async (req: Authenti
 
 // PUT /api/v1/servers/:id/startup - Update server software/version/startup
 router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
   const { server, db } = access;
@@ -1194,7 +1254,7 @@ router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res
 
 // POST /api/v1/servers/:id/install-dependencies - Install npm / pip packages
 router.post('/:id/install-dependencies', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
   try {
@@ -1240,7 +1300,7 @@ router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res:
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.view');
   if (!access) return;
 
   const status = await getPlayitStatus(req.params.id);
@@ -1252,7 +1312,7 @@ router.post('/:id/playit/install', authMiddleware, async (req: AuthenticatedRequ
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1268,7 +1328,7 @@ router.post('/:id/playit/start', authMiddleware, async (req: AuthenticatedReques
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1284,7 +1344,7 @@ router.post('/:id/playit/stop', authMiddleware, async (req: AuthenticatedRequest
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1300,7 +1360,7 @@ router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedReque
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   const { enable } = req.body;
@@ -1317,7 +1377,7 @@ router.post('/:id/playit/restart', authMiddleware, async (req: AuthenticatedRequ
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1333,7 +1393,7 @@ router.post('/:id/playit/secret', authMiddleware, async (req: AuthenticatedReque
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   const { secretKey } = req.body;
@@ -1355,7 +1415,7 @@ router.post('/:id/playit/claim', authMiddleware, async (req: AuthenticatedReques
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1379,7 +1439,7 @@ router.get('/:id/playit/logs', authMiddleware, async (req: AuthenticatedRequest,
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.view');
   if (!access) return;
 
   try {
@@ -1396,7 +1456,7 @@ router.post('/:id/playit/repair', authMiddleware, async (req: AuthenticatedReque
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1412,7 +1472,7 @@ router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRe
   const isEnabled = await checkPlayitEnabled(req, res);
   if (!isEnabled) return;
 
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   try {
@@ -1425,7 +1485,7 @@ router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRe
 
 // POST /api/v1/servers/:id/sftp/reset-password - Generate fresh SFTP password
 router.post('/:id/sftp/reset-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
   const { server } = access;
@@ -1438,7 +1498,7 @@ router.post('/:id/sftp/reset-password', authMiddleware, async (req: Authenticate
 
 // DELETE /api/v1/servers/:id - Delete server
 router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id);
+  const access = await checkServerAccess(req, res, req.params.id, 'settings.manage');
   if (!access) return;
 
   const { server, db } = access;
@@ -1482,6 +1542,192 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
   }, server.userId).catch(() => {});
 
   res.json({ success: true, message: 'Server deleted successfully.' });
+});
+
+// Subusers CRUD Routes
+
+// GET /api/v1/servers/:id/subusers - List subusers
+router.get('/:id/subusers', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'subusers.view');
+  if (!access) return;
+
+  const { server, db } = access;
+
+
+  const serverSubusers = (db.subusers || [])
+    .filter(s => s.serverId === server.id)
+    .map(sub => {
+      const userDetails = db.users.find(u => u.id === sub.userId);
+      return {
+        ...sub,
+        username: userDetails?.username || 'unknown',
+        displayName: userDetails?.displayName || 'unknown',
+        email: userDetails?.email || 'unknown',
+        role: userDetails?.role || 'user'
+      };
+    });
+
+  res.json({ success: true, data: serverSubusers });
+});
+
+// POST /api/v1/servers/:id/subusers - Create/Add subuser
+router.post('/:id/subusers', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'subusers.create');
+  if (!access) return;
+
+  const { server, db, isOwner, isAdmin, requesterSubuser } = access;
+
+
+  const { email, permissions } = req.body;
+  if (!email || !permissions) {
+    return res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'Email and permissions are required.' } });
+  }
+
+  // Permission escalation check
+  const requestedPermissions = Array.isArray(permissions) ? permissions : [];
+  if (!isOwner && !isAdmin && requesterSubuser) {
+    const missingPermissions = requestedPermissions.filter(p => !requesterSubuser.permissions.includes(p));
+    if (missingPermissions.length > 0) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot grant permissions you do not possess.' } });
+    }
+  }
+
+  const targetUser = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() || u.username.toLowerCase() === email.toLowerCase());
+  if (!targetUser) {
+    return res.status(404).json({ success: false, error: { code: 'USER_NOT_FOUND', message: 'No registered user found with this email or username.' } });
+  }
+
+  if (targetUser.id === server.userId) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_SUBUSER', message: 'Owners cannot be subusers of their own servers.' } });
+  }
+
+  const existingSubuser = (db.subusers || []).find(s => s.serverId === server.id && s.userId === targetUser.id);
+  if (existingSubuser) {
+    return res.status(400).json({ success: false, error: { code: 'ALREADY_SUBUSER', message: 'This user is already a subuser of this server.' } });
+  }
+
+  const newSubuser = {
+    id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    installationId: server.installationId,
+    serverId: server.id,
+    userId: targetUser.id,
+    permissions: Array.isArray(permissions) ? permissions : [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!db.subusers) {
+    db.subusers = [];
+  }
+  db.subusers.push(newSubuser);
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'SUBUSER_CREATE', server.id,
+    `Added subuser ${targetUser.username} with permissions: ${newSubuser.permissions.join(', ')}`
+  );
+
+  res.json({
+    success: true,
+    data: {
+      ...newSubuser,
+      username: targetUser.username,
+      displayName: targetUser.displayName,
+      email: targetUser.email,
+      role: targetUser.role
+    }
+  });
+});
+
+// PUT /api/v1/servers/:id/subusers/:subuserId - Update subuser permissions
+router.put('/:id/subusers/:subuserId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'subusers.update');
+  if (!access) return;
+
+  const { server, db, isOwner, isAdmin, requesterSubuser } = access;
+
+
+  const { permissions } = req.body;
+  const subuser = (db.subusers || []).find(s => s.serverId === server.id && s.id === req.params.subuserId);
+  if (!subuser) {
+    return res.status(404).json({ success: false, error: { code: 'SUBUSER_NOT_FOUND', message: 'Subuser not found.' } });
+  }
+
+  // Self-edit protection
+  if (subuser.userId === req.user!.id) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot modify your own subuser permissions.' } });
+  }
+
+  // Permission escalation check
+  const requestedPermissions = Array.isArray(permissions) ? permissions : [];
+  if (!isOwner && !isAdmin && requesterSubuser) {
+    const missingPermissions = requestedPermissions.filter(p => !requesterSubuser.permissions.includes(p));
+    if (missingPermissions.length > 0) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot grant permissions you do not possess.' } });
+    }
+  }
+
+  subuser.permissions = requestedPermissions;
+  subuser.updatedAt = new Date().toISOString();
+  saveDbSync();
+
+  if (!subuser.permissions.includes('console.view')) {
+    closeUserConsoleClient(server.id, subuser.userId, 'Console access revoked.');
+  }
+
+  const targetUser = db.users.find(u => u.id === subuser.userId);
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'SUBUSER_UPDATE', server.id,
+    `Updated subuser ${targetUser?.username || 'unknown'} permissions to: ${subuser.permissions.join(', ')}`
+  );
+
+  res.json({
+    success: true,
+    data: {
+      ...subuser,
+      username: targetUser?.username || 'unknown',
+      displayName: targetUser?.displayName || 'unknown',
+      email: targetUser?.email || 'unknown',
+      role: targetUser?.role || 'user'
+    }
+  });
+});
+
+// DELETE /api/v1/servers/:id/subusers/:subuserId - Revoke subuser access
+router.delete('/:id/subusers/:subuserId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'subusers.delete');
+  if (!access) return;
+
+  const { server, db } = access;
+
+
+  const index = (db.subusers || []).findIndex(s => s.serverId === server.id && s.id === req.params.subuserId);
+  if (index === -1) {
+    return res.status(404).json({ success: false, error: { code: 'SUBUSER_NOT_FOUND', message: 'Subuser not found.' } });
+  }
+
+  const subuser = db.subusers[index];
+
+  // Self-delete protection
+  if (subuser.userId === req.user!.id) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You cannot remove your own subuser access.' } });
+  }
+
+  const deletedSub = db.subusers.splice(index, 1)[0];
+  saveDbSync();
+
+  closeUserConsoleClient(server.id, deletedSub.userId, 'Server access revoked.');
+
+  const targetUser = db.users.find(u => u.id === deletedSub.userId);
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'SUBUSER_DELETE', server.id,
+    `Revoked subuser ${targetUser?.username || 'unknown'} access.`
+  );
+
+  res.json({ success: true, message: 'Subuser access revoked successfully.' });
 });
 
 export default router;
