@@ -80,7 +80,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const reconnectAttemptsRef = useRef(0);
 
   const isMinecraft =
-    /minecraft|paper|purpur|velocity|bungeecord|forge|fabric|spigot|bedrock|pocketmine/i.test(server.software || '') ||
+    /minecraft|paper|purpur|velocity|bungeecord|forge|fabric|spigot|pocketmine/i.test(server.software || '') ||
     (server.productId || '').includes('minecraft');
   
   const isNode = /node|express|discord/i.test(server.software || '') || server.software === 'Node.js';

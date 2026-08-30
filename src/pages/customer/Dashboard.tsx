@@ -8,6 +8,7 @@ import { Server, UserAllocationStatus } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { ServerCard } from '../../components/server/ServerCard';
+import { normalizeServer, formatMemory } from '../../lib/serverNormalize';
 
 interface DashboardProps {
   onNavigate: (page: string, params?: any) => void;
@@ -27,22 +28,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
 
   const fetchServers = async (showLoading = false) => {
     if (showLoading) setLoading(true);
-    const [serversRes, allocRes] = await Promise.all([
-      apiRequest('/servers'),
-      apiRequest('/account/allocations')
-    ]);
+    try {
+      const [serversRes, allocRes] = await Promise.all([
+        apiRequest('/servers'),
+        apiRequest('/account/allocations')
+      ]);
 
-    if (serversRes.success) {
-      setServers(serversRes.data || []);
-      setOwnedServers(serversRes.ownedServers || []);
-      setSharedServers(serversRes.sharedServers || []);
+      if (serversRes.success) {
+        const all = Array.isArray(serversRes.data) ? serversRes.data : [];
+        const owned = Array.isArray(serversRes.ownedServers) ? serversRes.ownedServers : [];
+        const shared = Array.isArray(serversRes.sharedServers) ? serversRes.sharedServers : [];
+
+        setServers(all.map((s: any) => normalizeServer(s)));
+        setOwnedServers(owned.map((s: any) => normalizeServer(s)));
+        setSharedServers(shared.map((s: any) => normalizeServer(s)));
+      }
+
+      if (allocRes.success && allocRes.data) {
+        setAllocations(allocRes.data);
+      }
+    } finally {
+      if (showLoading) setLoading(false);
     }
-
-    if (allocRes.success && allocRes.data) {
-      setAllocations(allocRes.data);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -123,7 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
             <Cpu className="h-4 w-4 text-cyan-400" />
           </div>
           <div className="text-2xl font-extrabold text-white font-mono">
-            {(totalRamMB / 1024).toFixed(1)} GB
+            {formatMemory(totalRamMB)}
           </div>
           <p className="text-[11px] text-zinc-500">Across {servers.length} container instances</p>
         </div>
@@ -164,8 +171,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
               Your Active Hosting Containers ({ownedServers.length})
             </h2>
             <button
-              onClick={fetchServers}
-              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+              onClick={() => fetchServers(true)}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>

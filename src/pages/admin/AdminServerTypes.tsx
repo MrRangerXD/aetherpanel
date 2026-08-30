@@ -303,7 +303,7 @@ export const AdminServerTypesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTypes.map(st => {
-            const theme = st.theme || {};
+            const theme: Partial<ServerTypeTheme> = st.theme || {};
             const accent = theme.accentColor || '#8B5CF6';
             const bgUrl = theme.backgroundUrl || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80';
 
@@ -735,9 +735,9 @@ export const AdminServerTypesPage: React.FC = () => {
 
                 {/* Simulated Server Card with exact applied styling */}
                 <div
-                  className={`relative rounded-2xl overflow-hidden transition-all duration-300 border ${editingTheme.cardStyle === 'bordered' ? 'border-2' : 'border'}`}
+                  className={`relative rounded-2xl overflow-hidden transition-all duration-300 border ${editingTheme.cardStyle === 'glass' ? 'border-2' : 'border'}`}
                   style={{
-                    borderColor: editingTheme.cardStyle === 'bordered' ? editingTheme.accentColor : '#27272a',
+                    borderColor: editingTheme.cardStyle === 'glass' ? editingTheme.accentColor : '#27272a',
                     backgroundColor: '#18181b'
                   }}
                 >

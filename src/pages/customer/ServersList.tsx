@@ -5,6 +5,7 @@ import { Server } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { ServerCard } from '../../components/server/ServerCard';
+import { normalizeServer } from '../../lib/serverNormalize';
 
 interface ServersListProps {
   onNavigate: (page: string, params?: any) => void;
@@ -21,7 +22,8 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
   const fetchServers = async () => {
     const res = await apiRequest('/servers');
     if (res.success && res.data) {
-      setServers(res.data);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setServers(list.map((s: any) => normalizeServer(s)));
     }
     setLoading(false);
   };

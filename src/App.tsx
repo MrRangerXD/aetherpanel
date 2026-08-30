@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { BrandingProvider, useBranding } from './lib/BrandingContext';
 import { ToastProvider } from './lib/ToastContext';
+import { AnimationProvider, useAnimation } from './lib/AnimationContext';
+import { PageTransition } from './components/animation/PageTransition';
+import { motion } from 'motion/react';
 import { ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
 import { apiRequest } from './lib/api';
 import { Server } from './types';
@@ -68,8 +71,22 @@ import { AdminDiagnostics } from './pages/admin/AdminDiagnostics';
 function AppContent() {
   const { user, loading, logout } = useAuth();
   const { brandName, maintenanceMode, maintenanceMessage, refreshBranding } = useBranding();
+  const { settings, getTransitionProps, motionEnabled } = useAnimation();
   
   const [checkingMaintenance, setCheckingMaintenance] = useState(false);
+  const [isInitialPanelMount, setIsInitialPanelMount] = useState(true);
+
+  // Mark initial load finished once authenticated panel renders
+  useEffect(() => {
+    if (user) {
+      const timer = setTimeout(() => {
+        setIsInitialPanelMount(false);
+      }, 1200);
+      return () => clearTimeout(timer);
+    } else {
+      setIsInitialPanelMount(true);
+    }
+  }, [user]);
   
   // Parse initial route directly from current browser URL
   const initialRoute = parseUrlToRoute(window.location.pathname, window.location.search);
@@ -264,101 +281,119 @@ function AppContent() {
         
         {/* Customer Sidebar */}
         {isCustomerPage && user && (
-          <Sidebar
-            currentPage={currentPage}
-            onNavigate={handleNavigate}
-            userServers={userServers}
-            currentServerId={pageParams?.serverId}
-            onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-          />
+          <motion.div
+            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
+            className="shrink-0"
+          >
+            <Sidebar
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+              userServers={userServers}
+              currentServerId={pageParams?.serverId}
+              onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+            />
+          </motion.div>
         )}
 
         {/* Admin Sidebar */}
         {isAdminPage && user && (
-          <AdminSidebar
-            currentPage={currentPage}
-            onNavigate={handleNavigate}
-          />
+          <motion.div
+            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
+            className="shrink-0"
+          >
+            <AdminSidebar
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+            />
+          </motion.div>
         )}
 
         {/* Content Viewport */}
         <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
-          <div>
-          {/* Public Views */}
-          {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
-          {currentPage === 'minecraft' && <MinecraftHosting onNavigate={handleNavigate} />}
-          {currentPage === 'bot' && <BotHosting onNavigate={handleNavigate} />}
-          {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}
-          {currentPage === 'status' && <Status onNavigate={handleNavigate} />}
-          {currentPage === 'docs' && <Docs onNavigate={handleNavigate} />}
-          {currentPage === 'terms' && <LegalPage initialSlug="terms" onNavigate={handleNavigate} />}
-          {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
-          {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
-          {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
+          <div className="flex-1 flex flex-col">
+            <PageTransition routeKey={currentPage}>
+              <div className="flex-1 flex flex-col">
+                {/* Public Views */}
+                {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
+                {currentPage === 'minecraft' && <MinecraftHosting onNavigate={handleNavigate} />}
+                {currentPage === 'bot' && <BotHosting onNavigate={handleNavigate} />}
+                {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}
+                {currentPage === 'status' && <Status />}
+                {currentPage === 'docs' && <Docs />}
+                {currentPage === 'terms' && <LegalPage initialSlug="terms" onNavigate={handleNavigate} />}
+                {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
+                {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
+                {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
 
-          {/* Auth Views */}
-          {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
-          {currentPage === 'register' && <Register onNavigate={handleNavigate} />}
+                {/* Auth Views */}
+                {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
+                {currentPage === 'register' && <Register onNavigate={handleNavigate} />}
 
-          {/* Customer Control Panel Views */}
-          {currentPage === 'dashboard' && (
-            <div className="space-y-6">
-              <AdBanner placement="dashboard" />
-              <Dashboard
-                onNavigate={handleNavigate}
-                onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-              />
-            </div>
-          )}
-          {currentPage === 'servers' && (
-            <div className="space-y-6">
-              <AdBanner placement="server_list" />
-              <ServersList onNavigate={handleNavigate} />
-            </div>
-          )}
-          {currentPage === 'deploy' && (
-            <ServerDeployWizard
-              onNavigate={handleNavigate}
-              onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-              onRefreshServers={fetchServers}
-            />
-          )}
-          {currentPage === 'server-manage' && (
-            <ServerManage
-              serverId={pageParams.serverId || userServers[0]?.id || ''}
-              initialTab={pageParams.initialTab}
-              onNavigate={handleNavigate}
-            />
-          )}
-          {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
-          {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
-          {currentPage === 'activity' && <ActivityLog />}
-          {currentPage === 'settings' && <UserSettings />}
-          {currentPage === 'afk-rewards' && <AfkRewards />}
+                {/* Customer Control Panel Views */}
+                {currentPage === 'dashboard' && (
+                  <div className="space-y-6">
+                    <AdBanner placement="dashboard" />
+                    <Dashboard
+                      onNavigate={handleNavigate}
+                      onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+                    />
+                  </div>
+                )}
+                {currentPage === 'servers' && (
+                  <div className="space-y-6">
+                    <AdBanner placement="server_list" />
+                    <ServersList onNavigate={handleNavigate} />
+                  </div>
+                )}
+                {currentPage === 'deploy' && (
+                  <ServerDeployWizard
+                    onNavigate={handleNavigate}
+                    onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+                    onRefreshServers={fetchServers}
+                  />
+                )}
+                {currentPage === 'server-manage' && (
+                  <ServerManage
+                    serverId={pageParams.serverId || userServers[0]?.id || ''}
+                    initialTab={pageParams.initialTab}
+                    onNavigate={handleNavigate}
+                  />
+                )}
+                {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
+                {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
+                {currentPage === 'activity' && <ActivityLog />}
+                {currentPage === 'settings' && <UserSettings />}
+                {currentPage === 'afk-rewards' && <AfkRewards />}
 
-          {/* Admin Views */}
-          {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={handleNavigate} />}
-          {currentPage === 'admin-users' && <AdminUsers />}
-          {currentPage === 'admin-servers' && <AdminServers />}
-          {currentPage === 'admin-products' && <AdminProducts />}
-          {currentPage === 'admin-server-types' && <AdminServerTypesPage />}
-          {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
-          {currentPage === 'admin-nodes' && <AdminNodes />}
-          {currentPage === 'admin-monitoring' && <AdminMonitoring />}
-          {currentPage === 'admin-billing' && <AdminBilling />}
+                {/* Admin Views */}
+                {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={handleNavigate} />}
+                {currentPage === 'admin-users' && <AdminUsers />}
+                {currentPage === 'admin-servers' && <AdminServers />}
+                {currentPage === 'admin-products' && <AdminProducts />}
+                {currentPage === 'admin-server-types' && <AdminServerTypesPage />}
+                {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
+                {currentPage === 'admin-nodes' && <AdminNodes />}
+                {currentPage === 'admin-monitoring' && <AdminMonitoring />}
+                {currentPage === 'admin-billing' && <AdminBilling />}
 
-          {currentPage === 'admin-coupons' && <AdminCoupons />}
-          {currentPage === 'admin-announcements' && <AdminAnnouncements />}
-          {currentPage === 'admin-support' && <AdminSupport />}
-          {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
-          {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
-          {currentPage === 'admin-legal' && <AdminLegal />}
-          {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
-          {currentPage === 'admin-settings' && <AdminSettings />}
-          {currentPage === 'admin-ads' && <AdminAds />}
-          {currentPage === 'admin-rewards' && <AdminRewards />}
-          {currentPage === 'admin-discord' && <AdminDiscord />}
-          {currentPage === 'admin-appearance' && <AdminAppearance />}
+                {currentPage === 'admin-coupons' && <AdminCoupons />}
+                {currentPage === 'admin-announcements' && <AdminAnnouncements />}
+                {currentPage === 'admin-support' && <AdminSupport />}
+                {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
+                {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
+                {currentPage === 'admin-legal' && <AdminLegal />}
+                {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
+                {currentPage === 'admin-settings' && <AdminSettings />}
+                {currentPage === 'admin-ads' && <AdminAds />}
+                {currentPage === 'admin-rewards' && <AdminRewards />}
+                {currentPage === 'admin-discord' && <AdminDiscord />}
+                {currentPage === 'admin-appearance' && <AdminAppearance />}
+              </div>
+            </PageTransition>
           </div>
 
           {/* Subtle Panel Footer for Customer & Admin Pages */}
@@ -384,7 +419,9 @@ export default function App() {
       <BrandingProvider>
         <AuthProvider>
           <ToastProvider>
-            <AppContent />
+            <AnimationProvider>
+              <AppContent />
+            </AnimationProvider>
           </ToastProvider>
         </AuthProvider>
       </BrandingProvider>

@@ -26,26 +26,26 @@ let versionCache: VersionCache = {
 // Fallback version tables if network/upstream is temporarily unreachable
 const FALLBACK_VERSIONS: Record<string, string[]> = {
   paper: [
-    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
   ],
   purpur: [
-    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5'
   ],
   vanilla: [
-    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.15.2', '1.14.4', '1.12.2', '1.8.9'
   ],
   fabric: [
-    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.14.4'
   ],
   spigot: [
-    '1.21.4', '1.21.1', '1.20.4', '1.20.1', '1.19.4', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
+    '26.2', '1.21.4', '1.21.1', '1.20.4', '1.20.1', '1.19.4', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
   ],
   forge: [
-    '1.20.4', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'
+    '26.2', '1.20.4', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'
   ]
 };
 
@@ -310,17 +310,22 @@ export async function getMinecraftVersions(software: string = 'paper'): Promise<
     };
   }
 
+  const versionsList = result.versions.length > 0
+    ? (result.versions.includes('26.2') ? result.versions : ['26.2', ...result.versions])
+    : (FALLBACK_VERSIONS[norm] || ['26.2']);
+  const latestVersion = versionsList[0] || '26.2';
+
   // Update Cache if successful, else do not cache bad values long
-  if (result.latest !== 'UNKNOWN' && result.versions.length > 0) {
-    versionCache.data[norm] = result;
+  if (latestVersion !== 'UNKNOWN' && versionsList.length > 0) {
+    versionCache.data[norm] = { versions: versionsList, latest: latestVersion };
     versionCache.timestamp = now;
   }
 
   return {
     software: norm,
-    versions: result.versions,
-    latest: result.latest,
-    recommendedJava: getRecommendedJavaVersion(result.latest)
+    versions: versionsList,
+    latest: latestVersion,
+    recommendedJava: getRecommendedJavaVersion(latestVersion)
   };
 }
 
@@ -339,7 +344,7 @@ export function getMinecraftProviders() {
 // Get Latest Stable Version for a Software Provider
 export async function getLatestStableMinecraftVersion(software: string = 'paper'): Promise<string> {
   const verInfo = await getMinecraftVersions(software);
-  return verInfo.latest || '1.21.4';
+  return verInfo.latest || '26.2';
 }
 
 // Search Versions dynamically across a software provider

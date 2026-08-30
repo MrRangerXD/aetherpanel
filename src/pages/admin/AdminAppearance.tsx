@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
+import { useAnimation } from '../../lib/AnimationContext';
 import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
 import { apiRequest } from '../../lib/api';
 
@@ -17,6 +18,8 @@ export const AdminAppearance: React.FC = () => {
     applySystemThemeSettings
   } = useTheme();
 
+  const { refreshSettings } = useAnimation();
+
   const [selectedThemeId, setSelectedThemeId] = useState(activeThemeId || 'golden');
   const [selectedFontId, setSelectedFontId] = useState(activeFontId || 'Plus Jakarta Sans');
   const [logoUrl, setLogoUrl] = useState(themeAssets.logoUrl || '');
@@ -28,6 +31,11 @@ export const AdminAppearance: React.FC = () => {
   const [allowUserCustomization, setAllowUserCustomization] = useState(true);
   const [backgroundBlur, setBackgroundBlur] = useState<string>('none');
   const [backgroundOverlayOpacity, setBackgroundOverlayOpacity] = useState<number>(75);
+
+  const [animationsEnabled, setAnimationsEnabledState] = useState(true);
+  const [pageTransitionsEnabled, setPageTransitionsEnabled] = useState(true);
+  const [initialPanelAnimationEnabled, setInitialPanelAnimationEnabled] = useState(true);
+  const [animationIntensity, setAnimationIntensity] = useState<'subtle' | 'normal' | 'enhanced'>('normal');
 
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -53,14 +61,27 @@ export const AdminAppearance: React.FC = () => {
         if (d.backgroundOverlayOpacity !== undefined) setBackgroundOverlayOpacity(d.backgroundOverlayOpacity);
       }
     };
+
+    const loadAnimations = async () => {
+      const res = await apiRequest('/settings/appearance');
+      if (res.success && res.data) {
+        const d = res.data;
+        setAnimationsEnabledState(d.enabled ?? true);
+        setPageTransitionsEnabled(d.pageTransitions ?? true);
+        setInitialPanelAnimationEnabled(d.initialPanelAnimation ?? true);
+        setAnimationIntensity(d.intensity ?? 'normal');
+      }
+    };
+
     loadSettings();
+    loadAnimations();
   }, []);
 
   const handleSaveTheme = async () => {
     setLoading(true);
     setErrorMsg(null);
 
-    const payload = {
+    const payloadTheme = {
       activeThemeId: selectedThemeId,
       activeFontId: selectedFontId,
       cardStyle,
@@ -76,20 +97,37 @@ export const AdminAppearance: React.FC = () => {
       }
     };
 
-    const res = await apiRequest('/admin/theme-settings', {
+    const payloadAnim = {
+      enabled: animationsEnabled,
+      pageTransitions: pageTransitionsEnabled,
+      initialPanelAnimation: initialPanelAnimationEnabled,
+      intensity: animationIntensity
+    };
+
+    const resTheme = await apiRequest('/admin/theme-settings', {
       method: 'PUT',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payloadTheme)
     });
 
-    if (res.success) {
+    const resAnim = await apiRequest('/admin/settings/appearance', {
+      method: 'PUT',
+      body: JSON.stringify(payloadAnim)
+    });
+
+    if (resTheme.success && resAnim.success) {
       setActiveThemeId(selectedThemeId);
       setActiveFontId(selectedFontId);
-      setThemeAssets(payload.assets);
-      applySystemThemeSettings(payload as any);
+      setThemeAssets(payloadTheme.assets);
+      applySystemThemeSettings(payloadTheme as any);
+      await refreshSettings();
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } else {
-      setErrorMsg(res.error?.message || 'Failed to save theme settings.');
+      setErrorMsg(
+        (!resTheme.success ? resTheme.error?.message : '') ||
+        (!resAnim.success ? resAnim.error?.message : '') ||
+        'Failed to save appearance settings.'
+      );
     }
     setLoading(false);
   };
@@ -251,6 +289,110 @@ export const AdminAppearance: React.FC = () => {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Interface Animations & Page Transitions */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  Interface Animations & Transitions
+                </h3>
+              </div>
+              <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border ${
+                animationsEnabled
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+              }`}>
+                {animationsEnabled ? 'ANIMATIONS ACTIVE' : 'ANIMATIONS MUTED'}
+              </span>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Enable premium, lightweight transitions, micro-interactions, and entrances. Supports low-latency performance constraints and accessibility preferences.
+            </p>
+
+            <div className="space-y-4 pt-2">
+              {/* Master Animation Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
+                <div>
+                  <div className="text-xs font-semibold text-white">Enable Interface Animations</div>
+                  <div className="text-[11px] text-zinc-400">Master switch for all frontend visual animations.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={animationsEnabled}
+                    onChange={(e) => setAnimationsEnabledState(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Page Transitions Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
+                <div>
+                  <div className="text-xs font-semibold text-white">Enable Page Transitions</div>
+                  <div className="text-[11px] text-zinc-400">Animate navigation transitions between control panel views.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pageTransitionsEnabled}
+                    disabled={!animationsEnabled}
+                    onChange={(e) => setPageTransitionsEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white peer-disabled:opacity-40 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Initial Panel Entrance Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
+                <div>
+                  <div className="text-xs font-semibold text-white">Enable Initial Panel Entrance Animation</div>
+                  <div className="text-[11px] text-zinc-400">Subtle slide and fade-in entrances upon fresh logins and reloads.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={initialPanelAnimationEnabled}
+                    disabled={!animationsEnabled}
+                    onChange={(e) => setInitialPanelAnimationEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white peer-disabled:opacity-40 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Animation Intensity Selector */}
+              <div className="space-y-2.5">
+                <label className="block text-xs font-semibold text-zinc-300">Animation Intensity Profile</label>
+                <div className="grid grid-cols-3 gap-2 text-xs font-semibold">
+                  {(['subtle', 'normal', 'enhanced'] as const).map((profile) => {
+                    const isSelected = animationIntensity === profile;
+                    const label = profile === 'subtle' ? 'Subtle (Fast)' : profile === 'enhanced' ? 'Enhanced' : 'Normal (Fluent)';
+                    return (
+                      <button
+                        key={profile}
+                        type="button"
+                        disabled={!animationsEnabled}
+                        onClick={() => setAnimationIntensity(profile)}
+                        className={`py-2 px-3.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-zinc-800/90 border-amber-500 text-white shadow-md ring-1 ring-amber-500/40 font-bold'
+                            : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:bg-zinc-900 peer-disabled:opacity-45'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>

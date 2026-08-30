@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { ServerDiscordLink, DiscordNotificationEvent } from '../../types';
+import { useToast } from '../../lib/ToastContext';
 
 interface ServerDiscordTabProps {
   serverId: string;
@@ -26,6 +27,7 @@ const ALL_EVENTS: { id: DiscordNotificationEvent; label: string; category: strin
 ];
 
 export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, serverName }) => {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -120,9 +122,11 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
       if (res.success) {
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3000);
+      } else {
+        toast.error(res.error?.message || 'Failed to save settings.');
       }
     } catch (err: any) {
-      alert(`Failed to save settings: ${err.message}`);
+      toast.error(`Failed to save settings: ${err.message}`);
     } finally {
       setSaving(false);
     }

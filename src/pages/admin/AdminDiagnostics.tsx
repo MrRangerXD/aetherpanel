@@ -292,6 +292,67 @@ export const AdminDiagnostics: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* 5. Host System & Environment Capabilities */}
+          {data.capabilities && (
+            <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4 shadow-xl md:col-span-2">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-amber-500" /> Environment Capability Matrix
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono">
+                  CAP_MATRIX_V1
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Operating System</span>
+                  <span className="text-sm font-bold text-white block capitalize">{data.capabilities.os}</span>
+                  <span className="text-[10px] text-zinc-400 block">{data.capabilities.virtualization === 'unknown' ? 'Baremetal/Hardware' : `Virtualization: ${data.capabilities.virtualization}`}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Service Manager</span>
+                  <span className="text-sm font-bold text-white block">
+                    {data.capabilities.hasSystemd ? 'systemd (Available)' : 'Custom Process Supervisor'}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 block">
+                    {data.capabilities.hasSystemd ? 'Running as native systemd services.' : 'Running under detached background daemon.'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Sandbox Persistence</span>
+                  <span className="text-sm font-bold text-white block">
+                    {data.capabilities.isEphemeral ? 'Ephemeral Container' : 'Persistent Storage'}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 block">
+                    {data.capabilities.isEphemeral ? 'Data will reset on container restart.' : 'Fully persistent local file storage.'}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Process Independence</span>
+                  <span className="text-sm font-bold text-white block">
+                    {data.capabilities.hasIndependentProcesses ? 'FULLY DECOUPLED' : 'RESTRICTED RUNTIME'}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 block">
+                    {data.capabilities.hasIndependentProcesses 
+                      ? 'Workloads survive web service reboots.' 
+                      : 'Workloads terminate if web process restarts.'}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800/80 flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  AetherPanel detects capabilities dynamically. In standard sandboxed/container environments (e.g. CodeSandbox, Cloud IDEs), it implements <strong className="text-zinc-200">Runtime Supervisor Mode</strong> to ensure process independence and reconciliation across restarts without needing root systemd level access.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

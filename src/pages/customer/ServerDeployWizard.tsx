@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Bot, CheckCircle2, ArrowRight, ArrowLeft, Cpu,
   Globe2, ShieldCheck, Tag, Sparkles, Check, Server as ServerIcon,
@@ -6,6 +6,8 @@ import {
   Boxes, CheckCircle, RefreshCw, Radio, DollarSign, Activity
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
+import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
+import { formatMemory } from '../../lib/serverNormalize';
 import { Product, Plan, Node, UserAllocationStatus } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
@@ -36,9 +38,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Paper',
     category: 'minecraft',
     description: 'High performance Minecraft server designed to fix gameplay & mechanics inconsistencies.',
-    defaultVersion: '1.20.4',
-    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
-    recommendedJava: 'Java 21',
+    defaultVersion: '26.2',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
+    recommendedJava: 'Java 25',
     icon: Gamepad2
   },
   {
@@ -46,9 +48,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Purpur',
     category: 'minecraft',
     description: 'Drop-in replacement for Paper with extreme configuration options & optimizations.',
-    defaultVersion: '1.20.4',
-    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4'],
-    recommendedJava: 'Java 21',
+    defaultVersion: '26.2',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4'],
+    recommendedJava: 'Java 25',
     icon: Gamepad2
   },
   {
@@ -56,9 +58,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Vanilla',
     category: 'minecraft',
     description: 'Official unmodified Mojang server software.',
-    defaultVersion: '1.20.4',
-    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
-    recommendedJava: 'Java 21',
+    defaultVersion: '26.2',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
+    recommendedJava: 'Java 25',
     icon: Gamepad2
   },
   {
@@ -66,9 +68,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Fabric',
     category: 'minecraft',
     description: 'Lightweight, modular modding toolchain for Minecraft.',
-    defaultVersion: '1.20.4',
-    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
-    recommendedJava: 'Java 21',
+    defaultVersion: '26.2',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
+    recommendedJava: 'Java 25',
     icon: Boxes
   },
   {
@@ -76,9 +78,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Forge',
     category: 'minecraft',
     description: 'The standard modding platform for comprehensive Minecraft modpacks.',
-    defaultVersion: '1.20.4',
-    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
-    recommendedJava: 'Java 21',
+    defaultVersion: '26.2',
+    versions: ['26.2', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
+    recommendedJava: 'Java 25',
     icon: Layers
   },
 
@@ -139,7 +141,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   );
   const [selectedVersion, setSelectedVersion] = useState<string>(selectedSoftware.defaultVersion);
   const [dynamicVersions, setDynamicVersions] = useState<string[]>(selectedSoftware.versions);
-  const [selectedJavaVersion, setSelectedJavaVersion] = useState<string>('Java 21');
+  const [selectedJavaVersion, setSelectedJavaVersion] = useState<string>(selectedSoftware.recommendedJava || 'Java 25');
   const [eulaAccepted, setEulaAccepted] = useState<boolean>(true);
   const [isLoadingVersions, setIsLoadingVersions] = useState<boolean>(false);
 
@@ -165,9 +167,32 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployedServerId, setDeployedServerId] = useState<string | null>(null);
 
+  const [runtimesMap, setRuntimesMap] = useState<any>(null);
+  const versionRequestIdRef = useRef<number>(0);
+
   useEffect(() => {
     fetchDeployOptions();
+    fetchRuntimes();
+    if (selectedProductCategory === 'minecraft') {
+      loadMinecraftVersions(selectedSoftware.name);
+    }
   }, []);
+
+  const fetchRuntimes = async () => {
+    try {
+      const res = await apiRequest('/runtimes');
+      if (res.success && res.data) {
+        setRuntimesMap(res.data);
+        if (selectedSoftware.category === 'bot') {
+          const key = selectedSoftware.id.toLowerCase();
+          if (res.data[key]) {
+            setDynamicVersions(res.data[key].versions);
+            setSelectedVersion(res.data[key].defaultVersion);
+          }
+        }
+      }
+    } catch (e) {}
+  };
 
   const fetchDeployOptions = async () => {
     const res = await apiRequest('/deploy/options');
@@ -196,33 +221,48 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   };
 
   const loadMinecraftVersions = async (softwareName: string) => {
+    const requestId = ++versionRequestIdRef.current;
+
+    // Check if we already have the complete authoritative version list cached in memory
+    const cached = getCachedMinecraftVersions(softwareName);
+    if (cached && cached.versions.length > 0) {
+      setDynamicVersions(cached.versions);
+      setSelectedVersion(prev => (cached.versions.includes('26.2') ? '26.2' : (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0])));
+      if (cached.recommendedJava) {
+        setSelectedJavaVersion(`Java ${cached.recommendedJava}`);
+      }
+      return;
+    }
+
     setIsLoadingVersions(true);
     try {
-      const res = await apiRequest(`/minecraft/versions?software=${encodeURIComponent(softwareName)}`);
-      if (res.success && res.data && res.data.versions && res.data.versions.length > 0) {
-        setDynamicVersions(res.data.versions);
-        setSelectedVersion(res.data.latest || res.data.versions[0]);
-        if (res.data.recommendedJava) {
-          setSelectedJavaVersion(`Java ${res.data.recommendedJava}`);
+      const data = await fetchAuthoritativeMinecraftVersions(softwareName);
+      if (requestId !== versionRequestIdRef.current) {
+        // Race condition guard: ignore if user already switched to another software engine
+        return;
+      }
+      if (data && data.versions && data.versions.length > 0) {
+        setDynamicVersions(data.versions);
+        setSelectedVersion(prev => (data.versions.includes('26.2') ? '26.2' : (data.versions.includes(prev) ? prev : data.latest || data.versions[0])));
+        if (data.recommendedJava) {
+          setSelectedJavaVersion(`Java ${data.recommendedJava}`);
         }
       }
     } catch (e) {
       // Fallback
     } finally {
-      setIsLoadingVersions(false);
+      if (requestId === versionRequestIdRef.current) {
+        setIsLoadingVersions(false);
+      }
     }
   };
 
   const handleSelectSoftware = (software: SoftwareOption) => {
     setSelectedSoftware(software);
-    setSelectedVersion(software.defaultVersion);
-    setDynamicVersions(software.versions);
 
     // Auto-map software to serverTypeId
     const nameLower = software.name.toLowerCase();
-    if (nameLower.includes('bedrock')) {
-      setSelectedServerTypeId('st_minecraft_bedrock');
-    } else if (nameLower.includes('node')) {
+    if (nameLower.includes('node')) {
       setSelectedServerTypeId('st_nodejs');
     } else if (nameLower.includes('bun')) {
       setSelectedServerTypeId('st_bun');
@@ -234,6 +274,18 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
     if (software.category === 'minecraft') {
       loadMinecraftVersions(software.name);
+    } else if (software.category === 'bot' && runtimesMap) {
+      const key = software.id.toLowerCase();
+      if (runtimesMap[key]) {
+        setDynamicVersions(runtimesMap[key].versions);
+        setSelectedVersion(runtimesMap[key].defaultVersion);
+      } else {
+        setDynamicVersions(software.versions);
+        setSelectedVersion(software.defaultVersion);
+      }
+    } else {
+      setDynamicVersions(software.versions);
+      setSelectedVersion(software.defaultVersion);
     }
 
     // Auto-suggest server name
@@ -462,7 +514,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                   {selectedProductCategory === 'minecraft' && <Check className="h-4 w-4 text-amber-400" />}
                 </div>
                 <p className="text-xs text-zinc-400 mt-1">
-                  High-performance Java & Bedrock engines with Paper, Purpur, Fabric & Forge support.
+                  High-performance Minecraft engines with Paper, Purpur, Vanilla, Fabric & Forge support.
                 </p>
               </div>
             </button>
@@ -687,7 +739,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                         <span className="flex items-center gap-2 text-zinc-400">
                           <MemoryStick className="h-3.5 w-3.5 text-amber-400" /> Dedicated RAM
                         </span>
-                        <span className="font-mono font-bold text-white">{(plan.ramMB / 1024).toFixed(1)} GB</span>
+                        <span className="font-mono font-bold text-white">{formatMemory(plan.ramMB)}</span>
                       </div>
 
                       <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
@@ -921,7 +973,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                   <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                     <span className="text-zinc-500">Allocated RAM & CPU</span>
                     <div className="font-bold text-white text-sm font-mono">
-                      {(selectedPlan?.ramMB || 1024) / 1024} GB / {((selectedPlan?.cpuCores || 1) * 100)}% vCPU
+                      {formatMemory(selectedPlan?.ramMB || (selectedProductCategory === 'bot' ? 512 : 1024))} / {((selectedPlan?.cpuCores || (selectedProductCategory === 'bot' ? 0.5 : 1)) * 100)}% vCPU
                     </div>
                   </div>
 

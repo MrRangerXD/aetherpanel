@@ -87,10 +87,6 @@ export function resolveServerType(server: Server, serverTypes: ServerType[]): Se
   const sw = (server?.software || '').toLowerCase();
   const botRt = (server?.startup?.botRuntime || '').toLowerCase();
   
-  if (sw.includes('bedrock')) {
-    const found = types.find(st => st.id === 'st_minecraft_bedrock' || st.slug === 'minecraft-bedrock');
-    if (found) return normalizeServerType(found);
-  }
   if (sw.includes('node') || botRt === 'nodejs') {
     const found = types.find(st => st.id === 'st_nodejs' || st.slug === 'nodejs');
     if (found) return normalizeServerType(found);
@@ -368,9 +364,6 @@ router.post('/admin/:id/theme/reset', authMiddleware, requireRole(['admin', 'sup
   if (rt.includes('java')) {
     defaultBg = 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1200&q=80';
     defaultAccent = '#22C55E';
-  } else if (rt.includes('bedrock')) {
-    defaultBg = 'https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?auto=format&fit=crop&w=1200&q=80';
-    defaultAccent = '#10B981';
   } else if (rt.includes('node')) {
     defaultBg = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80';
     defaultAccent = '#68A063';

@@ -8,6 +8,7 @@ import {
 import { apiRequest } from '../../lib/api';
 import { useToast } from '../../lib/ToastContext';
 import { ServerFile } from '../../types';
+import { normalizeServerPath, joinServerPath, getParentServerPath, buildBreadcrumbs } from '../../lib/pathUtils';
 
 interface ServerFileManagerTabProps {
   serverId: string;
@@ -75,11 +76,17 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const fetchFiles = useCallback(async (path: string) => {
     setLoading(true);
     setLoadError(null);
+    const normPath = normalizeServerPath(path);
     try {
-      const res = await apiRequest(`/servers/${serverId}/files?path=${encodeURIComponent(path)}`);
+      const res = await apiRequest(`/servers/${serverId}/files?path=${encodeURIComponent(normPath)}`);
       if (res.success) {
         const fileList = Array.isArray(res.data) ? res.data : (res.data?.files || []);
-        setFiles(fileList);
+        // Guarantee file item paths are normalized relative to root
+        const normalizedFiles = fileList.map((f: ServerFile) => ({
+          ...f,
+          path: normalizeServerPath(f.path)
+        }));
+        setFiles(normalizedFiles);
       } else {
         setLoadError(res.error?.message || 'Failed to list directory contents.');
       }
@@ -122,21 +129,11 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
 
   // Breadcrumbs
   const breadcrumbs = useMemo(() => {
-    const parts = currentPath.split('/').filter(Boolean);
-    const crumbs = [{ name: 'root', path: '/' }];
-    let acc = '';
-    for (const part of parts) {
-      acc += `/${part}`;
-      crumbs.push({ name: part, path: acc });
-    }
-    return crumbs;
+    return buildBreadcrumbs(currentPath);
   }, [currentPath]);
 
   const navigateUp = () => {
-    if (currentPath === '/') return;
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    const parent = parts.length === 0 ? '/' : `/${parts.join('/')}`;
+    const parent = getParentServerPath(currentPath);
     setCurrentPath(parent);
   };
 
@@ -153,15 +150,16 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   };
 
   const toggleSelectPath = (path: string) => {
+    const norm = normalizeServerPath(path);
     setSelectedPaths(prev =>
-      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+      prev.includes(norm) ? prev.filter(p => p !== norm) : [...prev, norm]
     );
   };
 
   // Navigation into folder or open editor
   const handleItemClick = async (file: ServerFile) => {
     if (file.isDir) {
-      const newPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+      const newPath = joinServerPath(currentPath, file.name);
       setCurrentPath(newPath);
     } else {
       openFileEditor(file);
@@ -172,8 +170,9 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const openFileEditor = async (file: ServerFile) => {
     setEditingFile(file);
     setIsLoadingContent(true);
+    const normPath = normalizeServerPath(file.path);
     try {
-      const res = await apiRequest(`/servers/${serverId}/files/content?path=${encodeURIComponent(file.path)}`);
+      const res = await apiRequest(`/servers/${serverId}/files/content?path=${encodeURIComponent(normPath)}`);
       if (res.success && res.data) {
         setFileContent(res.data.content || '');
       } else {
@@ -192,10 +191,11 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const handleSaveFile = async () => {
     if (!editingFile) return;
     setIsSavingContent(true);
+    const normPath = normalizeServerPath(editingFile.path);
     try {
       const res = await apiRequest(`/servers/${serverId}/files/content`, {
         method: 'POST',
-        body: JSON.stringify({ path: editingFile.path, content: fileContent })
+        body: JSON.stringify({ path: normPath, content: fileContent })
       });
       if (res.success) {
         toast.success(`Saved '${editingFile.name}' successfully.`);
@@ -215,7 +215,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     e.preventDefault();
     if (!newFileName.trim()) return;
     const name = newFileName.trim();
-    const filePath = currentPath === '/' ? name : `${currentPath}/${name}`;
+    const filePath = joinServerPath(currentPath, name);
 
     try {
       const res = await apiRequest(`/servers/${serverId}/files/content`, {
@@ -240,7 +240,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     e.preventDefault();
     if (!newFolderName.trim()) return;
     const name = newFolderName.trim();
-    const folderPath = currentPath === '/' ? name : `${currentPath}/${name}`;
+    const folderPath = joinServerPath(currentPath, name);
 
     try {
       const res = await apiRequest(`/servers/${serverId}/files/mkdir`, {
@@ -264,9 +264,8 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!renameTarget || !renameValue.trim()) return;
-    const oldPath = renameTarget.path;
-    const parentDir = currentPath === '/' ? '' : currentPath;
-    const newPath = `${parentDir}/${renameValue.trim()}`.replace(/^\//, '');
+    const oldPath = normalizeServerPath(renameTarget.path);
+    const newPath = joinServerPath(currentPath, renameValue.trim());
 
     try {
       const res = await apiRequest(`/servers/${serverId}/files/rename`, {
@@ -291,7 +290,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     if (!deleteTargets || deleteTargets.length === 0) return;
     setIsDeleting(true);
 
-    const paths = deleteTargets.map(t => t.path);
+    const paths = deleteTargets.map(t => normalizeServerPath(t.path));
     try {
       const res = await apiRequest(`/servers/${serverId}/files/bulk-delete`, {
         method: 'POST',
@@ -323,8 +322,8 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       const res = await apiRequest(`/servers/${serverId}/files/${endpoint}`, {
         method: 'POST',
         body: JSON.stringify({
-          sources: moveCopyAction.sources,
-          destinationDir: destDir,
+          sources: moveCopyAction.sources.map(s => normalizeServerPath(s)),
+          destinationDir: normalizeServerPath(destDir),
           conflictStrategy
         })
       });
@@ -354,9 +353,9 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       const res = await apiRequest(`/servers/${serverId}/files/compress`, {
         method: 'POST',
         body: JSON.stringify({
-          paths: compressTargets,
+          paths: compressTargets.map(p => normalizeServerPath(p)),
           outputName: archiveName || undefined,
-          currentDir: currentPath
+          currentDir: normalizeServerPath(currentPath)
         })
       });
 
@@ -382,8 +381,8 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       const res = await apiRequest(`/servers/${serverId}/files/decompress`, {
         method: 'POST',
         body: JSON.stringify({
-          path: file.path,
-          destinationDir: currentPath
+          path: normalizeServerPath(file.path),
+          destinationDir: normalizeServerPath(currentPath)
         })
       });
 
@@ -418,7 +417,8 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
           prev.map(t => t.id === task.id ? { ...t, progress: 70 } : t)
         );
 
-        const res = await fetch(`/api/v1/servers/${serverId}/files/upload?path=${encodeURIComponent(currentPath)}`, {
+        const normCurrent = normalizeServerPath(currentPath);
+        const res = await fetch(`/api/v1/servers/${serverId}/files/upload?path=${encodeURIComponent(normCurrent)}`, {
           method: 'POST',
           headers: token ? { 'Authorization': `Bearer ${token}` } : {},
           body: formData
@@ -487,7 +487,8 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   // Download File
   const handleDownload = (file: ServerFile) => {
     const token = localStorage.getItem('aether_token');
-    const url = `/api/v1/servers/${serverId}/files/download?path=${encodeURIComponent(file.path)}`;
+    const normPath = normalizeServerPath(file.path);
+    const url = `/api/v1/servers/${serverId}/files/download?path=${encodeURIComponent(normPath)}`;
     const a = document.createElement('a');
     a.href = url;
     a.download = file.name;
@@ -498,7 +499,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
 
   // Available directories for Move/Copy picker
   const availableDirs = useMemo(() => {
-    return ['/', ...files.filter(f => f.isDir).map(f => currentPath === '/' ? `/${f.name}` : `${currentPath}/${f.name}`)];
+    return ['/', ...files.filter(f => f.isDir).map(f => joinServerPath(currentPath, f.name))];
   }, [files, currentPath]);
 
   // Selected files list

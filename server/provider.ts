@@ -2,10 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import AdmZip from 'adm-zip';
-import { getDb, saveDbSync } from './db';
+import { getDb, saveDbSync, getDbSync } from './db';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerActivity } from '../src/types';
 import { dispatchDiscordNotification } from './discordService';
 import { buildBotStartupCommand } from '../src/lib/startup';
+import { RuntimeSupervisor } from './utils/runtimeSupervisor';
 
 const SERVERS_DIR = path.join(process.cwd(), 'data', 'servers');
 
@@ -88,6 +89,33 @@ export function appendConsoleLog(serverId: string, logLine: string) {
         listener(serverId, formatted);
       } catch {}
     });
+
+    // Check startup ready signals for starting servers
+    try {
+      const db = getDbSync();
+      const server = db.servers.find(s => s.id === serverId);
+      if (server && server.status === 'starting') {
+        const str = l.toLowerCase();
+        const isReadySignal = 
+          str.includes('done (') ||
+          str.includes('ready to handle connections') ||
+          str.includes('listening on') ||
+          str.includes('started successfully') ||
+          str.includes('ready') ||
+          str.includes('discord bot connected') ||
+          str.includes('online');
+        
+        if (isReadySignal) {
+          server.status = 'running';
+          server.cpuUsage = 1.2;
+          server.ramUsageMB = server.software?.toLowerCase().includes('bot') ? 45 : 120;
+          server.uptimeSeconds = 0;
+          saveDbSync();
+          emitServerStatus(serverId, 'running');
+          setupStableUptimeReset(serverId);
+        }
+      }
+    } catch {}
   }
   
   if (buf.length > 1000) {
@@ -490,75 +518,42 @@ export async function startServer(serverId: string): Promise<boolean> {
     try {
       intendedStops.delete(serverId);
 
-      const child = spawn(executable, args, {
+      const runnerType = runtime === 'python' ? 'bot_python' : 'bot_node';
+      const processInfo = await RuntimeSupervisor.spawn(serverId, executable, args, {
         cwd: dir,
         env: cleanEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: false
+        runnerType
       });
 
       const entry: ActiveProcessEntry = {
-        child,
-        startedAt: new Date(),
-        runnerType: runtime === 'python' ? 'bot_python' : 'bot_node',
-        pid: child.pid
+        startedAt: new Date(processInfo.startedAt),
+        runnerType,
+        pid: processInfo.pid
       };
       activeProcesses.set(serverId, entry);
 
       if (!server.startup) server.startup = {};
-      server.startup.pid = child.pid;
-      server.startup.lastStartedAt = new Date().toISOString();
+      server.startup.pid = processInfo.pid;
+      server.startup.lastStartedAt = processInfo.startedAt;
 
-      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned (PID: ${child.pid}) running ${executable} ${args.join(' ')}`);
-
-      child.stdout?.on('data', (chunk) => {
-        appendConsoleLog(serverId, chunk.toString());
-        if (server.status === 'starting') {
-          server.status = 'running';
-          server.cpuUsage = 1.2;
-          server.ramUsageMB = runtime === 'python' ? 32 : 45;
-          server.uptimeSeconds = 0;
-          saveDbSync();
-          emitServerStatus(serverId, 'running', { pid: child.pid });
-          setupStableUptimeReset(serverId);
-          dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
-            message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
-          }).catch(() => {});
-        }
-      });
-
-      child.stderr?.on('data', (chunk) => {
-        appendConsoleLog(serverId, `[STDERR]: ${chunk.toString()}`);
-      });
-
-      child.on('error', (err) => {
-        appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Process spawn error: ${err.message}`);
-        server.status = 'error';
-        server.cpuUsage = 0;
-        server.ramUsageMB = 0;
-        activeProcesses.delete(serverId);
-        saveDbSync();
-        emitServerStatus(serverId, 'error', { error: err.message });
-      });
-
-      child.on('exit', (code, signal) => {
-        handleProcessExit(serverId, code, signal, child);
-      });
+      appendConsoleLog(serverId, `[AetherDaemon/INFO]: Bot process spawned via Supervisor (PID: ${processInfo.pid}) running ${executable} ${args.join(' ')}`);
 
       // Keep starting until verified or active for 1.5 seconds
       server.status = 'starting';
       server.uptimeSeconds = 0;
       saveDbSync();
-      emitServerStatus(serverId, 'starting', { pid: child.pid });
+      emitServerStatus(serverId, 'starting', { pid: processInfo.pid });
 
       setTimeout(async () => {
-        if (activeProcesses.has(serverId) && server.status === 'starting') {
-          server.status = 'running';
-          server.cpuUsage = 1.2;
-          server.ramUsageMB = runtime === 'python' ? 32 : 45;
-          server.uptimeSeconds = 0;
+        const db = await getDb();
+        const s = db.servers.find(srv => srv.id === serverId);
+        if (s && s.status === 'starting' && RuntimeSupervisor.getStatus(serverId) === 'starting') {
+          s.status = 'running';
+          s.cpuUsage = 1.2;
+          s.ramUsageMB = runtime === 'python' ? 32 : 45;
+          s.uptimeSeconds = 0;
           saveDbSync();
-          emitServerStatus(serverId, 'running', { pid: child.pid });
+          emitServerStatus(serverId, 'running', { pid: processInfo.pid });
           setupStableUptimeReset(serverId);
           dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
             message: `Bot '${server.name}' (${server.software}) started successfully and is now active.`
@@ -627,8 +622,8 @@ export async function startServer(serverId: string): Promise<boolean> {
       fs.writeFileSync(propPath, propContent, 'utf8');
     }
 
-    const xmsMB = server.startup?.xmsMB || 128;
-    const xmxMB = server.startup?.xmxMB || server.limits.ramMB;
+    const xmxMB = Math.min(Number(server.startup?.xmxMB) || server.limits.ramMB, server.limits.ramMB);
+    const xmsMB = Math.min(Number(server.startup?.xmsMB) || 128, xmxMB);
 
     appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);
     appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: ${xmsMB}M initial, ${xmxMB}M max`);
@@ -661,120 +656,41 @@ export async function startServer(serverId: string): Promise<boolean> {
       if (!server.startup) server.startup = {};
       server.startup.compiledCommand = compiledCmd;
 
-      const child = spawn(executable, args, {
+      const processInfo = await RuntimeSupervisor.spawn(serverId, executable, args, {
         cwd: dir,
         env: cleanEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: false
+        runnerType: 'minecraft'
       });
 
       const entry: ActiveProcessEntry = {
-        child,
-        startedAt: new Date(),
+        startedAt: new Date(processInfo.startedAt),
         runnerType: 'minecraft',
-        pid: child.pid
+        pid: processInfo.pid
       };
       activeProcesses.set(serverId, entry);
 
       if (!server.startup) server.startup = {};
-      server.startup.pid = child.pid;
-      server.startup.lastStartedAt = new Date().toISOString();
+      server.startup.pid = processInfo.pid;
+      server.startup.lastStartedAt = processInfo.startedAt;
 
-      child.stdout?.on('data', (chunk) => {
-        const str = chunk.toString();
-        appendConsoleLog(serverId, str);
-
-        // Check startup confirmation signals
-        if (server.status === 'starting') {
-          const isReadySignal = 
-            /Done \([0-9.]+s\)!/i.test(str) ||
-            str.includes('For help, type "help"') ||
-            str.includes('Timings Reset') ||
-            str.includes('Listening on /') ||
-            str.includes('Thread Query Listener started') ||
-            str.includes('RCON running on');
-
-          if (isReadySignal) {
-            server.status = 'running';
-            server.cpuUsage = 2.8;
-            server.ramUsageMB = 480;
-            server.uptimeSeconds = 0;
-            saveDbSync();
-            emitServerStatus(serverId, 'running', { pid: child.pid });
-            setupStableUptimeReset(serverId);
-            dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
-              message: `Minecraft Server '${server.name}' (${server.software} ${server.version}) is now ONLINE and listening on ${server.primaryIp}:${server.primaryPort}.`
-            }).catch(() => {});
-          }
-        }
-
-        if (str.includes('java.lang.UnsupportedClassVersionError') || str.includes('UnsupportedClassVersionError')) {
-          server.startup = server.startup || {};
-          if (server.startup.lastCrashReason !== 'JAVA_VERSION_MISMATCH') {
-            server.startup.lastCrashReason = 'JAVA_VERSION_MISMATCH';
-            appendConsoleLog(serverId, `\n[AetherDaemon/DIAGNOSTIC]: ====================================================`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: CRITICAL: Minecraft failed to start because the selected Java runtime`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: is incompatible with this Minecraft version.`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: `);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Minecraft:      ${server.version}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Required:       Java ${reqJava}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Currently used:  Java ${javaCheck.installedVersion || 'Unknown'}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Action:         Switch to Java ${reqJava}.`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: ====================================================\n`);
-            saveDbSync();
-          }
-        }
-      });
-
-      child.stderr?.on('data', (chunk) => {
-        const str = chunk.toString();
-        appendConsoleLog(serverId, `[STDERR]: ${str}`);
-        if (str.includes('java.lang.UnsupportedClassVersionError') || str.includes('UnsupportedClassVersionError')) {
-          server.startup = server.startup || {};
-          if (server.startup.lastCrashReason !== 'JAVA_VERSION_MISMATCH') {
-            server.startup.lastCrashReason = 'JAVA_VERSION_MISMATCH';
-            appendConsoleLog(serverId, `\n[AetherDaemon/DIAGNOSTIC]: ====================================================`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: CRITICAL: Minecraft failed to start because the selected Java runtime`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: is incompatible with this Minecraft version.`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: `);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Minecraft:      ${server.version}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Required:       Java ${reqJava}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Currently used:  Java ${javaCheck.installedVersion || 'Unknown'}`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: Action:         Switch to Java ${reqJava}.`);
-            appendConsoleLog(serverId, `[AetherDaemon/DIAGNOSTIC]: ====================================================\n`);
-            saveDbSync();
-          }
-        }
-      });
-
-      child.on('error', (err) => {
-        appendConsoleLog(serverId, `[Server thread/ERROR]: Process spawn error: ${err.message}`);
-        server.status = 'error';
-        server.cpuUsage = 0;
-        server.ramUsageMB = 0;
-        activeProcesses.delete(serverId);
-        saveDbSync();
-        emitServerStatus(serverId, 'error', { error: err.message });
-      });
-
-      child.on('exit', (code, signal) => {
-        handleProcessExit(serverId, code, signal, child);
-      });
+      appendConsoleLog(serverId, `[Server thread/INFO]: Minecraft Server spawned via Supervisor (PID: ${processInfo.pid}) running ${compiledCmd}`);
 
       // Keep server in 'starting' state until confirmed by logs or fallback after 20s
       server.status = 'starting';
       server.uptimeSeconds = 0;
       saveDbSync();
-      emitServerStatus(serverId, 'starting', { pid: child.pid });
+      emitServerStatus(serverId, 'starting', { pid: processInfo.pid });
 
       setTimeout(async () => {
-        if (activeProcesses.has(serverId) && server.status === 'starting') {
-          server.status = 'running';
-          server.cpuUsage = 2.8;
-          server.ramUsageMB = 480;
-          server.uptimeSeconds = 0;
+        const db = await getDb();
+        const s = db.servers.find(srv => srv.id === serverId);
+        if (s && s.status === 'starting' && RuntimeSupervisor.getStatus(serverId) === 'starting') {
+          s.status = 'running';
+          s.cpuUsage = 2.8;
+          s.ramUsageMB = 480;
+          s.uptimeSeconds = 0;
           saveDbSync();
-          emitServerStatus(serverId, 'running', { pid: child.pid });
+          emitServerStatus(serverId, 'running', { pid: processInfo.pid });
           setupStableUptimeReset(serverId);
           dispatchDiscordNotification(serverId, 'SERVER_STARTED', {
             message: `Minecraft Server '${server.name}' (${server.software} ${server.version}) is now active on ${server.primaryIp}:${server.primaryPort}.`
@@ -924,43 +840,13 @@ export async function stopServer(serverId: string): Promise<boolean> {
     return true;
   }
 
-  const entry = activeProcesses.get(serverId);
-  if (!entry) {
-    server.status = 'stopped';
-    server.cpuUsage = 0;
-    server.ramUsageMB = 0;
-    server.uptimeSeconds = 0;
-    if (server.startup) server.startup.pid = undefined;
-    saveDbSync();
-    emitServerStatus(serverId, 'stopped');
-    return true;
-  }
-
   server.status = 'stopping';
   saveDbSync();
   emitServerStatus(serverId, 'stopping');
 
   appendConsoleLog(serverId, `[AetherDaemon/INFO]: Sending graceful shutdown signal (SIGTERM)...`);
 
-  if (entry.child) {
-    try {
-      if (entry.child.stdin && entry.child.stdin.writable) {
-        entry.child.stdin.write('stop\n');
-      }
-      entry.child.kill('SIGTERM');
-
-      // Escalate to SIGKILL if still alive after 3.5s
-      setTimeout(() => {
-        if (activeProcesses.has(serverId)) {
-          appendConsoleLog(serverId, `[AetherDaemon/WARN]: Process did not exit cleanly within timeout. Escalating to SIGKILL...`);
-          try {
-            entry.child?.kill('SIGKILL');
-          } catch {}
-          activeProcesses.delete(serverId);
-        }
-      }, 3500);
-    } catch {}
-  }
+  await RuntimeSupervisor.stop(serverId);
 
   activeProcesses.delete(serverId);
 
@@ -1052,35 +938,15 @@ export async function restartServer(serverId: string): Promise<boolean> {
 export async function reconcileServerStatesOnBoot(): Promise<void> {
   console.log('[AETHERPANEL LIFECYCLE] Reconciling server states and executing boot recovery...');
   try {
-    const db = await getDb();
-    let modified = false;
+    // Run supervisor-level reconciliation to restore log-tracking of survived detached workloads
+    await RuntimeSupervisor.reconcile();
 
+    const db = await getDb();
     for (const server of db.servers) {
       const node = db.nodes.find(n => n.id === server.nodeId);
       const isLocal = !node || node.isLocalNode || node.id === 'node_local';
 
       if (isLocal) {
-        // If status is marked running in DB but we just booted fresh without active process
-        if (server.status === 'running' || server.status === 'starting') {
-          let isActuallyAlive = false;
-          if (server.startup?.pid) {
-            try {
-              process.kill(server.startup.pid, 0); // Check if PID exists
-              isActuallyAlive = true;
-            } catch {
-              isActuallyAlive = false;
-            }
-          }
-
-          if (!isActuallyAlive) {
-            server.status = 'stopped';
-            server.cpuUsage = 0;
-            server.ramUsageMB = 0;
-            if (server.startup) server.startup.pid = undefined;
-            modified = true;
-          }
-        }
-
         // Check auto-start on boot
         if (server.startup?.autoStartOnBoot && server.status === 'stopped') {
           console.log(`[BOOT RECOVERY] Auto-starting server '${server.name}' (${server.id})...`);
@@ -1089,10 +955,6 @@ export async function reconcileServerStatesOnBoot(): Promise<void> {
           });
         }
       }
-    }
-
-    if (modified) {
-      saveDbSync();
     }
   } catch (err) {
     console.error('[AETHERPANEL LIFECYCLE] Boot reconciliation error:', err);
@@ -1203,31 +1065,42 @@ export const sendServerConsoleInput = sendServerCommand;
  */
 export function safePath(serverId: string, relPath: string = ''): string {
   const baseDir = path.resolve(getServerDir(serverId));
-  const sanitized = (relPath || '').replace(/\0/g, '');
-  const cleaned = path.normalize(sanitized).replace(/^(\.\.[\/\\])+/, '');
-  const resolved = path.resolve(baseDir, '.' + (cleaned.startsWith('/') ? cleaned : '/' + cleaned));
+  let cleanRel = (relPath || '').replace(/\0/g, '').trim();
 
-  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
-    return baseDir;
+  // If relPath starts with baseDir, strip baseDir prefix first
+  if (cleanRel.startsWith(baseDir)) {
+    cleanRel = cleanRel.substring(baseDir.length);
   }
+
+  // Remove leading slashes and backslashes
+  cleanRel = cleanRel.replace(/^[/\\]+/, '');
+
+  // Normalize relative path
+  const normalizedRel = path.normalize(cleanRel);
+
+  // Check for path traversal elements
+  if (normalizedRel.startsWith('..') || normalizedRel.split(path.sep).includes('..')) {
+    throw new Error('Access denied: Outside server root directory');
+  }
+
+  // Resolve target path safely relative to baseDir
+  const resolved = path.resolve(baseDir, normalizedRel);
+
+  // Verify that resolved path is equal to baseDir or inside baseDir
+  const relative = path.relative(baseDir, resolved);
+  const isOutside = relative.startsWith('..') || path.isAbsolute(relative);
+
+  if (isOutside) {
+    throw new Error('Access denied: Outside server root directory');
+  }
+
   return resolved;
 }
 
 // File Operations
 export function listServerFiles(serverId: string, relPath: string = ''): ServerFile[] {
   const baseDir = path.resolve(getServerDir(serverId));
-  if (relPath && relPath !== '/' && relPath !== '.') {
-    const rawTarget = path.resolve(baseDir, relPath.replace(/\0/g, ''));
-    if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
-      throw new Error('Access denied: Outside server root directory');
-    }
-  }
   const targetDir = safePath(serverId, relPath);
-
-  // Security check - path traversal prevention
-  if (targetDir !== baseDir && !targetDir.startsWith(baseDir + path.sep)) {
-    throw new Error('Access denied: Outside server root directory');
-  }
 
   if (!fs.existsSync(targetDir)) {
     return [];
@@ -1256,38 +1129,15 @@ export function listServerFiles(serverId: string, relPath: string = ''): ServerF
 }
 
 export function readServerFile(serverId: string, relPath: string): string {
-  const baseDir = path.resolve(getServerDir(serverId));
-  const rawTarget = path.resolve(baseDir, (relPath || '').replace(/\0/g, ''));
-  if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
-    throw new Error('Access denied: Outside server root directory');
-  }
-
   const targetPath = safePath(serverId, relPath);
-
-  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
-    throw new Error('Access denied: Outside server root directory');
-  }
-
   if (!fs.existsSync(targetPath)) {
     throw new Error('File not found');
   }
-
   return fs.readFileSync(targetPath, 'utf-8');
 }
 
 export function writeServerFile(serverId: string, relPath: string, content: string): boolean {
-  const baseDir = path.resolve(getServerDir(serverId));
-  const rawTarget = path.resolve(baseDir, (relPath || '').replace(/\0/g, ''));
-  if (rawTarget !== baseDir && !rawTarget.startsWith(baseDir + path.sep)) {
-    throw new Error('Access denied: Outside server root directory');
-  }
-
   const targetPath = safePath(serverId, relPath);
-
-  if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
-    throw new Error('Access denied: Outside server root directory');
-  }
-
   const parentDir = path.dirname(targetPath);
   if (!fs.existsSync(parentDir)) {
     fs.mkdirSync(parentDir, { recursive: true });

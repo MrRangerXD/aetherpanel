@@ -1,8 +1,11 @@
-import express from 'express';
+import express, { Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
+
+import { authMiddleware, AuthenticatedRequest } from './server/auth';
+import { getDb } from './server/db';
 
 import authRoutes from './server/routes/auth';
 import publicRoutes from './server/routes/public';
@@ -21,6 +24,7 @@ import monitoringRoutes from './server/routes/monitoring';
 import apiKeysRoutes from './server/routes/apiKeys';
 import minecraftRoutes from './server/routes/minecraft';
 import serverTypesRoutes from './server/routes/serverTypes';
+import runtimesRoutes from './server/routes/runtimes';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
@@ -95,9 +99,22 @@ async function startServer() {
   });
 
   // API Routes FIRST
+  app.get('/api/v1/settings/appearance', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    const db = await getDb();
+    const defaultAnimationSettings = {
+      enabled: true,
+      pageTransitions: true,
+      initialPanelAnimation: true,
+      intensity: 'normal' as const
+    };
+    const settings = db.settings.animationSettings || defaultAnimationSettings;
+    res.json({ success: true, data: settings });
+  });
+
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/account', authRoutes);
   app.use('/api/v1/public', publicRoutes);
+  app.use('/api/v1/plans', publicRoutes);
   app.use('/api/v1/servers', serverRoutes);
   app.use('/api/v1/deploy', deployRoutes);
   app.use('/api/v1/billing', billingRoutes);
@@ -113,6 +130,7 @@ async function startServer() {
   app.use('/api/v1/api-keys', apiKeysRoutes);
   app.use('/api/v1/minecraft', minecraftRoutes);
   app.use('/api/v1/server-types', serverTypesRoutes);
+  app.use('/api/v1/runtimes', runtimesRoutes);
 
   // Catch-all for missing API routes - must return JSON, not HTML
   app.all('/api/*', (req, res) => {

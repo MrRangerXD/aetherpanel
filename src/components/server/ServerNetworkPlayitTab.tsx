@@ -246,7 +246,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const sftpPort = sftpInfo?.port || 2022;
   const sftpUser = sftpInfo?.username || `srv_${server.id.substring(0, 10)}`;
   const sftpPass = sftpInfo?.password || (server as any).sftpPassword || '••••••••••••••••';
-  const sftpUri = sftpInfo?.connectionUri || `sftp://${sftpUser}@${sftpHost}:${sftpPort}`;
+  const sftpUri = sftpInfo?.uri || `sftp://${sftpUser}@${sftpHost}:${sftpPort}`;
 
   const isClaimed = playit?.isClaimed || playit?.claimStatus === 'CLAIMED';
   const isRunning = playit?.isRunning || playit?.agentStatus === 'RUNNING';

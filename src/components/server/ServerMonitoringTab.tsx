@@ -24,8 +24,8 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isMinecraft = server.category === 'minecraft' || server.product?.category === 'minecraft' || server.software?.toLowerCase().includes('paper') || server.software?.toLowerCase().includes('purpur');
-  const isBot = server.category === 'bot' || server.product?.category === 'bot' || server.software?.toLowerCase().includes('node') || server.software?.toLowerCase().includes('python');
+  const isMinecraft = server.serverType?.category?.toLowerCase().includes('minecraft') || ['paper', 'purpur', 'vanilla', 'fabric', 'forge', 'spigot'].some(s => server.software?.toLowerCase().includes(s));
+  const isBot = server.serverType?.category?.toLowerCase().includes('bot') || ['node', 'python', 'bun', 'discord'].some(s => server.software?.toLowerCase().includes(s));
 
   const fetchTelemetry = async () => {
     setLoading(true);
@@ -239,7 +239,7 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
             data={telemetry.map(p => ({ timestamp: p.timestamp, value: p.usedRamMB }))}
             unit="MB"
             color="amber"
-            maxValue={server.limits.ramMB}
+            maxValue={server.resources?.memoryMb || server.limits?.ramMB || 512}
             height={150}
           />
 

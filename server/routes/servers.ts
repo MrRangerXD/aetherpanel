@@ -6,6 +6,9 @@ import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { parseEnvContent, mergeEnvVariables, serializeEnvLines, EnvLine } from '../utils/envHelper';
 import { authMiddleware, requireApiKeyScope, AuthenticatedRequest, createAuditLog } from '../auth';
+import { isValidRuntimeVersion, normalizeRuntimeVersion } from './runtimes';
+import { validateAndNormalizeEntrypoint, sanitizeStartupFlags, validateRuntimeVersion } from '../utils/startupValidation';
+import { buildBotStartupCommand } from '../../src/lib/startup';
 import {
   startServer, stopServer, restartServer, reinstallServer, killServer,
   validateServerPreflight,
@@ -23,6 +26,10 @@ import {
 import { searchRealPlugins, downloadPluginJar } from '../pluginProviders';
 import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProcess, getBackupFilePath } from '../backups';
 import { calculateNextRunAt } from '../scheduler';
+import {
+  createRealDatabase, deleteRealDatabase, rotateRealDatabasePassword,
+  cleanupServerDatabases, testDatabaseCredentials, getProviderStatus, validateDatabaseName
+} from '../services/databaseService';
 import { ServerBackup, ServerDatabase, ServerSchedule, ServerActivity } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerSftpInfo } from '../sftpResolver';
@@ -190,8 +197,17 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
 
 // GET /api/v1/servers/:id/sftp - Resolved public SFTP Connection details
 router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id, 'files.view');
+  const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
+
+  const { isOwner, isAdmin, requesterSubuser } = access;
+  if (!isOwner && !isAdmin) {
+    const hasPerm = requesterSubuser?.permissions.includes('sftp.connect') || requesterSubuser?.permissions.includes('files.view');
+    if (!hasPerm) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: "Required permission 'files.view' or 'sftp.connect' is missing." } });
+      return;
+    }
+  }
 
   const sftpInfo = await resolveServerSftpInfo(req.params.id, req.get('host'));
   res.json({
@@ -261,17 +277,140 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
   if (!access) return;
 
   const { server, db } = access;
-  const { name, startup, envVars, description } = req.body;
+  const { name, startup, envVars, description, limits, memory, ramMB, cpu, disk } = req.body;
+
+  const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin';
+
+  // Resource limits mutation protection: non-admins CANNOT alter server resource limits
+  if (isAdmin && limits && typeof limits === 'object') {
+    server.limits = {
+      ...server.limits,
+      ...limits
+    };
+    server.resources = {
+      memoryMb: server.limits.ramMB,
+      cpuPercent: Math.round(server.limits.cpuCores * 100),
+      diskGb: server.limits.diskGB
+    };
+  }
 
   if (typeof name === 'string' && name.trim()) {
     server.name = name.trim();
   }
 
   if (startup && typeof startup === 'object') {
+    // 1. Validate entrypoints across sub-configs
+    const isMinecraft = server.productId === 'prod_minecraft' || /minecraft|paper|purpur|forge|fabric/i.test(server.software || '');
+
+    if (startup.entryFile) {
+      const val = validateAndNormalizeEntrypoint(startup.entryFile, isMinecraft ? 'server.jar' : 'index.js');
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_ENTRYPOINT', message: val.error } });
+      }
+      startup.entryFile = val.normalized;
+    }
+
+    if (startup.nodeConfig?.startupFile) {
+      const val = validateAndNormalizeEntrypoint(startup.nodeConfig.startupFile, 'index.js');
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_ENTRYPOINT', message: val.error } });
+      }
+      startup.nodeConfig.startupFile = val.normalized;
+    }
+
+    if (startup.pythonConfig?.startupFile) {
+      const val = validateAndNormalizeEntrypoint(startup.pythonConfig.startupFile, 'main.py');
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_ENTRYPOINT', message: val.error } });
+      }
+      startup.pythonConfig.startupFile = val.normalized;
+    }
+
+    if (startup.bunConfig?.startupFile) {
+      const val = validateAndNormalizeEntrypoint(startup.bunConfig.startupFile, 'index.ts');
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_ENTRYPOINT', message: val.error } });
+      }
+      startup.bunConfig.startupFile = val.normalized;
+    }
+
+    if (startup.serverJar) {
+      const val = validateAndNormalizeEntrypoint(startup.serverJar, 'server.jar');
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_SERVER_JAR', message: val.error } });
+      }
+      startup.serverJar = val.normalized;
+    }
+
+    // 2. Prevent user-supplied executable override (e.g. 'bash', 'curl', etc.)
+    if ('pythonExecutable' in startup) {
+      delete startup.pythonExecutable;
+    }
+
+    // 3. Force Node memory flag & config to match server allocation
+    if (!startup.nodeConfig) startup.nodeConfig = {};
+    startup.nodeConfig.memoryLimitMB = server.limits.ramMB;
+
+    // 4. Force Minecraft heap to stay within allocated RAM
+    if (startup.xmxMB) {
+      startup.xmxMB = Math.min(Math.max(256, Number(startup.xmxMB) || server.limits.ramMB), server.limits.ramMB);
+    } else {
+      startup.xmxMB = server.limits.ramMB;
+    }
+    if (startup.xmsMB) {
+      startup.xmsMB = Math.min(Math.max(64, Number(startup.xmsMB) || 128), startup.xmxMB);
+    }
+
+    // 5. Sanitize custom flags
+    if (startup.customFlags) {
+      startup.customFlags = sanitizeStartupFlags(startup.customFlags, { disallowMemoryOverride: true });
+    }
+    if (startup.nodeOptions) {
+      startup.nodeOptions = sanitizeStartupFlags(startup.nodeOptions, { disallowMemoryOverride: true });
+    }
+    if (startup.jvmFlags) {
+      startup.jvmFlags = sanitizeStartupFlags(startup.jvmFlags, { disallowMemoryOverride: true });
+    }
+
+    // 6. Synchronize software version and runtime
+    if (startup.javaVersion) {
+      server.version = startup.javaVersion;
+    } else if (startup.version) {
+      const verVal = validateRuntimeVersion(server.software, startup.version);
+      if (!verVal.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_VERSION', message: `Invalid version '${startup.version}'.` } });
+      }
+      server.version = verVal.normalized;
+    }
+
+    if (startup.botRuntime) {
+      if (startup.botRuntime === 'python') {
+        server.software = 'Python Bot';
+      } else if (startup.botRuntime === 'bun') {
+        server.software = 'Bun JS';
+      } else if (startup.botRuntime === 'nodejs') {
+        server.software = 'Node.js Bot';
+      }
+    }
+
+    // Merge into server.startup
     server.startup = {
       ...(server.startup || {}),
       ...startup
     };
+
+    // Re-generate compiled startup command dynamically
+    if (!isMinecraft) {
+      const cmdObj = buildBotStartupCommand(server, server.startup);
+      server.startup.compiledCommand = cmdObj.compiledCommand;
+      server.startup.entryFile = cmdObj.startupFile;
+    } else {
+      const xms = server.startup.xmsMB || 128;
+      const xmx = server.startup.xmxMB || server.limits.ramMB;
+      const jar = server.startup.serverJar || 'server.jar';
+      const flags = server.startup.jvmFlags || server.startup.customFlags || '';
+      server.startup.compiledCommand = `java -Xms${xms}M -Xmx${xmx}M ${flags} -jar ${jar} nogui`.replace(/\s+/g, ' ').trim();
+    }
   }
 
   if (Array.isArray(envVars)) {
@@ -1033,66 +1172,207 @@ router.delete('/:id/backups/:backupId', authMiddleware, async (req: Authenticate
   }
 });
 
-// GET /api/v1/servers/:id/databases - List databases
+// GET /api/v1/servers/:id/databases - List databases & provider status
 router.get('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'databases.view');
   if (!access) return;
 
-  const { db } = access;
+  const { server, db } = access;
   const dbs = db.databases.filter(d => d.serverId === req.params.id);
-  res.json({ success: true, data: dbs });
+  const providerStatus = await getProviderStatus(server);
+
+  res.json({
+    success: true,
+    data: dbs,
+    providerStatus,
+    limits: {
+      used: dbs.length,
+      max: server.limits.databases
+    }
+  });
 });
 
-// POST /api/v1/servers/:id/databases - Create database
+// GET /api/v1/servers/:id/databases/provider-status - Check provider status
+router.get('/:id/databases/provider-status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.view');
+  if (!access) return;
+
+  const { server } = access;
+  const providerStatus = await getProviderStatus(server);
+  res.json({ success: true, data: providerStatus });
+});
+
+// POST /api/v1/servers/:id/databases - Create real database
 router.post('/:id/databases', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'databases.create');
   if (!access) return;
 
   const { server, db } = access;
-  const currentDbs = db.databases.filter(d => d.serverId === server.id);
+  const currentDbs = (db.databases || []).filter(d => d.serverId === server.id);
 
   if (currentDbs.length >= server.limits.databases) {
     return res.status(400).json({
       success: false,
-      error: { code: 'DATABASE_LIMIT_EXCEEDED', message: `Database limit reached (${server.limits.databases} max for your plan).` }
+      error: {
+        code: 'DATABASE_LIMIT_EXCEEDED',
+        message: `Database limit reached (${currentDbs.length}/${server.limits.databases} allocated for this server). Upgrade your plan to create more databases.`
+      }
     });
   }
 
   const { name, dbType } = req.body;
-  const dbName = (name || 'app_db').replace(/[^a-zA-Z0-9_]/g, '');
+  const val = validateDatabaseName(name);
+  if (!val.valid) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_DATABASE_NAME', message: val.error }
+    });
+  }
 
-  const node = db.nodes.find(n => n.id === server.nodeId);
+  try {
+    const newDb = await createRealDatabase(server, name, dbType);
+    if (!db.databases) db.databases = [];
+    db.databases.push(newDb);
+    saveDbSync();
 
-  const newDb: ServerDatabase = {
-    id: `db_${Date.now()}`,
-    serverId: server.id,
-    name: `s_${server.id.substring(4)}_${dbName}`,
-    username: `u_${server.id.substring(4)}`,
-    host: node?.hostname || 'db-cluster.aetherpanel.com',
-    port: dbType === 'postgres' ? 5432 : 3306,
-    dbType: dbType === 'postgres' ? 'postgres' : 'mysql',
-    createdAt: new Date().toISOString()
-  };
+    await recordServerActivity(
+      server.id,
+      req.user!.id,
+      req.user!.username,
+      'database.created',
+      `Created and provisioned real database schema '${newDb.name}' (${newDb.dbType.toUpperCase()})`
+    );
 
-  db.databases.push(newDb);
-  saveDbSync();
+    await createAuditLog(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'CREATE_SERVER_DATABASE',
+      server.id,
+      `Created real database ${newDb.name} on host ${newDb.host}:${newDb.port}`
+    );
 
-  res.json({ success: true, message: 'Database created successfully.', data: newDb });
+    res.json({
+      success: true,
+      message: 'Database schema and user credentials successfully provisioned.',
+      data: newDb
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'DATABASE_PROVISIONING_FAILED',
+        message: err.message || 'Database provisioning failed.'
+      }
+    });
+  }
 });
 
-// DELETE /api/v1/servers/:id/databases/:databaseId
+// DELETE /api/v1/servers/:id/databases/:databaseId - Delete real database
 router.delete('/:id/databases/:databaseId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'databases.delete');
   if (!access) return;
 
+  const { server, db } = access;
+  const targetDb = (db.databases || []).find(d => d.id === req.params.databaseId && d.serverId === req.params.id);
+  if (!targetDb) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database not found.' } });
+  }
+
+  try {
+    await deleteRealDatabase(targetDb);
+
+    db.databases = (db.databases || []).filter(d => d.id !== targetDb.id);
+    saveDbSync();
+
+    await recordServerActivity(
+      server.id,
+      req.user!.id,
+      req.user!.username,
+      'database.deleted',
+      `Deleted database schema '${targetDb.name}' and revoked user credentials`
+    );
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'DELETE_SERVER_DATABASE',
+      server.id,
+      `Deleted database schema ${targetDb.name}`
+    );
+
+    res.json({ success: true, message: 'Database and associated user successfully removed.' });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'DATABASE_DELETION_FAILED', message: err.message || 'Failed to delete database.' }
+    });
+  }
+});
+
+// POST /api/v1/servers/:id/databases/:databaseId/rotate-password - Rotate database password
+router.post('/:id/databases/:databaseId/rotate-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.create');
+  if (!access) return;
+
+  const { server, db } = access;
+  const targetDb = (db.databases || []).find(d => d.id === req.params.databaseId && d.serverId === req.params.id);
+  if (!targetDb) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database not found.' } });
+  }
+
+  try {
+    const { newPassword, connectionUri } = await rotateRealDatabasePassword(targetDb);
+    targetDb.password = newPassword;
+    targetDb.connectionUri = connectionUri;
+    targetDb.updatedAt = new Date().toISOString();
+    saveDbSync();
+
+    await recordServerActivity(
+      server.id,
+      req.user!.id,
+      req.user!.username,
+      'database.password_rotated',
+      `Rotated credentials for database '${targetDb.name}'`
+    );
+
+    res.json({
+      success: true,
+      message: 'Database password rotated successfully.',
+      data: {
+        id: targetDb.id,
+        password: newPassword,
+        connectionUri
+      }
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'ROTATE_PASSWORD_FAILED', message: err.message || 'Failed to rotate database password.' }
+    });
+  }
+});
+
+// POST /api/v1/servers/:id/databases/:databaseId/test-connection - Test real database connectivity
+router.post('/:id/databases/:databaseId/test-connection', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'databases.view');
+  if (!access) return;
+
   const { db } = access;
-  const idx = db.databases.findIndex(d => d.id === req.params.databaseId && d.serverId === req.params.id);
-  if (idx === -1) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database not found' } });
+  const targetDb = (db.databases || []).find(d => d.id === req.params.databaseId && d.serverId === req.params.id);
+  if (!targetDb) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database not found.' } });
+  }
 
-  db.databases.splice(idx, 1);
-  saveDbSync();
-
-  res.json({ success: true, message: 'Database removed.' });
+  const result = await testDatabaseCredentials(targetDb);
+  res.json({
+    success: result.success,
+    data: {
+      connected: result.success,
+      message: result.message
+    }
+  });
 });
 
 // GET /api/v1/servers/:id/schedules
@@ -1240,13 +1520,56 @@ router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res
   const access = await checkServerAccess(req, res, req.params.id, 'startup.update');
   if (!access) return;
 
-  const { server, db } = access;
-  const { software, version } = req.body;
+  const { server } = access;
+  const { software, version, entryFile, startup } = req.body;
 
   if (software) server.software = software;
-  if (version) server.version = version;
-  server.updatedAt = new Date().toISOString();
 
+  if (version) {
+    const isBot = server.productId === 'prod_bot' || (typeof server.software === 'string' && /node|python|bun/i.test(server.software));
+    if (isBot) {
+      const verCheck = validateRuntimeVersion(server.software, version);
+      if (!verCheck.valid) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_VERSION', message: `Invalid version '${version}' for runtime '${server.software}'.` } });
+      }
+      server.version = verCheck.normalized;
+    } else {
+      server.version = version;
+    }
+  }
+
+  if (entryFile) {
+    const isMinecraft = server.productId === 'prod_minecraft' || /minecraft|paper|purpur|forge|fabric/i.test(server.software || '');
+    const val = validateAndNormalizeEntrypoint(entryFile, isMinecraft ? 'server.jar' : 'index.js');
+    if (!val.valid) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_ENTRYPOINT', message: val.error } });
+    }
+    if (!server.startup) server.startup = {};
+    server.startup.entryFile = val.normalized;
+  }
+
+  if (startup && typeof startup === 'object') {
+    if ('pythonExecutable' in startup) delete startup.pythonExecutable;
+    server.startup = { ...(server.startup || {}), ...startup };
+  }
+
+  // Re-generate compiled startup command
+  const isMinecraft = server.productId === 'prod_minecraft' || /minecraft|paper|purpur|forge|fabric/i.test(server.software || '');
+  if (!isMinecraft) {
+    const cmdObj = buildBotStartupCommand(server, server.startup);
+    server.startup = server.startup || {};
+    server.startup.compiledCommand = cmdObj.compiledCommand;
+    server.startup.entryFile = cmdObj.startupFile;
+  } else {
+    server.startup = server.startup || {};
+    const xms = server.startup.xmsMB || 128;
+    const xmx = server.startup.xmxMB || server.limits.ramMB;
+    const jar = server.startup.serverJar || 'server.jar';
+    const flags = server.startup.jvmFlags || server.startup.customFlags || '';
+    server.startup.compiledCommand = `java -Xms${xms}M -Xmx${xmx}M ${flags} -jar ${jar} nogui`.replace(/\s+/g, ' ').trim();
+  }
+
+  server.updatedAt = new Date().toISOString();
   saveDbSync();
 
   res.json({ success: true, message: 'Startup configuration updated.', data: server });
@@ -1423,9 +1746,8 @@ router.post('/:id/playit/claim', authMiddleware, async (req: AuthenticatedReques
     if (!claimRes.success) {
       return res.status(400).json({
         success: false,
-        state: claimRes.state,
-        error: { code: 'CLAIM_URL_UNAVAILABLE', message: claimRes.message || 'Playit agent is running, but Playit has not provided a claim URL yet.' },
-        data: claimRes
+        code: 'PLAYIT_CLAIM_UNAVAILABLE',
+        message: claimRes.message || 'The Playit agent started, but a verified claim URL could not be obtained.'
       });
     }
     res.json({ success: true, data: claimRes });
@@ -1485,10 +1807,18 @@ router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRe
 
 // POST /api/v1/servers/:id/sftp/reset-password - Generate fresh SFTP password
 router.post('/:id/sftp/reset-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
+  const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const { server } = access;
+  const { server, isOwner, isAdmin, requesterSubuser } = access;
+  if (!isOwner && !isAdmin) {
+    const hasPerm = requesterSubuser?.permissions.includes('sftp.connect') || requesterSubuser?.permissions.includes('network.manage');
+    if (!hasPerm) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: "Required permission 'network.manage' or 'sftp.connect' is missing." } });
+      return;
+    }
+  }
+
   const newPassword = `aeth_${crypto.randomBytes(8).toString('hex')}`;
   (server as any).sftpPassword = newPassword;
   saveDbSync();
@@ -1518,6 +1848,15 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
     } catch (e) {}
   }
 
+  // Release node capacity
+  const targetNode = db.nodes.find(n => n.id === server.nodeId);
+  if (targetNode) {
+    targetNode.usedRamMB = Math.max(0, targetNode.usedRamMB - (server.limits?.ramMB || 0));
+    targetNode.usedCpuCores = Math.max(0, targetNode.usedCpuCores - (server.limits?.cpuCores || 0));
+    targetNode.usedDiskGB = Math.max(0, (targetNode.usedDiskGB || 0) - (server.limits?.diskGB || 0));
+    targetNode.serverCount = Math.max(0, targetNode.serverCount - 1);
+  }
+
   // Remove from DB
   db.servers = db.servers.filter(s => s.id !== server.id);
   // Free allocations
@@ -1527,7 +1866,7 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
   });
   // Remove backups & dbs
   db.backups = db.backups.filter(b => b.serverId !== server.id);
-  db.databases = db.databases.filter(d => d.serverId !== server.id);
+  await cleanupServerDatabases(server.id);
   db.schedules = db.schedules.filter(sc => sc.serverId !== server.id);
 
   saveDbSync();

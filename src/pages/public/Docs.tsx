@@ -66,7 +66,10 @@ export const Docs: React.FC = () => {
                 <p className="text-[11px] text-zinc-400 leading-relaxed mb-3">
                   Our community discord is active 24/7 for technical support.
                 </p>
-                <button className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors">
+                <button 
+                  onClick={() => window.open('https://discord.gg', '_blank')}
+                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
                   Join Discord
                 </button>
               </div>
@@ -360,7 +363,7 @@ client.login(process.env.BOT_TOKEN);`}</code>
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-white">A Record (Bedrock & Discord)</h3>
+                    <h3 className="text-sm font-bold text-white">A Record (Bots & Direct IP)</h3>
                     <p className="text-xs text-zinc-400 leading-relaxed">
                       Used for direct IP mapping. Note that port specification is still required for connection.
                     </p>

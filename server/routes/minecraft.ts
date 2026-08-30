@@ -214,7 +214,7 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
       const verInfo = await getMinecraftVersions(targetSoftware);
       targetVersion = verInfo.latest;
     } catch {
-      targetVersion = '1.20.4';
+      targetVersion = '26.2';
     }
   }
 

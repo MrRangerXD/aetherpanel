@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Square, RotateCw, Cpu, Activity, HardDrive, Copy, Check, Loader2 } from 'lucide-react';
-import { Server } from '../../types';
+import { Server, ServerTypeTheme } from '../../types';
+import { formatMemory } from '../../lib/serverNormalize';
 
 interface ServerCardProps {
   server: Server;
@@ -24,7 +25,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
   const canRestart = !server.isSubuser || server.permissions?.includes('server.restart');
 
   const serverType = server.serverType;
-  const theme = serverType?.theme || {};
+  const theme: Partial<ServerTypeTheme> = serverType?.theme || {};
   const accentColor = theme.accentColor || '#8B5CF6';
   const rawBgUrl = theme.backgroundUrl || FALLBACK_BACKGROUND;
   const bgUrl = bgError ? FALLBACK_BACKGROUND : rawBgUrl;
@@ -61,9 +62,9 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
   };
 
   const formatRam = () => {
-    if (!isRunning) return '0 GB';
+    if (!isRunning) return '0 MB';
     if (typeof server.ramUsageMB === 'number' && !isNaN(server.ramUsageMB)) {
-      return `${(server.ramUsageMB / 1024).toFixed(1)} GB`;
+      return formatMemory(server.ramUsageMB);
     }
     return '—';
   };

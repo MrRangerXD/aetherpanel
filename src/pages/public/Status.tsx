@@ -457,9 +457,9 @@ export const Status: React.FC = () => {
                         </span>
                       </div>
 
-                      <button className="text-zinc-400 hover:text-white p-1">
+                      <div className="text-zinc-400 hover:text-white p-1">
                         {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-zinc-300">{inc.description}</p>

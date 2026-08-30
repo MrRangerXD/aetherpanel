@@ -28,16 +28,14 @@ async function runAuditTests() {
   console.log('--- [1/6] DATABASE SEED & SERVER TYPE INTEGRITY ---');
   try {
     const db = await getDb();
-    assert(Array.isArray(db.serverTypes) && db.serverTypes.length >= 5, 'At least 5 default Server Types present in DB', `${db.serverTypes.length} types found`);
+    assert(Array.isArray(db.serverTypes) && db.serverTypes.length >= 4, 'At least 4 default Server Types present in DB', `${db.serverTypes.length} types found`);
 
     const java = db.serverTypes.find(st => st.id === 'st_minecraft_java' || st.slug === 'minecraft-java');
-    const bedrock = db.serverTypes.find(st => st.id === 'st_minecraft_bedrock' || st.slug === 'minecraft-bedrock');
     const node = db.serverTypes.find(st => st.id === 'st_nodejs' || st.slug === 'nodejs');
     const bun = db.serverTypes.find(st => st.id === 'st_bun' || st.slug === 'bun');
     const python = db.serverTypes.find(st => st.id === 'st_python' || st.slug === 'python');
 
     assert(!!java, 'Minecraft Java edition server type exists');
-    assert(!!bedrock, 'Minecraft Bedrock edition server type exists');
     assert(!!node, 'Node.js Bot server type exists');
     assert(!!bun, 'Bun Bot server type exists');
     assert(!!python, 'Python Bot server type exists');
@@ -113,10 +111,10 @@ async function runAuditTests() {
     const db = await getDb();
     const serverTypes = db.serverTypes || [];
 
-    // Test Bedrock matching
-    const srvBedrock: any = { id: 'srv_b', software: 'Bedrock Dedicated Server' };
-    const resBedrock = resolveServerType(srvBedrock, serverTypes);
-    assert(resBedrock.id === 'st_minecraft_bedrock' || resBedrock.slug === 'minecraft-bedrock', 'Software "Bedrock Dedicated Server" matches Bedrock type');
+    // Test Paper matching
+    const srvPaper: any = { id: 'srv_p', software: 'Paper' };
+    const resPaper = resolveServerType(srvPaper, serverTypes);
+    assert(resPaper.id === 'st_minecraft_java' || resPaper.slug === 'minecraft-java', 'Software "Paper" matches Java type');
 
     // Test Node.js matching via startup.botRuntime
     const srvNode: any = { id: 'srv_n', software: 'Discord Bot', startup: { botRuntime: 'nodejs' } };

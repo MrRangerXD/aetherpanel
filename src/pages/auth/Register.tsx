@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Cpu, Lock, Mail, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import { useBranding } from '../../lib/BrandingContext';
 
 interface RegisterProps {
   onNavigate: (page: string) => void;
@@ -10,6 +12,7 @@ interface RegisterProps {
 export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const { register, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
   const { accentClasses } = useTheme();
+  const { pageAnimationsEnabled } = useBranding();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -20,6 +23,15 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [discordLoading, setDiscordLoading] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   const handleRedirect = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -93,8 +105,30 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const hasSocialAuth = authConfig.googleEnabled || authConfig.discordEnabled;
   const isEmailEnabled = authConfig.emailPasswordEnabled;
 
+  const animate = pageAnimationsEnabled && !prefersReducedMotion;
+
+  const containerVariants = {
+    hidden: { opacity: 0, y: 12 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 120,
+        damping: 18,
+        mass: 0.8
+      }
+    }
+  };
+
+  const motionDivProps = animate ? {
+    variants: containerVariants,
+    initial: "hidden",
+    animate: "visible"
+  } : {};
+
   return (
-    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <motion.div {...motionDivProps} className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8">
         
         {/* Header */}
@@ -283,6 +317,6 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
         </div>
 
       </div>
-    </div>
+    </motion.div>
   );
 };

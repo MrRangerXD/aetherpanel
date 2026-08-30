@@ -75,7 +75,7 @@ curl -sSL http://your-panel-ip:3000/install.sh | bash -s -- --node --token YOUR_
 
 ## 🌟 Core Capabilities
 
-* **Multi-Instance Orchestration**: Effortlessly manage Minecraft (Java/Bedrock), Discord Bots (Node.js/Python), and dedicated Databases.
+* **Multi-Instance Orchestration**: Effortlessly manage Minecraft (Paper/Purpur/Vanilla/Fabric/Forge), Discord Bots (Node.js/Python), and dedicated Databases.
 * **Real-Time Telemetry**: Live CPU, RAM, and Disk metrics streamed via high-speed WebSocket connections.
 * **Integrated Marketplace**: Search and deploy plugins directly from Modrinth and Hangar repositories.
 * **Granular RBAC**: Complex subuser permission system for collaborative server management.

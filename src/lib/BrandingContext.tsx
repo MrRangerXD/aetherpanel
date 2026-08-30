@@ -9,9 +9,11 @@ interface BrandingContextType {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   enablePlayit: boolean;
+  pageAnimationsEnabled: boolean;
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
   setEnablePlayitLocally: (enabled: boolean) => void;
+  setPageAnimationsEnabledLocally: (enabled: boolean) => void;
 }
 
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
@@ -27,6 +29,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [maintenanceMessage, setMaintenanceMessage] = useState<string>('AetherPanel is currently performing scheduled system upgrades.');
   const [enablePlayit, setEnablePlayit] = useState<boolean>(() => {
     const saved = localStorage.getItem('aether_enable_playit');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [pageAnimationsEnabled, setPageAnimationsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('aether_page_animations_enabled');
     return saved !== null ? saved === 'true' : true;
   });
 
@@ -46,6 +52,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (res.data.enablePlayit !== undefined) {
           setEnablePlayit(res.data.enablePlayit);
           localStorage.setItem('aether_enable_playit', String(res.data.enablePlayit));
+        }
+        if (res.data.pageAnimationsEnabled !== undefined) {
+          setPageAnimationsEnabled(res.data.pageAnimationsEnabled);
+          localStorage.setItem('aether_page_animations_enabled', String(res.data.pageAnimationsEnabled));
         }
       }
     } catch (err) {
@@ -78,6 +88,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('aether_enable_playit', String(enabled));
   };
 
+  const setPageAnimationsEnabledLocally = (enabled: boolean) => {
+    setPageAnimationsEnabled(enabled);
+    localStorage.setItem('aether_page_animations_enabled', String(enabled));
+  };
+
   return (
     <BrandingContext.Provider
       value={{
@@ -88,9 +103,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         maintenanceMode,
         maintenanceMessage,
         enablePlayit,
+        pageAnimationsEnabled,
         refreshBranding: fetchBranding,
         updateBrandNameLocally,
-        setEnablePlayitLocally
+        setEnablePlayitLocally,
+        setPageAnimationsEnabledLocally
       }}
     >
       {children}

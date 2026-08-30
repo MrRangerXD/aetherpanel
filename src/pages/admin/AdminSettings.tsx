@@ -3,14 +3,15 @@ import {
   Sliders, Save, Check, QrCode, CreditCard, Building, CheckCircle2,
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
-  AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy
+  AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy,
+  Database, Plus, Trash2, Edit3, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
-import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings } from '../../types';
+import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings, DatabaseHost } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp' | 'databases'>('general');
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -21,20 +22,19 @@ export const AdminSettings: React.FC = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [enablePlayit, setEnablePlayit] = useState(true);
   const [togglingGlobalPlayit, setTogglingGlobalPlayit] = useState(false);
+  const [pageAnimationsEnabled, setPageAnimationsEnabled] = useState(true);
 
   // Auth Provider Settings
   const [authProviders, setAuthProviders] = useState<AuthProviderSettings>({
     emailPassword: { enabled: true },
     google: {
       enabled: true,
-      firebaseConfig: {
-        apiKey: '',
-        authDomain: '',
-        projectId: '',
-        storageBucket: '',
-        messagingSenderId: '',
-        appId: ''
-      }
+      firebaseApiKey: '',
+      firebaseAuthDomain: '',
+      firebaseProjectId: '',
+      firebaseStorageBucket: '',
+      firebaseMessagingSenderId: '',
+      firebaseAppId: ''
     },
     discord: {
       enabled: true,
@@ -114,6 +114,33 @@ export const AdminSettings: React.FC = () => {
   const [networkSftpDetails, setNetworkSftpDetails] = useState<any>(null);
   const [fetchingNetwork, setFetchingNetwork] = useState(false);
 
+  // Database Hosts state
+  const [databaseHosts, setDatabaseHosts] = useState<DatabaseHost[]>([]);
+  const [loadingDbHosts, setLoadingDbHosts] = useState(false);
+  const [showAddHostModal, setShowAddHostModal] = useState(false);
+  const [editingHost, setEditingHost] = useState<DatabaseHost | null>(null);
+  const [hostForm, setHostForm] = useState<{
+    name: string;
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    dbType: 'mysql' | 'postgres';
+    maxDatabases?: number;
+  }>({
+    name: '',
+    host: '127.0.0.1',
+    port: 3306,
+    username: 'root',
+    password: '',
+    dbType: 'mysql',
+    maxDatabases: undefined
+  });
+  const [testingHost, setTestingHost] = useState(false);
+  const [hostTestResult, setHostTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSavingHost, setIsSavingHost] = useState(false);
+  const [hostModalError, setHostModalError] = useState<string | null>(null);
+
   const fetchNetworkSftpData = async () => {
     setFetchingNetwork(true);
     try {
@@ -135,6 +162,7 @@ export const AdminSettings: React.FC = () => {
       setRegistrationEnabled(res.data.registrationEnabled ?? true);
       setMaintenanceMode(res.data.maintenanceMode ?? false);
       setEnablePlayit(res.data.enablePlayit ?? true);
+      setPageAnimationsEnabled(res.data.pageAnimationsEnabled ?? true);
       if (res.data.paymentGateways) {
         setGateways(res.data.paymentGateways);
       }
@@ -225,6 +253,92 @@ export const AdminSettings: React.FC = () => {
     if (forceCheck) setCheckingUpdates(false);
   };
 
+  const fetchDatabaseHosts = async () => {
+    setLoadingDbHosts(true);
+    const res = await apiRequest('/admin/database-hosts');
+    if (res.success && res.data) {
+      setDatabaseHosts(res.data);
+    }
+    setLoadingDbHosts(false);
+  };
+
+  const handleTestHostConnection = async () => {
+    setTestingHost(true);
+    setHostTestResult(null);
+    setHostModalError(null);
+
+    const res = await apiRequest('/admin/database-hosts/test', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: editingHost?.id,
+        host: hostForm.host,
+        port: hostForm.port,
+        username: hostForm.username,
+        password: hostForm.password,
+        dbType: hostForm.dbType
+      })
+    });
+
+    setTestingHost(false);
+    if (res.success) {
+      setHostTestResult({ success: true, message: res.message || 'Connection successful!' });
+    } else {
+      setHostTestResult({ success: false, message: res.error?.message || 'Connection failed.' });
+    }
+  };
+
+  const handleSaveDatabaseHost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hostForm.name || !hostForm.host || !hostForm.username) {
+      setHostModalError('Name, Host, and Username are required.');
+      return;
+    }
+
+    setIsSavingHost(true);
+    setHostModalError(null);
+
+    const res = await apiRequest('/admin/database-hosts', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: editingHost?.id,
+        name: hostForm.name,
+        host: hostForm.host,
+        port: hostForm.port,
+        username: hostForm.username,
+        password: hostForm.password,
+        dbType: hostForm.dbType,
+        maxDatabases: hostForm.maxDatabases
+      })
+    });
+
+    setIsSavingHost(false);
+    if (res.success) {
+      setShowAddHostModal(false);
+      setEditingHost(null);
+      setActionMsg(res.message || 'Database host saved successfully.');
+      setTimeout(() => setActionMsg(null), 4000);
+      fetchDatabaseHosts();
+    } else {
+      setHostModalError(res.error?.message || 'Failed to save database host.');
+    }
+  };
+
+  const handleDeleteDatabaseHost = async (hostId: string, hostName: string) => {
+    if (!window.confirm(`Are you sure you want to remove database host '${hostName}'? Existing servers may no longer connect if this provider is active.`)) return;
+
+    const res = await apiRequest(`/admin/database-hosts/${hostId}`, {
+      method: 'DELETE'
+    });
+
+    if (res.success) {
+      setActionMsg(`Database host '${hostName}' removed.`);
+      setTimeout(() => setActionMsg(null), 4000);
+      fetchDatabaseHosts();
+    } else {
+      setActionMsg(res.error?.message || 'Failed to delete database host.');
+    }
+  };
+
   const pollUpdateStatus = async () => {
     const res = await apiRequest('/admin/update/status');
     if (res.success && res.data) {
@@ -266,7 +380,7 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
-  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally } = useBranding();
+  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally } = useBranding();
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,12 +393,14 @@ export const AdminSettings: React.FC = () => {
         currencySymbol,
         registrationEnabled,
         maintenanceMode,
-        enablePlayit
+        enablePlayit,
+        pageAnimationsEnabled
       })
     });
     if (res.success) {
       updateBrandNameLocally(brandName);
       setEnablePlayitLocally(enablePlayit);
+      setPageAnimationsEnabledLocally(pageAnimationsEnabled);
       await refreshBranding();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -305,12 +421,14 @@ export const AdminSettings: React.FC = () => {
         currencySymbol,
         registrationEnabled,
         maintenanceMode,
-        enablePlayit: enabled
+        enablePlayit: enabled,
+        pageAnimationsEnabled
       })
     });
     setTogglingGlobalPlayit(false);
     if (res.success) {
       setEnablePlayitLocally(enabled);
+      setPageAnimationsEnabledLocally(pageAnimationsEnabled);
       await refreshBranding();
       setActionMsg(enabled ? 'Playit.GG has been enabled globally.' : 'Playit.GG has been disabled globally.');
       setTimeout(() => setActionMsg(null), 4000);
@@ -422,6 +540,12 @@ export const AdminSettings: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'network_sftp' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
             <Globe className="h-3.5 w-3.5" /> Network & SFTP
+          </button>
+          <button
+            onClick={() => { setActiveTab('databases'); fetchDatabaseHosts(); }}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'databases' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <Database className="h-3.5 w-3.5" /> Database Hosts
           </button>
           <button
             onClick={() => { setActiveTab('updates'); fetchVersionInfo(); pollUpdateStatus(); }}
@@ -550,6 +674,46 @@ export const AdminSettings: React.FC = () => {
             </div>
           </div>
 
+          {/* Appearance & Experience — Page Animations */}
+          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white">Appearance & Experience</h3>
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                    pageAnimationsEnabled
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${pageAnimationsEnabled ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                    {pageAnimationsEnabled ? 'On' : 'Off'}
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-zinc-200">Enable Page Animations</div>
+                <p className="text-[11px] text-zinc-400">
+                  Control premium entrance animations for the Homepage, Login, and Signup pages.
+                </p>
+                <p className="text-[11px] text-zinc-500">
+                  {pageAnimationsEnabled
+                    ? 'Animations will run on initial public and auth page entrance.'
+                    : 'Entrance animations are disabled globally for a faster feel.'}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                <input
+                  type="checkbox"
+                  checked={pageAnimationsEnabled}
+                  onChange={(e) => setPageAnimationsEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          </div>
+
           <div className="flex justify-end pt-2">
             <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5">
               <Save className="h-4 w-4" /> Save Settings
@@ -628,12 +792,12 @@ export const AdminSettings: React.FC = () => {
                     <label className="block text-zinc-400 font-medium mb-1">Firebase API Key</label>
                     <input
                       type="text"
-                      value={authProviders.google?.firebaseConfig?.apiKey || ''}
+                      value={authProviders.google?.firebaseApiKey || ''}
                       onChange={(e) => setAuthProviders(prev => ({
                         ...prev,
                         google: {
                           ...prev.google,
-                          firebaseConfig: { ...prev.google.firebaseConfig, apiKey: e.target.value }
+                          firebaseApiKey: e.target.value
                         }
                       }))}
                       placeholder="AIzaSy..."
@@ -645,12 +809,12 @@ export const AdminSettings: React.FC = () => {
                     <label className="block text-zinc-400 font-medium mb-1">Firebase Auth Domain</label>
                     <input
                       type="text"
-                      value={authProviders.google?.firebaseConfig?.authDomain || ''}
+                      value={authProviders.google?.firebaseAuthDomain || ''}
                       onChange={(e) => setAuthProviders(prev => ({
                         ...prev,
                         google: {
                           ...prev.google,
-                          firebaseConfig: { ...prev.google.firebaseConfig, authDomain: e.target.value }
+                          firebaseAuthDomain: e.target.value
                         }
                       }))}
                       placeholder="project-id.firebaseapp.com"
@@ -662,12 +826,12 @@ export const AdminSettings: React.FC = () => {
                     <label className="block text-zinc-400 font-medium mb-1">Firebase Project ID</label>
                     <input
                       type="text"
-                      value={authProviders.google?.firebaseConfig?.projectId || ''}
+                      value={authProviders.google?.firebaseProjectId || ''}
                       onChange={(e) => setAuthProviders(prev => ({
                         ...prev,
                         google: {
                           ...prev.google,
-                          firebaseConfig: { ...prev.google.firebaseConfig, projectId: e.target.value }
+                          firebaseProjectId: e.target.value
                         }
                       }))}
                       placeholder="my-aetherpanel-app"
@@ -679,12 +843,12 @@ export const AdminSettings: React.FC = () => {
                     <label className="block text-zinc-400 font-medium mb-1">Firebase App ID</label>
                     <input
                       type="text"
-                      value={authProviders.google?.firebaseConfig?.appId || ''}
+                      value={authProviders.google?.firebaseAppId || ''}
                       onChange={(e) => setAuthProviders(prev => ({
                         ...prev,
                         google: {
                           ...prev.google,
-                          firebaseConfig: { ...prev.google.firebaseConfig, appId: e.target.value }
+                          firebaseAppId: e.target.value
                         }
                       }))}
                       placeholder="1:123456789:web:abcdef"
@@ -1194,11 +1358,11 @@ export const AdminSettings: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-white font-mono">{order.id}</span>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-bold">
-                        {order.method.toUpperCase()}
+                        {order.paymentMethod || 'MANUAL'}
                       </span>
                     </div>
                     <div className="text-xs text-zinc-300">
-                      Amount: <strong className="text-emerald-400 font-mono">${order.amount.toFixed(2)}</strong> (Credits: +{order.creditsGranted})
+                      Amount: <strong className="text-emerald-400 font-mono">${order.amount.toFixed(2)}</strong> ({order.planName})
                     </div>
                     <div className="text-[11px] text-zinc-400 font-mono">
                       Ref / UTR: <span className="text-white font-bold">{order.transactionRef || 'None provided'}</span>
@@ -1437,6 +1601,301 @@ export const AdminSettings: React.FC = () => {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* TAB 8: DATABASE HOSTS */}
+      {activeTab === 'databases' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Database className="h-5 w-5 text-amber-400" /> Database Host Providers
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Manage dedicated MySQL and PostgreSQL host servers used to dynamically provision client server databases.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setEditingHost(null);
+                  setHostForm({
+                    name: '',
+                    host: '127.0.0.1',
+                    port: 3306,
+                    username: 'root',
+                    password: '',
+                    dbType: 'mysql',
+                    maxDatabases: undefined
+                  });
+                  setHostTestResult(null);
+                  setHostModalError(null);
+                  setShowAddHostModal(true);
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs font-bold text-zinc-950 rounded-xl flex items-center gap-2 shadow-lg shadow-amber-500/10"
+              >
+                <Plus className="h-4 w-4" /> Add Database Host
+              </button>
+            </div>
+
+            {/* Environment Fallback Notice */}
+            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2 text-xs">
+              <div className="font-semibold text-zinc-300 flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-amber-400" /> Environment Variable Auto-Discovery
+              </div>
+              <p className="text-zinc-400 text-[11px] leading-relaxed">
+                If no database hosts are added here, AetherPanel will automatically fallback to standard environment variables: <code className="text-amber-300 font-mono">MYSQL_HOST</code>, <code className="text-amber-300 font-mono">MYSQL_PORT</code>, <code className="text-amber-300 font-mono">MYSQL_USER</code>, <code className="text-amber-300 font-mono">MYSQL_PASSWORD</code> or <code className="text-amber-300 font-mono">PGHOST</code>, <code className="text-amber-300 font-mono">PGPORT</code>, <code className="text-amber-300 font-mono">PGUSER</code>, <code className="text-amber-300 font-mono">PGPASSWORD</code>.
+              </p>
+            </div>
+          </div>
+
+          {/* Database Hosts Grid */}
+          {loadingDbHosts ? (
+            <div className="p-12 text-center text-xs text-zinc-400 space-y-3">
+              <RefreshCw className="h-6 w-6 animate-spin mx-auto text-amber-400" />
+              <p>Loading database host providers...</p>
+            </div>
+          ) : databaseHosts.length === 0 ? (
+            <div className="p-12 text-center rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+              <Database className="h-10 w-10 text-zinc-600 mx-auto" />
+              <div className="text-sm font-semibold text-zinc-300">No Database Hosts Configured</div>
+              <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                Add an external MySQL/MariaDB or PostgreSQL instance above so users can provision isolated schemas for their Minecraft servers and Discord bots.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {databaseHosts.map((host) => (
+                <div key={host.id} className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>{host.name}</span>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 font-mono mt-0.5">{host.host}:{host.port}</div>
+                      </div>
+
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
+                        host.dbType === 'postgres'
+                          ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                          : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                      }`}>
+                        {host.dbType}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs font-mono bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 text-zinc-300">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Admin User:</span>
+                        <strong className="text-white">{host.username}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Password:</span>
+                        <strong className="text-zinc-500 font-mono">••••••••</strong>
+                      </div>
+                      {host.maxDatabases && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Max Databases:</span>
+                          <strong className="text-white">{host.maxDatabases}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end items-center gap-2 pt-2 border-t border-zinc-800">
+                    <button
+                      onClick={() => {
+                        setEditingHost(host);
+                        setHostForm({
+                          name: host.name,
+                          host: host.host,
+                          port: host.port,
+                          username: host.username,
+                          password: '',
+                          dbType: host.dbType,
+                          maxDatabases: host.maxDatabases
+                        });
+                        setHostTestResult(null);
+                        setHostModalError(null);
+                        setShowAddHostModal(true);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDatabaseHost(host.id, host.name)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add / Edit Database Host Modal */}
+      {showAddHostModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Database className="h-5 w-5 text-amber-400" />
+                {editingHost ? 'Edit Database Host' : 'Add Database Host Provider'}
+              </h3>
+              <button onClick={() => setShowAddHostModal(false)} className="text-zinc-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {hostModalError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{hostModalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDatabaseHost} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Provider Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={hostForm.name}
+                    onChange={(e) => setHostForm({ ...hostForm, name: e.target.value })}
+                    placeholder="e.g. Primary MySQL Cluster"
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Engine Type</label>
+                  <select
+                    value={hostForm.dbType}
+                    onChange={(e) => {
+                      const newType = e.target.value as 'mysql' | 'postgres';
+                      setHostForm({
+                        ...hostForm,
+                        dbType: newType,
+                        port: newType === 'postgres' ? 5432 : 3306
+                      });
+                    }}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white"
+                  >
+                    <option value="mysql">MySQL / MariaDB</option>
+                    <option value="postgres">PostgreSQL</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Host / IP Address</label>
+                  <input
+                    type="text"
+                    required
+                    value={hostForm.host}
+                    onChange={(e) => setHostForm({ ...hostForm, host: e.target.value })}
+                    placeholder="127.0.0.1 or mysql.internal"
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Port</label>
+                  <input
+                    type="number"
+                    required
+                    value={hostForm.port}
+                    onChange={(e) => setHostForm({ ...hostForm, port: parseInt(e.target.value, 10) || (hostForm.dbType === 'postgres' ? 5432 : 3306) })}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Master / Admin Username</label>
+                  <input
+                    type="text"
+                    required
+                    value={hostForm.username}
+                    onChange={(e) => setHostForm({ ...hostForm, username: e.target.value })}
+                    placeholder="root or postgres"
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Master Password {editingHost && <span className="text-zinc-500 font-normal">(leave blank to keep)</span>}
+                  </label>
+                  <input
+                    type="password"
+                    value={hostForm.password}
+                    onChange={(e) => setHostForm({ ...hostForm, password: e.target.value })}
+                    placeholder="••••••••••••"
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Test Connection Button & Result */}
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestHostConnection}
+                  disabled={testingHost || !hostForm.host || !hostForm.username}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 font-semibold flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${testingHost ? 'animate-spin' : ''}`} />
+                  <span>{testingHost ? 'Testing Host Connection...' : 'Test Connection'}</span>
+                </button>
+
+                {hostTestResult && (
+                  <div className={`text-xs flex items-center gap-1.5 font-medium ${hostTestResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {hostTestResult.success ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                    <span className="truncate max-w-xs">{hostTestResult.message}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddHostModal(false)}
+                  disabled={isSavingHost}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingHost}
+                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs text-zinc-950 font-bold rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingHost ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving Host...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3.5 w-3.5" />
+                      <span>Save Database Host</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

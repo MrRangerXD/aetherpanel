@@ -9,6 +9,7 @@ import {
   Globe, Wifi, Sliders, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
+import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
 import { Server, ServerFile, ServerBackup, ServerDatabase, ServerSchedule, ServerActivity, PluginItem, ServerStartupConfig, ServerEnvVar } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
@@ -19,7 +20,10 @@ import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPla
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
 import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
+import { TabTransition } from '../../components/animation/TabTransition';
 import { buildBotStartupCommand } from '../../lib/startup';
+import { normalizeServer, formatMemory } from '../../lib/serverNormalize';
+import { normalizeServerPath, joinServerPath, getParentServerPath } from '../../lib/pathUtils';
 
 function getRecommendedJava(version?: string): number {
   if (!version) return 21;
@@ -108,6 +112,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [envBrowsePath, setEnvBrowsePath] = useState('/');
   const [envBrowseFiles, setEnvBrowseFiles] = useState<ServerFile[]>([]);
   const [envBrowseLoading, setEnvBrowseLoading] = useState(false);
+  const [isEnvLoading, setIsEnvLoading] = useState(false);
   const [envError, setEnvError] = useState<string | null>(null);
 
   // Backups state
@@ -121,7 +126,22 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   // Databases state
   const [databases, setDatabases] = useState<ServerDatabase[]>([]);
   const [dbName, setDbName] = useState('');
+  const [selectedDbEngine, setSelectedDbEngine] = useState<'mysql' | 'postgres'>('mysql');
   const [isCreatingDb, setIsCreatingDb] = useState(false);
+  const [dbProviderStatus, setDbProviderStatus] = useState<{
+    isConfigured: boolean;
+    availableEngines: ('mysql' | 'postgres')[];
+    defaultEngine: 'mysql' | 'postgres' | null;
+  } | null>(null);
+  const [dbLimits, setDbLimits] = useState<{ used: number; max: number } | null>(null);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [rotatingDbId, setRotatingDbId] = useState<string | null>(null);
+  const [testingDbId, setTestingDbId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { connected: boolean; message?: string }>>({});
+  const [deletingDb, setDeletingDb] = useState<ServerDatabase | null>(null);
+  const [isDeletingDb, setIsDeletingDb] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [dbSuccessMessage, setDbSuccessMessage] = useState<string | null>(null);
 
   // Schedules state
   const [schedules, setSchedules] = useState<ServerSchedule[]>([]);
@@ -139,6 +159,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Activity state
   const [activities, setActivities] = useState<ServerActivity[]>([]);
+  const [runtimesMap, setRuntimesMap] = useState<any>(null);
 
   // Settings & Startup Config & Lifecycle state
   const [serverNameEdit, setServerNameEdit] = useState('');
@@ -296,12 +317,19 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   };
 
   const loadReinstallVersions = async (software: string) => {
+    const cached = getCachedMinecraftVersions(software);
+    if (cached && cached.versions.length > 0) {
+      setReinstallVersionsList(cached.versions);
+      setReinstallVersion(prev => (cached.versions.includes('26.2') ? '26.2' : (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0])));
+      return;
+    }
+
     setIsLoadingReinstallVersions(true);
     try {
-      const res = await apiRequest(`/minecraft/versions?software=${encodeURIComponent(software)}`);
-      if (res.success && res.data && res.data.versions && res.data.versions.length > 0) {
-        setReinstallVersionsList(res.data.versions);
-        setReinstallVersion(res.data.latest || res.data.versions[0]);
+      const data = await fetchAuthoritativeMinecraftVersions(software);
+      if (data && data.versions && data.versions.length > 0) {
+        setReinstallVersionsList(data.versions);
+        setReinstallVersion(prev => (data.versions.includes('26.2') ? '26.2' : (data.versions.includes(prev) ? prev : data.latest || data.versions[0])));
       }
     } catch (e) {}
     setIsLoadingReinstallVersions(false);
@@ -339,10 +367,20 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   };
 
   // Fetch Server Data
+  const fetchRuntimes = async () => {
+    try {
+      const res = await apiRequest('/runtimes');
+      if (res.success && res.data) {
+        setRuntimesMap(res.data);
+      }
+    } catch {}
+  };
+
   const fetchServerDetails = async () => {
     const res = await apiRequest(`/servers/${serverId}`);
     if (res.success && res.data) {
-      const s = res.data.server || res.data;
+      const raw = res.data.server || res.data;
+      const s = normalizeServer(raw);
       setServer(s);
       setServerNameEdit(s.name);
       if (s.startup) {
@@ -352,7 +390,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           xmxMB: s.startup.xmxMB || s.limits?.ramMB || prev.xmxMB
         }));
         setStartupFlags(s.startup.jvmFlags || s.startup.customFlags || '');
-        if (s.startup.javaVersion) setJavaVersion(s.startup.javaVersion);
+        if (s.startup.javaVersion) setJavaVersion(String(s.startup.javaVersion));
         if (s.startup.botRuntime) {
           setActiveBotRuntime(s.startup.botRuntime);
         } else {
@@ -527,33 +565,38 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Fetch Environment Variables
   const fetchEnvVars = async (filePath?: string) => {
+    setIsEnvLoading(true);
     setEnvError(null);
-    let url = `/servers/${serverId}/env`;
-    if (filePath) {
-      url += `?filePath=${encodeURIComponent(filePath)}`;
-    }
-    const res = await apiRequest(url);
-    if (res.success && res.data) {
-      const respData = res.data;
-      setSelectedEnvPath(respData.selectedEnvPath || null);
-      setIsEnvFileExists(respData.exists !== false);
-      setIsEnvDirty(false);
-
-      if (Array.isArray(respData.envVars)) {
-        setEnvVars(respData.envVars);
-      } else if (respData.env && Object.keys(respData.env).length > 0) {
-        const entries = Object.entries(respData.env).map(([key, value]) => ({
-          key,
-          value: String(value),
-          isSecret: /token|secret|key|password|auth/i.test(key),
-          isEnabled: true
-        }));
-        setEnvVars(entries);
-      } else {
-        setEnvVars([]);
+    try {
+      let url = `/servers/${serverId}/env`;
+      if (filePath) {
+        url += `?filePath=${encodeURIComponent(filePath)}`;
       }
-    } else if (res.error) {
-      setEnvError(res.error.message || 'Failed to load environment variables.');
+      const res = await apiRequest(url);
+      if (res.success && res.data) {
+        const respData = res.data;
+        setSelectedEnvPath(respData.selectedEnvPath || null);
+        setIsEnvFileExists(respData.exists !== false);
+        setIsEnvDirty(false);
+
+        if (Array.isArray(respData.envVars)) {
+          setEnvVars(respData.envVars);
+        } else if (respData.env && Object.keys(respData.env).length > 0) {
+          const entries = Object.entries(respData.env).map(([key, value]) => ({
+            key,
+            value: String(value),
+            isSecret: /token|secret|key|password|auth/i.test(key),
+            isEnabled: true
+          }));
+          setEnvVars(entries);
+        } else {
+          setEnvVars([]);
+        }
+      } else if (res.error) {
+        setEnvError(res.error.message || 'Failed to load environment variables.');
+      }
+    } finally {
+      setIsEnvLoading(false);
     }
   };
 
@@ -638,6 +681,15 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     const res = await apiRequest(`/servers/${serverId}/databases`);
     if (res.success && res.data) {
       setDatabases(res.data);
+      if (res.providerStatus) {
+        setDbProviderStatus(res.providerStatus);
+        if (res.providerStatus.defaultEngine) {
+          setSelectedDbEngine(res.providerStatus.defaultEngine);
+        }
+      }
+      if (res.limits) {
+        setDbLimits(res.limits);
+      }
     }
   };
 
@@ -660,7 +712,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   useEffect(() => {
     setLoading(true);
     fetchServerDetails().then(() => setLoading(false));
+    fetchDatabases();
     fetchJavaRuntimes();
+    fetchRuntimes();
   }, [serverId]);
 
   useEffect(() => {
@@ -858,16 +912,88 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     fetchBackups();
   };
 
-  // Create DB
+  // Create Real Database
   const handleCreateDatabase = async () => {
+    const trimmed = dbName.trim();
+    if (!trimmed) {
+      setDbError('Please enter a database name.');
+      return;
+    }
     setIsCreatingDb(true);
-    await apiRequest(`/servers/${serverId}/databases`, {
+    setDbError(null);
+    setDbSuccessMessage(null);
+
+    const res = await apiRequest(`/servers/${serverId}/databases`, {
       method: 'POST',
-      body: JSON.stringify({ name: dbName || 'app_db' })
+      body: JSON.stringify({ name: trimmed, dbType: selectedDbEngine })
     });
-    setDbName('');
+
     setIsCreatingDb(false);
-    fetchDatabases();
+    if (res.success) {
+      setDbName('');
+      setDbSuccessMessage(res.message || 'Database schema and user provisioned successfully.');
+      setTimeout(() => setDbSuccessMessage(null), 5000);
+      fetchDatabases();
+    } else {
+      setDbError(res.error?.message || 'Database creation failed.');
+    }
+  };
+
+  // Rotate Real Database Password
+  const handleRotatePassword = async (dbItem: ServerDatabase) => {
+    setRotatingDbId(dbItem.id);
+    setDbError(null);
+    const res = await apiRequest(`/servers/${serverId}/databases/${dbItem.id}/rotate-password`, {
+      method: 'POST'
+    });
+    setRotatingDbId(null);
+    if (res.success) {
+      setDbSuccessMessage(`Password rotated for database ${dbItem.name}.`);
+      setTimeout(() => setDbSuccessMessage(null), 4000);
+      fetchDatabases();
+    } else {
+      setDbError(res.error?.message || 'Failed to rotate database password.');
+    }
+  };
+
+  // Test Real Database Connection
+  const handleTestDatabaseConnection = async (dbItem: ServerDatabase) => {
+    setTestingDbId(dbItem.id);
+    const res = await apiRequest(`/servers/${serverId}/databases/${dbItem.id}/test-connection`, {
+      method: 'POST'
+    });
+    setTestingDbId(null);
+    if (res.data) {
+      setTestResult(prev => ({
+        ...prev,
+        [dbItem.id]: {
+          connected: res.data.connected,
+          message: res.data.message
+        }
+      }));
+    }
+  };
+
+  // Confirm and Delete Real Database
+  const handleConfirmDeleteDatabase = async () => {
+    if (!deletingDb) return;
+    setIsDeletingDb(true);
+    setDbError(null);
+
+    const res = await apiRequest(`/servers/${serverId}/databases/${deletingDb.id}`, {
+      method: 'DELETE'
+    });
+
+    setIsDeletingDb(false);
+    if (res.success) {
+      const deletedName = deletingDb.name;
+      setDeletingDb(null);
+      setDbSuccessMessage(`Database schema '${deletedName}' and user credentials permanently deleted.`);
+      setTimeout(() => setDbSuccessMessage(null), 4000);
+      fetchDatabases();
+    } else {
+      setDbError(res.error?.message || 'Failed to delete database.');
+    }
   };
 
   // Create Schedule
@@ -1154,10 +1280,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <Activity className="h-3.5 w-3.5 text-cyan-400" />
           </div>
           <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {isRunning ? `${(server.ramUsageMB / 1024).toFixed(1)}GB` : '0GB'} / {((server.limits?.ramMB || 1024) / 1024).toFixed(0)}GB
+            {isRunning ? formatMemory(server.ramUsageMB) : '0 MB'} / {formatMemory(server.resources?.memoryMb || server.limits?.ramMB)}
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (server.ramUsageMB / (server.limits?.ramMB || 1024)) * 100) : 0}%` }} />
+            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (server.ramUsageMB / (server.resources?.memoryMb || server.limits?.ramMB || 512)) * 100) : 0}%` }} />
           </div>
         </div>
 
@@ -1387,31 +1513,41 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
       {/* TAB 1: CONSOLE LOGS */}
       {activeTab === 'console' && (
-        <ServerConsoleTab
-          server={server}
-          onRefreshServer={fetchServerDetails}
-          onPowerAction={handlePowerAction}
-        />
+        <TabTransition>
+          <ServerConsoleTab
+            server={server}
+            onRefreshServer={fetchServerDetails}
+            onPowerAction={handlePowerAction}
+          />
+        </TabTransition>
       )}
 
       {/* TAB: SUBUSERS */}
       {activeTab === 'subusers' && (
-        <ServerSubusersTab server={server} />
+        <TabTransition>
+          <ServerSubusersTab server={server} />
+        </TabTransition>
       )}
 
       {/* TAB: MONITORING & REAL-TIME TELEMETRY */}
       {activeTab === 'monitoring' && (
-        <ServerMonitoringTab server={server} />
+        <TabTransition>
+          <ServerMonitoringTab server={server} />
+        </TabTransition>
       )}
 
       {/* TAB: NETWORK, SFTP & PLAYIT.GG */}
       {activeTab === 'network' && (
-        <ServerNetworkPlayitTab server={server} onRefreshServer={fetchServerDetails} />
+        <TabTransition>
+          <ServerNetworkPlayitTab server={server} onRefreshServer={fetchServerDetails} />
+        </TabTransition>
       )}
 
       {/* TAB 2: FILE MANAGER */}
       {activeTab === 'files' && (
-        <ServerFileManagerTab serverId={serverId} />
+        <TabTransition>
+          <ServerFileManagerTab serverId={serverId} />
+        </TabTransition>
       )}
 
       {/* TAB 3: MINECRAFT PLUGINS MANAGER */}
@@ -1966,16 +2102,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               {selectedEnvPath && (
                 <button
                   onClick={() => {
+                    if (isEnvLoading) return;
                     if (isEnvDirty) {
                       const confirmReload = window.confirm("You have unsaved changes in the panel. Reloading will discard them. Are you sure?");
                       if (!confirmReload) return;
                     }
                     fetchEnvVars(selectedEnvPath);
                   }}
-                  className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                  disabled={isEnvLoading}
+                  className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
                   title="Reload environment variables directly from disk"
                 >
-                  <RefreshCw className="h-4 w-4 text-zinc-400 animate-spin-slow" /> Reload From File
+                  <RefreshCw className={`h-4 w-4 text-zinc-400 ${isEnvLoading ? 'animate-spin' : ''}`} /> Reload From File
                 </button>
               )}
 
@@ -2470,58 +2608,292 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB 6: DATABASES */}
       {activeTab === 'databases' && (
         <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-white">Managed MySQL / Postgres Databases</h3>
-              <p className="text-xs text-zinc-400">Isolated database schemas for LuckPerms, Vault, CoreProtect, or custom bot persistence.</p>
-            </div>
+          {/* Header & Limits Banner */}
+          <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Database className="h-5 w-5 text-violet-400" /> Managed MySQL / PostgreSQL Databases
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Dedicated isolated schemas and restricted credentials for Minecraft plugins (LuckPerms, CoreProtect, Vault) or Discord bot persistence.
+                </p>
+              </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <input
-                type="text"
-                value={dbName}
-                onChange={(e) => setDbName(e.target.value)}
-                placeholder="Database name"
-                className="rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs text-white"
-              />
-              <button
-                onClick={handleCreateDatabase}
-                disabled={isCreatingDb}
-                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shrink-0"
-              >
-                {isCreatingDb ? 'Provisioning...' : 'New Database'}
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {databases.map((db) => (
-              <div key={db.id} className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-white font-mono">{db.name}</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase">
-                    {db.dbType}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs font-mono bg-zinc-950 p-3 rounded-xl border border-zinc-800 text-zinc-300">
-                  <div>Host: <strong className="text-white">{db.host}</strong></div>
-                  <div>Port: <strong className="text-white">{db.port}</strong></div>
-                  <div>User: <strong className="text-white">{db.username}</strong></div>
-                  <div>Password: <strong className="text-violet-400 font-bold">••••••••••••</strong></div>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={() => handleCopy(`mysql://${db.username}:secret@${db.host}:${db.port}/${db.name}`)}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-300 hover:text-white"
-                  >
-                    Copy Connection URI
-                  </button>
+              <div className="flex items-center gap-3">
+                <div className="px-3.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs">
+                  <span className="text-zinc-400">Allocated Quota: </span>
+                  <strong className={databases.length >= server.limits.databases ? 'text-amber-400 font-mono' : 'text-emerald-400 font-mono'}>
+                    {databases.length} / {server.limits.databases}
+                  </strong>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Provider Warning if not configured */}
+            {dbProviderStatus && !dbProviderStatus.isConfigured && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-semibold">No Database Provider Configured</div>
+                  <div className="text-[11px] text-amber-400/80">
+                    Real database provisioning requires an active MySQL or PostgreSQL database host. Administrators can configure a Database Host in Admin Settings or specify <code className="bg-amber-950/60 px-1 py-0.5 rounded text-amber-200">MYSQL_HOST</code> / <code className="bg-amber-950/60 px-1 py-0.5 rounded text-amber-200">PGHOST</code> in the server environment.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Success & Error alerts */}
+            {dbSuccessMessage && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" /> {dbSuccessMessage}
+                </span>
+                <button onClick={() => setDbSuccessMessage(null)} className="text-emerald-400 hover:text-emerald-200">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {dbError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-rose-400" /> {dbError}
+                </span>
+                <button onClick={() => setDbError(null)} className="text-rose-400 hover:text-rose-200">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Creation Form */}
+            <div className="pt-2 border-t border-zinc-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={dbName}
+                  onChange={(e) => setDbName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                  placeholder="e.g. luckperms or bot_data"
+                  disabled={isCreatingDb || databases.length >= server.limits.databases}
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                />
+              </div>
+
+              {dbProviderStatus && dbProviderStatus.availableEngines.length > 1 && (
+                <select
+                  value={selectedDbEngine}
+                  onChange={(e) => setSelectedDbEngine(e.target.value as any)}
+                  disabled={isCreatingDb || databases.length >= server.limits.databases}
+                  className="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500"
+                >
+                  <option value="mysql">MySQL / MariaDB</option>
+                  <option value="postgres">PostgreSQL</option>
+                </select>
+              )}
+
+              <button
+                onClick={handleCreateDatabase}
+                disabled={isCreatingDb || !dbName.trim() || databases.length >= server.limits.databases}
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shrink-0 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-violet-600/20"
+              >
+                {isCreatingDb ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Provisioning Real Schema...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>New Database</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {databases.length >= server.limits.databases && (
+              <p className="text-[11px] text-amber-400">
+                You have reached your database limit of {server.limits.databases} for this server plan. Delete an existing database or upgrade to create more.
+              </p>
+            )}
           </div>
+
+          {/* Database Cards List */}
+          {databases.length === 0 ? (
+            <div className="p-12 text-center rounded-2xl bg-zinc-900/40 border border-zinc-800/60 space-y-3">
+              <Database className="h-10 w-10 text-zinc-600 mx-auto" />
+              <div className="text-sm font-semibold text-zinc-300">No Databases Created</div>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                No database schemas are currently associated with this server. Create a database above to connect plugins and bots.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {databases.map((db) => {
+                const isPasswordRevealed = revealedPasswords[db.id];
+                const uri = db.connectionUri || (
+                  db.dbType === 'mysql'
+                    ? `mysql://${db.username}:${db.password || 'password'}@${db.host}:${db.port}/${db.name}`
+                    : `postgresql://${db.username}:${db.password || 'password'}@${db.host}:${db.port}/${db.name}`
+                );
+
+                const testState = testResult[db.id];
+
+                return (
+                  <div key={db.id} className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 flex flex-col justify-between space-y-4 shadow-sm hover:border-zinc-700/80 transition-colors">
+                    <div className="space-y-3">
+                      {/* Top Header */}
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-white font-mono">{db.name}</span>
+                            <button
+                              onClick={() => handleCopy(db.name)}
+                              title="Copy Database Name"
+                              className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <div className="text-[11px] text-zinc-400">Created on {new Date(db.createdAt).toLocaleDateString()}</div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase font-bold border ${
+                            db.dbType === 'postgres'
+                              ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                          }`}>
+                            {db.dbType}
+                          </span>
+
+                          <button
+                            onClick={() => setDeletingDb(db)}
+                            title="Delete Database"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Connection Details Table */}
+                      <div className="space-y-2 text-xs font-mono bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80 text-zinc-300">
+                        <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <span className="text-zinc-500">Endpoint:</span>
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-white">{db.host}:{db.port}</strong>
+                            <button
+                              onClick={() => handleCopy(`${db.host}:${db.port}`)}
+                              className="text-zinc-500 hover:text-zinc-300"
+                              title="Copy Host & Port"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <span className="text-zinc-500">Database / Schema:</span>
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-white">{db.name}</strong>
+                            <button
+                              onClick={() => handleCopy(db.name)}
+                              className="text-zinc-500 hover:text-zinc-300"
+                              title="Copy Schema Name"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <span className="text-zinc-500">Username:</span>
+                          <div className="flex items-center gap-1.5">
+                            <strong className="text-white">{db.username}</strong>
+                            <button
+                              onClick={() => handleCopy(db.username)}
+                              className="text-zinc-500 hover:text-zinc-300"
+                              title="Copy Username"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-0.5">
+                          <span className="text-zinc-500">Password:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-violet-400 font-bold">
+                              {isPasswordRevealed ? (db.password || '••••••••••••') : '••••••••••••'}
+                            </span>
+                            <button
+                              onClick={() => setRevealedPasswords(prev => ({ ...prev, [db.id]: !prev[db.id] }))}
+                              className="text-zinc-400 hover:text-white p-0.5"
+                              title={isPasswordRevealed ? 'Hide Password' : 'Show Password'}
+                            >
+                              {isPasswordRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                            {db.password && (
+                              <button
+                                onClick={() => handleCopy(db.password!)}
+                                className="text-zinc-400 hover:text-white p-0.5"
+                                title="Copy Password"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRotatePassword(db)}
+                              disabled={rotatingDbId === db.id}
+                              className="text-zinc-400 hover:text-amber-400 p-0.5 disabled:opacity-50"
+                              title="Rotate Password"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${rotatingDbId === db.id ? 'animate-spin text-amber-400' : ''}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Connection Test Result */}
+                      {testState && (
+                        <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border ${
+                          testState.connected
+                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                        }`}>
+                          {testState.connected ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                          )}
+                          <span className="text-[11px] truncate">{testState.message || (testState.connected ? 'Connection verified.' : 'Connection test failed.')}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 gap-2">
+                      <button
+                        onClick={() => handleTestDatabaseConnection(db)}
+                        disabled={testingDbId === db.id}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${testingDbId === db.id ? 'animate-spin' : ''}`} />
+                        <span>{testingDbId === db.id ? 'Testing...' : 'Test Connection'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleCopy(uri)}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Copy URI</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -2812,23 +3184,53 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   )}
                   {isNode && (
                     <>
-                      <option value="Node.js 18">Node.js 18 LTS</option>
-                      <option value="Node.js 20">Node.js 20 LTS (Recommended)</option>
-                      <option value="Node.js 22">Node.js 22 Current</option>
+                      {runtimesMap?.nodejs?.versions ? (
+                        runtimesMap.nodejs.versions.map((ver: string) => (
+                          <option key={ver} value={ver}>{ver}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="24.x">24.x</option>
+                          <option value="22.x">22.x</option>
+                          <option value="20.x">20.x</option>
+                          <option value="18.x">18.x</option>
+                          <option value="Latest Stable">Latest Stable</option>
+                        </>
+                      )}
                     </>
                   )}
                   {isPython && (
                     <>
-                      <option value="Python 3.10">Python 3.10 LTS</option>
-                      <option value="Python 3.11">Python 3.11 LTS (Recommended)</option>
-                      <option value="Python 3.12">Python 3.12</option>
+                      {runtimesMap?.python?.versions ? (
+                        runtimesMap.python.versions.map((ver: string) => (
+                          <option key={ver} value={ver}>{ver}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="3.14.x">3.14.x</option>
+                          <option value="3.13.x">3.13.x</option>
+                          <option value="3.12.x">3.12.x</option>
+                          <option value="3.11.x">3.11.x</option>
+                          <option value="3.10.x">3.10.x</option>
+                          <option value="Latest Stable">Latest Stable</option>
+                        </>
+                      )}
                     </>
                   )}
                   {isBun && (
                     <>
-                      <option value="Bun 1.0">Bun 1.0</option>
-                      <option value="Bun 1.1">Bun 1.1 (Recommended)</option>
-                      <option value="Bun 1.2">Bun 1.2</option>
+                      {runtimesMap?.bun?.versions ? (
+                        runtimesMap.bun.versions.map((ver: string) => (
+                          <option key={ver} value={ver}>{ver}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="1.2.x">1.2.x</option>
+                          <option value="1.1.x">1.1.x</option>
+                          <option value="1.0.x">1.0.x</option>
+                          <option value="Latest Stable">Latest Stable</option>
+                        </>
+                      )}
                     </>
                   )}
                 </select>
@@ -2891,6 +3293,35 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   <span><strong>Last Crash ({server.startup.lastCrashAt ? new Date(server.startup.lastCrashAt).toLocaleTimeString() : 'Recent'}):</strong> {server.startup.lastCrashReason}</span>
                 </div>
               )}
+            </div>
+
+            {/* Allocated Resources Read-Only Card */}
+            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-emerald-400" /> System Allocated Container Resources
+                </h4>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20 font-bold uppercase">
+                  Read-Only / Plan Controlled
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">Memory (RAM)</div>
+                  <div className="text-sm font-mono font-bold text-emerald-400 mt-1">{formatMemory(server?.resources?.memoryMb || server?.limits?.ramMB || 512)}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Max Heap: {isMinecraft ? `-Xmx${server?.resources?.memoryMb || server?.limits?.ramMB || 1024}M` : `--max-old-space-size=${server?.resources?.memoryMb || server?.limits?.ramMB || 512}`}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">CPU Compute</div>
+                  <div className="text-sm font-mono font-bold text-cyan-400 mt-1">{((server?.limits?.cpuCores || 0.5) * 100).toFixed(0)}% ({server?.limits?.cpuCores || 0.5} vCPU)</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Enforced process allocation</div>
+                </div>
+                <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400">NVMe Storage</div>
+                  <div className="text-sm font-mono font-bold text-amber-400 mt-1">{server?.limits?.diskGB || 5} GB</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Isolated container workspace</div>
+                </div>
+              </div>
             </div>
 
             {/* Startup Command Dynamic Generator & Preview */}
@@ -3252,13 +3683,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                           <label className="block text-[11px] font-medium text-zinc-300 mb-1">
                             Python Interpreter Binary
                           </label>
-                          <input
-                            type="text"
-                            value={startupConfig.pythonExecutable || 'python3'}
-                            onChange={(e) => setStartupConfig({ ...startupConfig, pythonExecutable: e.target.value })}
-                            placeholder="python3"
-                            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                          />
+                          <div className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-zinc-300 flex items-center justify-between">
+                            <span>python3</span>
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">System Enforced</span>
+                          </div>
                         </div>
                       </div>
 
@@ -3694,7 +4122,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                       ))
                     ) : (
                       <>
-                        <option value="1.21.4">1.21.4 (Latest)</option>
+                        <option value="26.2">26.2 (Latest)</option>
+                        <option value="1.21.4">1.21.4</option>
                         <option value="1.21.3">1.21.3</option>
                         <option value="1.21.1">1.21.1</option>
                         <option value="1.20.4">1.20.4</option>
@@ -3740,6 +4169,50 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs text-black font-bold rounded-xl shadow-lg shadow-amber-500/10 disabled:opacity-50"
               >
                 {isReinstalling ? 'Downloading & Provisioning...' : 'Confirm Reinstall'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Database Modal */}
+      {deletingDb && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-zinc-950 border border-rose-500/30 p-6 rounded-3xl space-y-4">
+            <h3 className="text-lg font-bold text-rose-400 flex items-center gap-2">
+              <AlertOctagon className="h-5 w-5 text-rose-500" /> Delete Database
+            </h3>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently drop database schema <strong className="text-white font-mono">{deletingDb.name}</strong> and revoke user <strong className="text-white font-mono">{deletingDb.username}</strong>?
+            </p>
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>All tables, rows, and data stored in this database will be irreversibly erased from the SQL host.</span>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setDeletingDb(null)}
+                disabled={isDeletingDb}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteDatabase}
+                disabled={isDeletingDb}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs rounded-xl flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingDb ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Dropping Schema...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

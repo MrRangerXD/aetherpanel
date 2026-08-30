@@ -6,7 +6,7 @@ import { getInstallationId } from './installation';
 import {
   User, Product, Plan, Server, Node, Allocation, Order, Coupon,
   SupportTicket, Announcement, AuditLog, SystemSettings, ServerBackup,
-  ServerDatabase, ServerSchedule, ServerActivity, Location, NodeInstallToken,
+  ServerDatabase, DatabaseHost, ServerSchedule, ServerActivity, Location, NodeInstallToken,
   AdItem, AdEvent, AfkSession, RewardTransaction, AfkSettings, ServerTemplate,
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
@@ -33,6 +33,7 @@ export interface DatabaseSchema {
   allocations: Allocation[];
   backups: ServerBackup[];
   databases: ServerDatabase[];
+  databaseHosts?: DatabaseHost[];
   schedules: ServerSchedule[];
   activities: ServerActivity[];
   orders: Order[];
@@ -111,10 +112,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Gamepad2',
     runtime: 'minecraft',
-    versions: ['1.20.4', '1.20.2', '1.19.4', '1.18.2'],
-    defaultVersion: '1.20.4',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.19.4', '1.18.2'],
+    defaultVersion: '26.2',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar server.jar nogui',
-    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '1.20.4', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '26.2', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 2048,
     recommendedCpuCores: 1,
@@ -132,10 +133,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Zap',
     runtime: 'minecraft',
-    versions: ['1.20.4', '1.20.2', '1.19.4'],
-    defaultVersion: '1.20.4',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.19.4'],
+    defaultVersion: '26.2',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar purpur.jar nogui',
-    environmentVars: { EULA: 'true', PURPUR_VERSION: '1.20.4', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', PURPUR_VERSION: '26.2', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 4096,
     recommendedCpuCores: 2,
@@ -153,8 +154,8 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Box',
     runtime: 'minecraft',
-    versions: ['1.20.4', '1.20.1', '1.19.4'],
-    defaultVersion: '1.20.4',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.1', '1.19.4'],
+    defaultVersion: '26.2',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -jar server.jar nogui',
     environmentVars: { EULA: 'true', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
@@ -174,8 +175,8 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Cpu',
     runtime: 'minecraft',
-    versions: ['1.20.4', '1.20.1', '1.19.4'],
-    defaultVersion: '1.20.4',
+    versions: ['26.2', '1.21.4', '1.20.4', '1.20.1', '1.19.4'],
+    defaultVersion: '26.2',
     startupCommand: 'java -Xms1024M -Xmx{RAM_MB}M -jar fabric-server-launch.jar nogui',
     environmentVars: { EULA: 'true', FABRIC_VERSION: '0.15.7', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
@@ -195,8 +196,8 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Hammer',
     runtime: 'minecraft',
-    versions: ['1.20.1', '1.19.2', '1.16.5'],
-    defaultVersion: '1.20.1',
+    versions: ['26.2', '1.20.4', '1.20.1', '1.19.2', '1.16.5'],
+    defaultVersion: '26.2',
     startupCommand: 'java -Xms2048M -Xmx{RAM_MB}M @user_jvm_args.txt @libraries/net/minecraftforge/forge/forge-args.txt nogui',
     environmentVars: { EULA: 'true', FORGE_VERSION: '47.2.0', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
@@ -659,40 +660,6 @@ export const defaultServerTypes: ServerType[] = [
     }
   },
   {
-    id: 'st_minecraft_bedrock',
-    name: 'Minecraft Bedrock',
-    slug: 'minecraft-bedrock',
-    category: 'Minecraft',
-    runtime: 'Bedrock',
-    description: 'Minecraft Bedrock Dedicated Server (BDS) & PocketMine-MP for cross-platform mobile, console, and Windows gaming.',
-    icon: 'Boxes',
-    enabled: true,
-    sortOrder: 2,
-    defaultPort: 19132,
-    defaultStartupCommand: './bedrock_server',
-    defaultEnvVars: {
-      GAMEMODE: 'survival',
-      DIFFICULTY: 'easy'
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    theme: {
-      id: 'stt_minecraft_bedrock',
-      serverTypeId: 'st_minecraft_bedrock',
-      backgroundUrl: 'https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?auto=format&fit=crop&w=1200&q=80',
-      iconUrl: '',
-      accentColor: '#10B981',
-      overlayOpacity: 0.6,
-      gradientEnabled: true,
-      cardStyle: 'default',
-      badgeStyle: 'solid',
-      statusStyle: 'pill',
-      defaultResourceLabels: { cpu: 'CPU', ram: 'RAM', disk: 'Disk' },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  },
-  {
     id: 'st_nodejs',
     name: 'Node.js Bot',
     slug: 'nodejs',
@@ -798,6 +765,63 @@ let initPromise: Promise<DatabaseSchema> | null = null;
 let isWriting = false;
 let pendingSave: Promise<void> | null = null;
 
+export function getDbSync(): DatabaseSchema {
+  if (!dbCache) {
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        dbCache = JSON.parse(raw);
+      } catch {}
+    }
+  }
+  return dbCache || {
+    users: [],
+    passwords: {},
+    products: [],
+    plans: [],
+    servers: [],
+    serverTypes: [],
+    templates: [],
+    locations: [],
+    nodes: [],
+    nodeInstallTokens: [],
+    allocations: [],
+    backups: [],
+    databases: [],
+    schedules: [],
+    activities: [],
+    orders: [],
+    coupons: [],
+    tickets: [],
+    announcements: [],
+    auditLogs: [],
+    settings: {
+      authProviders: {},
+      theme: { primaryColor: '#f59e0b', mode: 'dark' }
+    } as any,
+    ads: [],
+    adEvents: [],
+    afkSessions: [],
+    afkSettings: {} as any,
+    rewardTransactions: [],
+    discordLinks: {},
+    serverDiscordLinks: [],
+    discordAuditLogs: [],
+    marketplaceItems: [],
+    statusComponents: [],
+    incidents: [],
+    scheduledMaintenances: [],
+    alertRules: [],
+    alertIncidents: [],
+    telemetryHistory: {},
+    apiKeys: [],
+    apiAuditLogs: [],
+    webhooks: [],
+    legalPages: [],
+    subusers: []
+  };
+}
+
 export async function getDb(reload = false): Promise<DatabaseSchema> {
   if (reload) {
     dbCache = null;
@@ -820,9 +844,38 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         try {
           const raw = fs.readFileSync(DB_FILE, 'utf-8');
           dbCache = JSON.parse(raw);
-        } catch (readErr) {
-          console.warn('Could not parse db.json, generating new one:', readErr);
-          dbCache = null;
+        } catch (readErr: any) {
+          console.error(`[Database/CRITICAL] Could not parse ${DB_FILE}: ${readErr.message}`);
+          
+          // Move corrupted DB to safety
+          const corruptedBackupPath = `${DB_FILE}.corrupted.${Date.now()}`;
+          try {
+            fs.renameSync(DB_FILE, corruptedBackupPath);
+            console.warn(`[Database/INFO] Corrupted database moved to ${corruptedBackupPath}`);
+          } catch (renameErr) {
+            console.error('[Database/ERROR] Failed to move corrupted database:', renameErr);
+          }
+
+          // Try loading from snapshot
+          const snapshotPath = path.join(DATA_DIR, 'backups', 'db-snapshot.json');
+          if (fs.existsSync(snapshotPath)) {
+            try {
+              console.log(`[Database/RECOVERY] Attempting recovery from latest snapshot: ${snapshotPath}...`);
+              const rawSnapshot = fs.readFileSync(snapshotPath, 'utf-8');
+              dbCache = JSON.parse(rawSnapshot);
+              console.log('[Database/SUCCESS] Recovered database state from snapshot successfully!');
+              
+              // Write the recovered state back to the main DB file
+              const data = JSON.stringify(dbCache, null, 2);
+              fs.writeFileSync(DB_FILE, data, 'utf-8');
+            } catch (snapshotErr: any) {
+              console.error(`[Database/ERROR] Snapshot recovery failed: ${snapshotErr.message}`);
+              dbCache = null;
+            }
+          } else {
+            console.warn('[Database/WARN] No database snapshot found to recover from.');
+            dbCache = null;
+          }
         }
       }
 
@@ -835,17 +888,28 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         }
         if (!dbCache.serverTypes || dbCache.serverTypes.length === 0) {
           dbCache.serverTypes = defaultServerTypes;
+        } else {
+          dbCache.serverTypes = dbCache.serverTypes.filter(st => st.id !== 'st_minecraft_bedrock' && st.slug !== 'minecraft-bedrock');
         }
 
-        // Auto-migrate existing servers to ensure every server has a valid serverTypeId
+        if (dbCache.templates) {
+          dbCache.templates = dbCache.templates.filter(tpl => tpl.id !== 'tpl_mc_bedrock');
+        }
+
+        if (!dbCache.databaseHosts) {
+          dbCache.databaseHosts = [];
+        }
+
+        // Auto-migrate existing servers to ensure every server has a valid serverTypeId and canonical resources structure
         if (dbCache.servers && dbCache.servers.length > 0) {
           dbCache.servers.forEach(srv => {
+            if (srv.serverTypeId === 'st_minecraft_bedrock') {
+              srv.serverTypeId = 'st_minecraft_java';
+            }
             if (!srv.serverTypeId) {
               const sw = (srv.software || '').toLowerCase();
               const botRt = (srv.startup?.botRuntime || '').toLowerCase();
-              if (sw.includes('bedrock')) {
-                srv.serverTypeId = 'st_minecraft_bedrock';
-              } else if (sw.includes('node') || botRt === 'nodejs') {
+              if (sw.includes('node') || botRt === 'nodejs') {
                 srv.serverTypeId = 'st_nodejs';
               } else if (sw.includes('bun') || botRt === 'bun') {
                 srv.serverTypeId = 'st_bun';
@@ -855,6 +919,24 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
                 srv.serverTypeId = 'st_minecraft_java';
               }
             }
+
+            const isMc = srv.productId === 'prod_minecraft' || (srv.serverTypeId && srv.serverTypeId.includes('minecraft'));
+            const ramMB = srv.resources?.memoryMb || srv.limits?.ramMB || (isMc ? 1024 : 512);
+            const cpuPercent = srv.resources?.cpuPercent || (srv.limits?.cpuCores ? Math.round(srv.limits.cpuCores * 100) : (isMc ? 100 : 50));
+            const diskGB = srv.resources?.diskGb || srv.limits?.diskGB || (isMc ? 10 : 5);
+
+            (srv as any).resources = {
+              memoryMb: ramMB,
+              cpuPercent,
+              diskGb: diskGB
+            };
+            (srv as any).limits = {
+              ramMB,
+              cpuCores: cpuPercent / 100,
+              diskGB,
+              backups: srv.limits?.backups || 1,
+              databases: srv.limits?.databases || 1
+            };
           });
         }
         if (!dbCache.nodeInstallTokens) {
@@ -1289,12 +1371,12 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       priceYearly: 0.00,
       ramMB: 1024,
       cpuCores: 1,
-      diskGB: 10,
+      diskGB: 15,
       backupLimit: 1,
       databaseLimit: 1,
       serverLimit: 1,
       networkMbps: 1000,
-      features: ['1GB DDR5 RAM', '1 vCPU Ryzen 9', '10GB NVMe Storage', 'Subdomain Included', 'Free Forever'],
+      features: ['1GB DDR5 RAM', '1 vCPU Ryzen 9', '15GB NVMe Storage', 'Subdomain Included', 'Free Forever'],
       locations: ['local'],
       isActive: true
     },
@@ -1382,12 +1464,12 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       priceYearly: 0.00,
       ramMB: 512,
       cpuCores: 0.5,
-      diskGB: 5,
+      diskGB: 10,
       backupLimit: 1,
       databaseLimit: 1,
       serverLimit: 1,
       networkMbps: 1000,
-      features: ['512MB RAM', '0.5 vCPU', '5GB Storage', 'Node.js & Python 3', '24/7 Process Manager'],
+      features: ['512MB RAM', '0.5 vCPU', '10GB Storage', 'Node.js & Python', '24/7 Process Manager'],
       locations: ['local'],
       isActive: true
     },
@@ -1488,12 +1570,12 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       usedCpuCores: 0,
       totalDiskGB: 200,
       usedDiskGB: 5,
-      reservedRamMB: 2048,
+      reservedRamMB: 1024,
       reservedCpuCores: 1,
       reservedDiskGB: 10,
-      ramOverallocatePercent: 0,
-      cpuOverallocatePercent: 0,
-      diskOverallocatePercent: 0,
+      ramOverallocatePercent: 100,
+      cpuOverallocatePercent: 100,
+      diskOverallocatePercent: 100,
       maxServers: 100,
       allowedProducts: ['prod_minecraft', 'prod_bot'],
       status: 'online',
@@ -1642,6 +1724,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     allocations,
     backups: [],
     databases: [],
+    databaseHosts: [],
     schedules: [],
     activities: [],
     orders: [],

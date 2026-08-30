@@ -1,5 +1,6 @@
 import { DatabaseSchema } from '../db';
 import { User, UserAllocationStatus } from '../../src/types';
+import { resolveServerResources } from './resourceResolverService';
 
 /**
  * AetherPanel Authoritative Server Allocation Service
@@ -8,7 +9,79 @@ import { User, UserAllocationStatus } from '../../src/types';
 
 export function countOwnedServers(db: DatabaseSchema, userId: string): number {
   if (!db || !Array.isArray(db.servers)) return 0;
-  return db.servers.filter(s => s.userId === userId).length;
+  return db.servers.filter(s =>
+    s.userId === userId &&
+    !s.isAdminCreated &&
+    !s.createdByAdmin &&
+    s.provisionSource !== 'admin_assigned'
+  ).length;
+}
+
+export interface ResourceLimits {
+  ramMB: number;
+  cpuCores: number;
+  diskGB: number;
+  backups: number;
+  databases: number;
+}
+
+export function getServerResourceLimits(
+  category: 'minecraft' | 'bot' | string,
+  plan?: { priceMonthly?: number; priceYearly?: number; id?: string; ramMB?: number; cpuCores?: number; diskGB?: number; backupLimit?: number; databaseLimit?: number; serverLimit?: number; name?: string } | null,
+  requestedLimits?: { memory?: number; ramMB?: number; cpu?: number; cpuCores?: number; disk?: number; diskGB?: number },
+  db?: DatabaseSchema
+): ResourceLimits {
+  // If db is available and plan has an ID, resolve via authoritative system
+  if (db && plan?.id) {
+    try {
+      const res = resolveServerResources({
+        db,
+        planId: plan.id,
+        serverCategory: category,
+        requestedLimits
+      });
+      return {
+        ramMB: res.ramMB,
+        cpuCores: res.cpuCores,
+        diskGB: res.diskGB,
+        backups: res.backups,
+        databases: res.databases
+      };
+    } catch {
+      // Fallback to direct plan values if plan resolved cleanly
+    }
+  }
+
+  const isFreePlan = !plan || (plan.priceMonthly === 0 && (plan.priceYearly === 0 || plan.priceYearly === undefined)) || (plan.id && plan.id.endsWith('_free'));
+
+  if (isFreePlan) {
+    if (category === 'bot') {
+      return {
+        ramMB: 512,
+        cpuCores: 0.5,
+        diskGB: 5,
+        backups: plan?.backupLimit || 1,
+        databases: plan?.databaseLimit || 1
+      };
+    } else {
+      return {
+        ramMB: 1024,
+        cpuCores: 1.0,
+        diskGB: 10,
+        backups: plan?.backupLimit || 1,
+        databases: plan?.databaseLimit || 1
+      };
+    }
+  }
+
+  // Paid plan: exact plan values!
+  return {
+    ramMB: plan.ramMB || 1024,
+    cpuCores: plan.cpuCores || 1,
+    diskGB: plan.diskGB || 10,
+    backups: plan.backupLimit || 1,
+    databases: plan.databaseLimit || 1
+  };
 }
 
 export function getUserAllocationStatus(db: DatabaseSchema, userOrId: User | string): UserAllocationStatus {
@@ -92,7 +165,7 @@ export function canUserDeployServer(db: DatabaseSchema, user: User): {
       allowed: false,
       status,
       errorCode: 'SERVER_ALLOCATION_LIMIT_REACHED',
-      errorMessage: 'Your current plan does not support additional server allocations. Upgrade your plan or purchase additional allocations.'
+      errorMessage: 'Your current plan supports only 1 server allocation.'
     };
   }
 

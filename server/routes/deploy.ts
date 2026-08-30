@@ -1,12 +1,14 @@
 import { Router, Response } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
+import { buildBotStartupCommand } from '../../src/lib/startup';
 import { initializeServerFiles, appendConsoleLog, startServer } from '../provider';
 import { downloadMinecraftServerJar, writeMinecraftEula, writeServerProperties } from '../minecraftService';
 import { Server, Order, Allocation } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { RESERVED_SYSTEM_PORTS, isPortReserved, resolveNodePublicEndpoint, resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getUserAllocationStatus, canUserDeployServer } from '../services/allocationService';
+import { resolveServerResources } from '../services/resourceResolverService';
 
 const router = Router();
 
@@ -30,6 +32,23 @@ router.get('/options', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
 // User deployment mutex locks to prevent allocation race conditions
 const userDeployLocks = new Map<string, Promise<void>>();
+let globalDeployLock: Promise<void> | null = null;
+
+async function withGlobalDeployLock<T>(fn: () => Promise<T>): Promise<T> {
+  while (globalDeployLock) {
+    await globalDeployLock;
+  }
+  let resolveLock: () => void;
+  globalDeployLock = new Promise<void>(resolve => {
+    resolveLock = resolve;
+  });
+  try {
+    return await fn();
+  } finally {
+    globalDeployLock = null;
+    resolveLock!();
+  }
+}
 
 async function withUserDeployLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
   while (userDeployLocks.has(userId)) {
@@ -41,7 +60,8 @@ async function withUserDeployLock<T>(userId: string, fn: () => Promise<T>): Prom
   });
   userDeployLocks.set(userId, lockPromise);
   try {
-    return await fn();
+    // Also acquire global lock to prevent concurrent node capacity over-allocation
+    return await withGlobalDeployLock(fn);
   } finally {
     userDeployLocks.delete(userId);
     resolveLock!();
@@ -100,7 +120,7 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
           success: false,
           error: {
             code: deployCheck.errorCode || 'SERVER_ALLOCATION_LIMIT_REACHED',
-            message: deployCheck.errorMessage || 'Your current plan does not support additional server allocations. Upgrade your plan or purchase additional allocations.',
+            message: deployCheck.errorMessage || 'Your current plan supports only 1 server allocation.',
             details: {
               allowed: deployCheck.status.limit,
               used: deployCheck.status.used,
@@ -112,8 +132,28 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
         });
       }
 
+    // 1. Resolve Server Resources BEFORE scheduler
+    const prod = db.products.find(p => p.id === plan.productId);
+    const category = template?.category || prod?.category || (plan.id.includes('bot') ? 'bot' : 'minecraft');
+
+    const resolvedResources = resolveServerResources({
+      db,
+      planId: plan.id,
+      serverCategory: category,
+      provisionSource: 'self_service',
+      requestedLimits: {
+        memory: req.body.memory,
+        ramMB: req.body.ramMB,
+        cpu: req.body.cpu,
+        cpuCores: req.body.cpuCores,
+        disk: req.body.disk,
+        diskGB: req.body.diskGB
+      }
+    });
+
     // Advanced Node Scheduler
     let targetNode = null;
+    let nodeRejectionReason = '';
 
     if (nodeId) {
       targetNode = db.nodes.find(n => n.id === nodeId && n.status === 'online' && !n.isMaintenanceMode);
@@ -133,20 +173,38 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
           return false;
         }
 
-        // Effective RAM capacity calculation (including over-allocation percentage)
+        // Effective RAM capacity calculation
         const ramOverallocPct = n.ramOverallocatePercent || 0;
         const effectiveMaxRam = n.totalRamMB * (1 + ramOverallocPct / 100);
-        const availableRam = effectiveMaxRam - n.usedRamMB;
+        const availableRam = effectiveMaxRam - n.usedRamMB - (n.reservedRamMB || 0);
 
-        return availableRam >= plan.ramMB;
+        // Effective CPU capacity calculation
+        const cpuOverallocPct = n.cpuOverallocatePercent || 0;
+        const effectiveMaxCpu = n.totalCpuCores * (1 + cpuOverallocPct / 100);
+        const availableCpu = effectiveMaxCpu - n.usedCpuCores - (n.reservedCpuCores || 0);
+
+        // Effective Disk capacity calculation
+        const availableDisk = n.totalDiskGB - n.usedDiskGB - (n.reservedDiskGB || 0);
+
+        const hasRam = availableRam >= resolvedResources.ramMB;
+        const hasCpu = availableCpu >= resolvedResources.cpuCores;
+        const hasDisk = availableDisk >= resolvedResources.diskGB;
+
+        if (!hasRam) nodeRejectionReason = 'INSUFFICIENT_RAM';
+        else if (!hasCpu) nodeRejectionReason = 'INSUFFICIENT_CPU';
+        else if (!hasDisk) nodeRejectionReason = 'INSUFFICIENT_DISK';
+
+        return hasRam && hasCpu && hasDisk;
       });
 
       if (candidateNodes.length === 0) {
+        console.warn(`[Scheduler] Requested: RAM: ${resolvedResources.ramMB} MB, CPU: ${resolvedResources.cpuCores} vCPU, Disk: ${resolvedResources.diskGB} GB`);
+        console.warn(`[Scheduler] Rejection reason: ${nodeRejectionReason || 'NO_ELIGIBLE_NODES'}`);
         return res.status(507).json({
           success: false,
           error: {
             code: 'NO_COMPUTE_CAPACITY',
-            message: 'All compute nodes are currently at maximum capacity or undergoing maintenance. Please select another region or try again shortly.'
+            message: `All compute nodes are currently at maximum capacity or undergoing maintenance (Reason: ${nodeRejectionReason || 'NO_ELIGIBLE_NODES'}). Please select another region or try again shortly.`
           }
         });
       }
@@ -241,17 +299,21 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       alloc.isAssigned = true;
     }
 
-    const prod = db.products.find(p => p.id === plan.productId);
+    const resourceLimits = {
+      ramMB: resolvedResources.ramMB,
+      cpuCores: resolvedResources.cpuCores,
+      diskGB: resolvedResources.diskGB,
+      backups: resolvedResources.backups,
+      databases: resolvedResources.databases
+    };
 
-    const selectedSoftware = template?.name || software || (prod?.category === 'minecraft' ? 'Paper' : 'Node.js');
-    const selectedVersion = version || template?.defaultVersion || (prod?.category === 'minecraft' ? '1.20.4' : 'Node 20');
+    const selectedSoftware = template?.name || software || (category === 'minecraft' ? 'Paper' : 'Node.js');
+    const selectedVersion = version || template?.defaultVersion || (category === 'minecraft' ? '26.2' : 'Node 20');
 
     let resolvedServerTypeId = serverTypeId;
     if (!resolvedServerTypeId) {
       const swLower = (selectedSoftware || '').toLowerCase();
-      if (swLower.includes('bedrock')) {
-        resolvedServerTypeId = 'st_minecraft_bedrock';
-      } else if (swLower.includes('node')) {
+      if (swLower.includes('node')) {
         resolvedServerTypeId = 'st_nodejs';
       } else if (swLower.includes('bun')) {
         resolvedServerTypeId = 'st_bun';
@@ -260,6 +322,27 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       } else {
         resolvedServerTypeId = 'st_minecraft_java';
       }
+    }
+
+    const startupConfig: any = category === 'bot' ? {
+      botRuntime: selectedSoftware.toLowerCase().includes('python') ? 'python' : selectedSoftware.toLowerCase().includes('bun') ? 'bun' : 'nodejs',
+      nodeConfig: selectedSoftware.toLowerCase().includes('node') ? { version: selectedVersion, startupFile: 'index.js' } : undefined,
+      pythonConfig: selectedSoftware.toLowerCase().includes('python') ? { version: selectedVersion, startupFile: 'main.py' } : undefined,
+      bunConfig: selectedSoftware.toLowerCase().includes('bun') ? { version: selectedVersion, startupFile: 'index.ts' } : undefined,
+      entryFile: selectedSoftware.toLowerCase().includes('python') ? 'main.py' : selectedSoftware.toLowerCase().includes('bun') ? 'index.ts' : 'index.js'
+    } : {};
+
+    const dummyServer: Partial<Server> = {
+      software: selectedSoftware,
+      version: selectedVersion,
+      limits: resourceLimits
+    };
+
+    if (category === 'bot') {
+      const cmdObj = buildBotStartupCommand(dummyServer, startupConfig);
+      startupConfig.compiledCommand = cmdObj.compiledCommand;
+    } else {
+      startupConfig.compiledCommand = `java -Xms128M -Xmx${resourceLimits.ramMB}M -jar server.jar nogui`;
     }
 
     const newServer: Server = {
@@ -278,24 +361,28 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       location: targetNode.locationName,
       software: selectedSoftware,
       version: selectedVersion,
-      limits: {
-        ramMB: plan.ramMB,
-        cpuCores: plan.cpuCores,
-        diskGB: plan.diskGB,
-        backups: plan.backupLimit,
-        databases: plan.databaseLimit
+      startup: startupConfig as any,
+      limits: resourceLimits,
+      resources: {
+        memoryMb: resolvedResources.ramMB,
+        cpuPercent: resolvedResources.cpuPercent,
+        diskGb: resolvedResources.diskGB
       },
+      provisionSource: 'self_service',
+      isAdminCreated: false,
+      createdByAdmin: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       cpuUsage: 12.0,
-      ramUsageMB: Math.floor(plan.ramMB * 0.25),
+      ramUsageMB: Math.floor(resourceLimits.ramMB * 0.25),
       diskUsageMB: 250,
       uptimeSeconds: 0
     };
 
     // Update Node capacity
-    targetNode.usedRamMB += plan.ramMB;
-    targetNode.usedCpuCores += plan.cpuCores;
+    targetNode.usedRamMB += resourceLimits.ramMB;
+    targetNode.usedCpuCores += resourceLimits.cpuCores;
+    targetNode.usedDiskGB = (targetNode.usedDiskGB || 0) + resourceLimits.diskGB;
     targetNode.serverCount += 1;
 
     db.servers.push(newServer);
@@ -336,7 +423,29 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
     appendConsoleLog(serverId, `[AetherPanel]: Server auto-provisioned successfully from template '${selectedSoftware}' on node ${targetNode.name}.`);
 
     // Genuinely spawn the server runtime process
-    await startServer(serverId);
+    try {
+      await startServer(serverId);
+    } catch (err: any) {
+      if (newServer && targetNode) {
+        // Rollback memory state if deployment crashed
+        targetNode.usedRamMB -= resourceLimits.ramMB;
+        targetNode.usedCpuCores -= resourceLimits.cpuCores;
+        targetNode.usedDiskGB = (targetNode.usedDiskGB || 0) - resourceLimits.diskGB;
+        targetNode.serverCount -= 1;
+        const srvIdx = db.servers.findIndex(s => s.id === serverId);
+        if (srvIdx !== -1) db.servers.splice(srvIdx, 1);
+        
+        // Unassign port allocation
+        if (alloc) alloc.isAssigned = false;
+        
+        // Refund credits if used
+        if (paymentMethod === 'balance') {
+          const userObj = db.users.find(u => u.id === req.user!.id);
+          if (userObj) userObj.credits += finalAmount;
+        }
+      }
+      throw err;
+    }
 
     saveDbSync();
 

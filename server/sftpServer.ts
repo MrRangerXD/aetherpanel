@@ -41,6 +41,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
       (client: any) => {
         let authenticatedUser: any = null;
         let targetServerId: string | null = null;
+        let usedServerPassword = false;
+        let userServer: any = null;
+        let db: any = null;
 
         client.on('error', (err: any) => {
           // Ignore socket hangup/reset from clients
@@ -67,13 +70,13 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
               serverId = rawUsername.substring(4);
             }
 
-            const db = await getDb();
+            db = await getDb();
             let user = db.users.find(
               (u) => u.username.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase()
             );
 
             // If username wasn't matched directly, check if server was specified
-            let userServer = null;
+            userServer = null;
             if (serverId) {
               userServer = db.servers.find(
                 (s) => s.id === serverId || s.id.startsWith(serverId) || s.id.substring(0, 10) === serverId
@@ -104,6 +107,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
             if (userServer && (userServer as any).sftpPassword) {
               if (password === (userServer as any).sftpPassword) {
                 isAuthenticated = true;
+                usedServerPassword = true;
                 if (!user) {
                   user = db.users.find((u) => u.id === userServer.userId) || db.users[0];
                 }
@@ -123,20 +127,44 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
               return ctx.reject();
             }
 
-            // Determine target server
+            // Determine target server with subuser permissions
             if (!userServer) {
               if (serverId) {
-                userServer = db.servers.find(
-                  (s) => (s.id === serverId || s.id.startsWith(serverId)) &&
-                         (s.userId === user.id || ['admin', 'super_admin'].includes(user.role))
-                );
+                userServer = db.servers.find((s) => {
+                  const isMatch = s.id === serverId || s.id.startsWith(serverId) || s.id.substring(0, 10) === serverId;
+                  if (!isMatch) return false;
+
+                  const isOwner = s.userId === user.id;
+                  const isAdmin = ['admin', 'super_admin'].includes(user.role);
+                  const subuser = db.subusers?.find((sub) => sub.serverId === s.id && sub.userId === user.id);
+                  const hasSubuserAccess = subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
+
+                  return isOwner || isAdmin || hasSubuserAccess;
+                });
               } else {
-                userServer = db.servers.find((s) => s.userId === user.id) || db.servers[0];
+                // Find first server user owns
+                userServer = db.servers.find((s) => s.userId === user.id);
+                // If not found, find first server user is a subuser of with permission
+                if (!userServer) {
+                  userServer = db.servers.find((s) => {
+                    const subuser = db.subusers?.find((sub) => sub.serverId === s.id && sub.userId === user.id);
+                    return subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
+                  });
+                }
               }
             }
 
             if (!userServer && user.role !== 'super_admin') {
               return ctx.reject();
+            }
+
+            // Verify explicit subuser access/permission block
+            if (userServer && userServer.userId !== user.id && !['admin', 'super_admin'].includes(user.role) && !usedServerPassword) {
+              const subuser = db.subusers?.find((sub) => sub.serverId === userServer.id && sub.userId === user.id);
+              const hasSubuserAccess = subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
+              if (!hasSubuserAccess) {
+                return ctx.reject();
+              }
             }
 
             authenticatedUser = user;
@@ -156,6 +184,18 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 const baseDir = path.resolve(getServerDir(targetServerId));
                 const openHandles: Map<number, { fd?: number; dirEntries?: string[]; dirPath?: string }> = new Map();
                 let nextHandle = 1;
+
+                const isOwner = userServer ? userServer.userId === authenticatedUser.id : false;
+                const isAdmin = ['admin', 'super_admin'].includes(authenticatedUser.role);
+                const subuser = db.subusers?.find((sub) => sub.serverId === targetServerId && sub.userId === authenticatedUser.id);
+
+                function checkPerm(perm: string): boolean {
+                  if (isAdmin) return true;
+                  if (usedServerPassword) return true;
+                  if (isOwner) return true;
+                  if (!subuser) return false;
+                  return subuser.permissions.includes(perm);
+                }
 
                 function safePath(reqPath: string): string | null {
                   if (!reqPath) return baseDir;
@@ -183,6 +223,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 }
 
                 sftp.on('REALPATH', (reqid: number, reqPath: string) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3); // SSH_FX_PERMISSION_DENIED
+                  }
                   const resolved = safePath(reqPath || '/');
                   if (!resolved) return sftp.status(reqid, 3); // SSH_FX_PERMISSION_DENIED
                   const rel = '/' + path.relative(baseDir, resolved).replace(/\\/g, '/');
@@ -190,6 +233,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('STAT', (reqid: number, reqPath: string) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(reqPath);
                   if (!target) return sftp.status(reqid, 3);
                   fs.stat(target, (err, stats) => {
@@ -199,6 +245,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('LSTAT', (reqid: number, reqPath: string) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(reqPath);
                   if (!target) return sftp.status(reqid, 3);
                   fs.lstat(target, (err, stats) => {
@@ -215,6 +264,24 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                   if (flags & 0x0002) openFlags = 'w+';
                   else if (flags & 0x0008) openFlags = 'a';
                   else if (flags & 0x0002 || flags & 0x0004) openFlags = 'w';
+
+                  // Verify specific granular permission based on file exists/non-exists or read/write
+                  if (openFlags === 'r') {
+                    if (!checkPerm('sftp.connect') && !checkPerm('files.view') && !checkPerm('files.download')) {
+                      return sftp.status(reqid, 3);
+                    }
+                  } else {
+                    const exists = fs.existsSync(target);
+                    if (exists) {
+                      if (!checkPerm('files.edit') && !checkPerm('files.upload')) {
+                        return sftp.status(reqid, 3);
+                      }
+                    } else {
+                      if (!checkPerm('files.create') && !checkPerm('files.upload')) {
+                        return sftp.status(reqid, 3);
+                      }
+                    }
+                  }
 
                   // Ensure parent dir exists if opening for write
                   if (openFlags !== 'r') {
@@ -235,6 +302,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('READ', (reqid: number, handle: Buffer, offset: number, length: number) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view') && !checkPerm('files.download')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const hId = handle.readUInt32BE(0);
                   const entry = openHandles.get(hId);
                   if (!entry || entry.fd === undefined) return sftp.status(reqid, 4); // SSH_FX_FAILURE
@@ -248,6 +318,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('WRITE', (reqid: number, handle: Buffer, offset: number, data: Buffer) => {
+                  if (!checkPerm('files.edit') && !checkPerm('files.upload')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const hId = handle.readUInt32BE(0);
                   const entry = openHandles.get(hId);
                   if (!entry || entry.fd === undefined) return sftp.status(reqid, 4);
@@ -259,6 +332,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('OPENDIR', (reqid: number, dirPath: string) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(dirPath);
                   if (!target) return sftp.status(reqid, 3);
 
@@ -273,6 +349,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('READDIR', (reqid: number, handle: Buffer) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const hId = handle.readUInt32BE(0);
                   const entry = openHandles.get(hId);
                   if (!entry || !entry.dirEntries || !entry.dirPath) return sftp.status(reqid, 4);
@@ -312,6 +391,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('MKDIR', (reqid: number, dirPath: string) => {
+                  if (!checkPerm('files.create') && !checkPerm('files.upload')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(dirPath);
                   if (!target) return sftp.status(reqid, 3);
 
@@ -322,6 +404,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('RMDIR', (reqid: number, dirPath: string) => {
+                  if (!checkPerm('files.delete')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(dirPath);
                   if (!target) return sftp.status(reqid, 3);
 
@@ -332,6 +417,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('REMOVE', (reqid: number, filePath: string) => {
+                  if (!checkPerm('files.delete')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(filePath);
                   if (!target) return sftp.status(reqid, 3);
 
@@ -342,6 +430,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('RENAME', (reqid: number, oldPath: string, newPath: string) => {
+                  if (!checkPerm('files.rename')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const oldTarget = safePath(oldPath);
                   const newTarget = safePath(newPath);
                   if (!oldTarget || !newTarget) return sftp.status(reqid, 3);
@@ -358,6 +449,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('SETSTAT', (reqid: number, reqPath: string, attrs: any) => {
+                  if (!checkPerm('files.edit')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const target = safePath(reqPath);
                   if (!target) return sftp.status(reqid, 3);
 
@@ -370,6 +464,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                 });
 
                 sftp.on('FSETSTAT', (reqid: number, handle: Buffer, attrs: any) => {
+                  if (!checkPerm('files.edit')) {
+                    return sftp.status(reqid, 3);
+                  }
                   const hId = handle.readUInt32BE(0);
                   const entry = openHandles.get(hId);
                   if (!entry || entry.fd === undefined) return sftp.status(reqid, 4);

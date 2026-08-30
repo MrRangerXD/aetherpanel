@@ -3,7 +3,9 @@ import {
   Gamepad2, Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
   Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useTheme } from '../../lib/ThemeContext';
+import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
@@ -13,7 +15,17 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { accentClasses } = useTheme();
+  const { pageAnimationsEnabled } = useBranding();
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -43,10 +55,47 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     ? Math.min(...botPlans.map(p => p.priceMonthly))
     : 0.99;
 
+  const animate = pageAnimationsEnabled && !prefersReducedMotion;
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08,
+        delayChildren: 0.05
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 12 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 120,
+        damping: 18,
+        mass: 0.8
+      }
+    }
+  };
+
+  const motionDivProps = animate ? {
+    variants: containerVariants,
+    initial: "hidden",
+    animate: "visible"
+  } : {};
+
+  const motionChildProps = animate ? {
+    variants: itemVariants
+  } : {};
+
   return (
-    <div className="space-y-24 py-8">
+    <motion.div {...motionDivProps} className="space-y-24 py-8">
       {/* Hero Section */}
-      <section className="relative overflow-hidden px-4 sm:px-6 lg:px-8">
+      <motion.section {...motionChildProps} className="relative overflow-hidden px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="text-center space-y-6 max-w-3xl mx-auto">
             
@@ -165,10 +214,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             </div>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Product Category Showcase */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <motion.section {...motionChildProps} className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
           <h2 className="text-2xl sm:text-3xl font-bold text-white font-sans">
             Choose Your Hosting Product
@@ -249,10 +298,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* Feature Highlights Grid */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 border-t border-zinc-900 pt-16">
+      <motion.section {...motionChildProps} className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 border-t border-zinc-900 pt-16">
         <div className="text-center max-w-2xl mx-auto mb-16 space-y-2">
           <h2 className="text-2xl sm:text-3xl font-bold text-white font-sans">
             Engineered for Modern Game Infrastructure
@@ -325,10 +374,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
         </div>
-      </section>
+      </motion.section>
 
       {/* CTA Banner */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <motion.section {...motionChildProps} className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="rounded-3xl bg-gradient-to-r from-violet-900/40 via-zinc-900 to-cyan-900/40 border border-zinc-800 p-8 sm:p-12 text-center space-y-6">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
             Ready to Launch Your Server?
@@ -351,7 +400,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             </button>
           </div>
         </div>
-      </section>
-    </div>
+      </motion.section>
+    </motion.div>
   );
 };

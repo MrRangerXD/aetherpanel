@@ -3,7 +3,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
-import { User, Product, Plan, Node, Allocation, Coupon, Announcement, SystemSettings } from '../../src/types';
+import { User, Product, Plan, Server, Node, Allocation, Coupon, Announcement, SystemSettings, DatabaseHost } from '../../src/types';
 import { ensureLocalNode } from '../nodeAgent';
 import {
   getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent, restartNodePlayitAgent, provisionNodePlayitSecret, claimNodePlayitAgent
@@ -14,8 +14,12 @@ import { stopServer, startServer, restartServer, getServerDir } from '../provide
 import { clearConsoleBuffer, closeServerConsoleClients } from '../consoleWs';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerType } from './serverTypes';
+import { buildBotStartupCommand } from '../../src/lib/startup';
 import { getDiscordOAuthRedirectUri } from '../oauthUrlResolver';
 import { getUserAllocationStatus, adjustUserAllocations, countOwnedServers } from '../services/allocationService';
+import { resolveServerResources } from '../services/resourceResolverService';
+import { cleanupServerDatabases, testDatabaseHostConnection } from '../services/databaseService';
+import { detectEnvironmentCapabilities } from '../utils/environment';
 
 const router = Router();
 
@@ -331,7 +335,7 @@ router.post('/users/:id/credits', async (req: AuthenticatedRequest, res: Respons
   res.json({ success: true, data: user, message: `User credits updated to $${user.credits.toFixed(2)}` });
 });
 
-// DELETE /api/v1/admin/users/:id - Delete user
+// DELETE /api/v1/admin/users/:id - Delete user with complete orphan record cleanup
 router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const userIndex = db.users.findIndex(u => u.id === req.params.id);
@@ -346,7 +350,6 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
     return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only a Super Admin can delete another Super Admin' } });
   }
 
-  // Check if user has servers
   const userServers = db.servers.filter(s => s.userId === user.id);
   const force = req.query.force === 'true' || req.body?.force === true;
 
@@ -357,15 +360,43 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
     });
   }
 
-  if (userServers.length > 0 && force) {
-    db.servers = db.servers.filter(s => s.userId !== user.id);
+  // Orphan records cleanup for user's servers
+  for (const srv of userServers) {
+    try {
+      await stopServer(srv.id);
+    } catch (e) {}
+    clearConsoleBuffer(srv.id);
+    closeServerConsoleClients(srv.id, `Server deleted via user account termination.`);
+    const serverDir = getServerDir(srv.id);
+    if (fs.existsSync(serverDir)) {
+      try {
+        fs.rmSync(serverDir, { recursive: true, force: true });
+      } catch (e) {}
+    }
+    db.allocations.filter(a => a.serverId === srv.id).forEach(a => {
+      a.serverId = undefined;
+      a.isAssigned = false;
+    });
   }
+
+  const userServerIds = new Set(userServers.map(s => s.id));
+  db.servers = db.servers.filter(s => s.userId !== user.id);
+  db.backups = db.backups.filter(b => !userServerIds.has(b.serverId));
+  db.databases = db.databases.filter(d => !userServerIds.has(d.serverId));
+  db.schedules = db.schedules.filter(sc => !userServerIds.has(sc.serverId));
+  db.subusers = (db.subusers || []).filter(sub => sub.userId !== user.id || userServerIds.has(sub.serverId));
+  if (db.discordLinks && db.discordLinks[user.id]) {
+    delete db.discordLinks[user.id];
+  }
+  db.serverDiscordLinks = (db.serverDiscordLinks || []).filter(sdl => !userServerIds.has(sdl.serverId));
+  db.tickets = (db.tickets || []).filter(t => t.userId !== user.id);
+  db.orders = (db.orders || []).filter(o => o.userId !== user.id);
 
   db.users.splice(userIndex, 1);
   saveDbSync();
 
-  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_DELETE_USER', user.id, `Deleted user account ${user.email}`);
-  res.json({ success: true, message: `User ${user.email} deleted successfully` });
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_DELETE_USER', user.id, `Deleted user account ${user.email} and cleaned up all associated servers and orphan records.`);
+  res.json({ success: true, message: `User ${user.email} and all associated records deleted successfully` });
 });
 
 // --- PRODUCT & PLAN MANAGEMENT ---
@@ -465,10 +496,11 @@ router.delete('/plans/:id', async (req: AuthenticatedRequest, res: Response) => 
   // Check if any server is using this plan
   const activeServers = db.servers.filter(s => s.planId === plan.id);
   if (activeServers.length > 0) {
-    return res.status(400).json({
-      success: false,
-      error: { code: 'PLAN_IN_USE', message: `Cannot delete plan: ${activeServers.length} active server(s) are using this tier.` }
-    });
+    // Soft deletion (set inactive) preserves historical server snapshots without breaking existing servers
+    plan.isActive = false;
+    saveDbSync();
+    await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_DISABLE_PLAN', plan.id, `Deactivated plan tier '${plan.name}' (in use by ${activeServers.length} servers)`);
+    return res.json({ success: true, message: `Plan '${plan.name}' has active servers and was set to inactive. Existing servers remain operational.` });
   }
 
   db.plans.splice(planIdx, 1);
@@ -1084,6 +1116,180 @@ router.post('/nodes/:id/allocations/bulk-delete', async (req: AuthenticatedReque
 });
 
 // --- ALL SERVERS ---
+// POST /api/v1/admin/servers/create - Admin provision custom server for user with custom specs
+router.post('/servers/create', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const { userEmail, userId, name, hostingCategory, software, version, ramMB, cpuCores, diskGB, nodeId } = req.body;
+
+  const targetUser = db.users.find(u => 
+    (userId && u.id === userId) || 
+    (userEmail && u.email.toLowerCase() === userEmail.trim().toLowerCase())
+  );
+
+  if (!targetUser) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'USER_NOT_FOUND', message: 'No user account was found with this email address.' }
+    });
+  }
+
+  if (!name || !ramMB || !cpuCores || !diskGB) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Server name, RAM, CPU, and Disk specs are required.' }
+    });
+  }
+
+  const category = hostingCategory || 'minecraft';
+  const targetNode = nodeId ? db.nodes.find(n => n.id === nodeId && n.status === 'online') : db.nodes.find(n => n.status === 'online' && !n.isMaintenanceMode);
+
+  if (!targetNode) {
+    return res.status(507).json({
+      success: false,
+      error: { code: 'NO_COMPUTE_CAPACITY', message: 'No online compute nodes available for provisioning.' }
+    });
+  }
+
+  let assignedPort = 25565;
+  let alloc = db.allocations.find(a => a.nodeId === targetNode.id && !a.isAssigned);
+  if (alloc) {
+    assignedPort = alloc.port;
+  } else {
+    assignedPort = Math.floor(Math.random() * 4000) + 25565;
+  }
+
+  const serverId = `srv_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+  const effectiveIp = targetNode.ip;
+
+  if (!alloc) {
+    alloc = {
+      id: `alloc_${Date.now()}_${assignedPort}`,
+      nodeId: targetNode.id,
+      ip: targetNode.ip,
+      port: assignedPort,
+      serverId,
+      isAssigned: true,
+      createdAt: new Date().toISOString()
+    };
+    db.allocations.push(alloc);
+  } else {
+    alloc.serverId = serverId;
+    alloc.isAssigned = true;
+  }
+
+  const resolvedSoftware = software || (category === 'minecraft' ? 'Paper' : 'Node.js');
+  const resolvedVersion = version || (category === 'minecraft' ? '26.2' : '20.x');
+  let resolvedServerTypeId = category === 'minecraft' ? 'st_minecraft_java' : (resolvedSoftware.toLowerCase().includes('python') ? 'st_python' : resolvedSoftware.toLowerCase().includes('bun') ? 'st_bun' : 'st_nodejs');
+
+  const resolvedRes = resolveServerResources({
+    db,
+    serverCategory: category,
+    provisionSource: 'admin_assigned',
+    customResources: {
+      ramMB: parseInt(ramMB, 10) || 1024,
+      cpuCores: parseFloat(cpuCores) || 1,
+      diskGB: parseInt(diskGB, 10) || 15,
+      backups: 5,
+      databases: 3
+    }
+  });
+
+  const serverLimits = {
+    ramMB: resolvedRes.ramMB,
+    cpuCores: resolvedRes.cpuCores,
+    diskGB: resolvedRes.diskGB,
+    backups: resolvedRes.backups,
+    databases: resolvedRes.databases
+  };
+
+  const startupConfig: any = category === 'bot' ? {
+    botRuntime: resolvedSoftware.toLowerCase().includes('python') ? 'python' : resolvedSoftware.toLowerCase().includes('bun') ? 'bun' : 'nodejs',
+    nodeConfig: resolvedSoftware.toLowerCase().includes('node') ? { version: resolvedVersion, startupFile: 'index.js' } : undefined,
+    pythonConfig: resolvedSoftware.toLowerCase().includes('python') ? { version: resolvedVersion, startupFile: 'main.py' } : undefined,
+    bunConfig: resolvedSoftware.toLowerCase().includes('bun') ? { version: resolvedVersion, startupFile: 'index.ts' } : undefined,
+    entryFile: resolvedSoftware.toLowerCase().includes('python') ? 'main.py' : resolvedSoftware.toLowerCase().includes('bun') ? 'index.ts' : 'index.js'
+  } : {};
+
+  const dummyServer: Partial<Server> = {
+    software: resolvedSoftware,
+    version: resolvedVersion,
+    limits: serverLimits
+  };
+
+  if (category === 'bot') {
+    const cmdObj = buildBotStartupCommand(dummyServer, startupConfig);
+    startupConfig.compiledCommand = cmdObj.compiledCommand;
+  } else {
+    startupConfig.compiledCommand = `java -Xms128M -Xmx${serverLimits.ramMB}M -jar server.jar nogui`;
+  }
+
+  const newServer: Server = {
+    id: serverId,
+    name: name.trim(),
+    userId: targetUser.id,
+    productId: category === 'minecraft' ? 'prod_minecraft' : 'prod_bot',
+    planId: category === 'minecraft' ? 'plan_mc_custom' : 'plan_bot_custom',
+    nodeId: targetNode.id,
+    serverTypeId: resolvedServerTypeId,
+    deploymentState: 'READY',
+    status: 'running',
+    primaryIp: effectiveIp,
+    primaryPort: assignedPort,
+    location: targetNode.locationName,
+    software: resolvedSoftware,
+    version: resolvedVersion,
+    startup: startupConfig as any,
+    limits: serverLimits,
+    resources: {
+      memoryMb: resolvedRes.ramMB,
+      cpuPercent: resolvedRes.cpuPercent,
+      diskGb: resolvedRes.diskGB
+    },
+    isAdminCreated: true, // Crucial: does not count towards user's 1-server allocation limit
+    createdByAdmin: true,
+    provisionSource: 'admin_assigned',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    cpuUsage: 10.0,
+    ramUsageMB: Math.floor(resolvedRes.ramMB * 0.2),
+    diskUsageMB: 200,
+    uptimeSeconds: 0
+  };
+
+  targetNode.usedRamMB += newServer.limits.ramMB;
+  targetNode.usedCpuCores += newServer.limits.cpuCores;
+  targetNode.usedDiskGB = (targetNode.usedDiskGB || 0) + newServer.limits.diskGB;
+  targetNode.serverCount += 1;
+
+  db.servers.push(newServer);
+
+  import('../provider').then(p => {
+    p.initializeServerFiles(serverId, category, resolvedSoftware);
+    if (category === 'minecraft') {
+      p.appendConsoleLog(serverId, `[AetherPanel]: Admin provisioned Minecraft server (${resolvedSoftware} ${resolvedVersion}) with custom specs...`);
+      import('../minecraftService').then(mc => {
+        mc.writeMinecraftEula(serverId, true);
+        mc.writeServerProperties(serverId, { serverPort: assignedPort });
+      }).catch(() => {});
+    }
+    p.startServer(serverId).catch(() => {});
+  }).catch(() => {});
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'ADMIN_PROVISION_SERVER', serverId,
+    `Admin provisioned custom server '${name}' (${serverId}) for user ${targetUser.email} (RAM: ${ramMB}MB, CPU: ${cpuCores}, Disk: ${diskGB}GB)`
+  );
+
+  res.json({
+    success: true,
+    message: `Server successfully provisioned and delivered to ${targetUser.email}!`,
+    data: newServer
+  });
+});
+
 // GET /api/v1/admin/servers
 router.get('/servers', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -1119,6 +1325,15 @@ router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) =
     } catch (e) {}
   }
 
+  // Release node capacity
+  const targetNode = db.nodes.find(n => n.id === server.nodeId);
+  if (targetNode) {
+    targetNode.usedRamMB = Math.max(0, targetNode.usedRamMB - (server.limits?.ramMB || 0));
+    targetNode.usedCpuCores = Math.max(0, targetNode.usedCpuCores - (server.limits?.cpuCores || 0));
+    targetNode.usedDiskGB = Math.max(0, (targetNode.usedDiskGB || 0) - (server.limits?.diskGB || 0));
+    targetNode.serverCount = Math.max(0, targetNode.serverCount - 1);
+  }
+
   // 4. Free allocations
   db.allocations.filter(a => a.serverId === server.id).forEach(a => {
     a.serverId = undefined;
@@ -1127,7 +1342,7 @@ router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) =
 
   // 5. Remove associated databases, backups, and schedules
   db.backups = db.backups.filter(b => b.serverId !== server.id);
-  db.databases = db.databases.filter(d => d.serverId !== server.id);
+  await cleanupServerDatabases(server.id);
   db.schedules = db.schedules.filter(sc => sc.serverId !== server.id);
 
   // 6. Remove from servers list
@@ -1296,7 +1511,7 @@ router.post('/servers/bulk-delete', async (req: AuthenticatedRequest, res: Respo
 
       // 5. Remove associated databases, backups, and schedules
       db.backups = db.backups.filter(b => b.serverId !== server.id);
-      db.databases = db.databases.filter(d => d.serverId !== server.id);
+      await cleanupServerDatabases(server.id);
       db.schedules = db.schedules.filter(sc => sc.serverId !== server.id);
 
       // 6. Remove from servers list
@@ -2189,7 +2404,8 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
         sessions: { status: 'ONLINE', type: 'JWT Bearer + TokenVersion Invalidation' },
         apiKeys: { status: 'ONLINE', type: 'SHA-256 Hashed Secrets (aeth_live_*)' },
         processManager: { status: 'ONLINE', type: 'Pterodactyl-Compatible Node Agent' }
-      }
+      },
+      capabilities: detectEnvironmentCapabilities()
     }
   });
 });
@@ -2339,6 +2555,169 @@ router.get('/update/status', async (req: AuthenticatedRequest, res: Response) =>
   const { getUpdateJobStatus } = await import('../updateService');
   const status = getUpdateJobStatus();
   res.json({ success: true, data: status });
+});
+
+// ==========================================
+// Database Hosts Management
+// ==========================================
+
+// GET /api/v1/admin/database-hosts - List configured database hosts
+router.get('/database-hosts', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const hosts = db.databaseHosts || [];
+  // Mask passwords when returning list
+  const sanitized = hosts.map(h => ({
+    ...h,
+    password: h.password ? '••••••••' : ''
+  }));
+  res.json({ success: true, data: sanitized });
+});
+
+// POST /api/v1/admin/database-hosts/test - Test connection to a database host
+router.post('/database-hosts/test', async (req: AuthenticatedRequest, res: Response) => {
+  const { host, port, username, password, dbType, id } = req.body;
+  const db = await getDb();
+
+  let targetPassword = password;
+  if (!targetPassword && id) {
+    const existing = (db.databaseHosts || []).find(h => h.id === id);
+    if (existing) targetPassword = existing.password;
+  }
+
+  const hostConfig: DatabaseHost = {
+    id: id || 'test_host',
+    name: 'Test Connection Host',
+    host: String(host || '').trim(),
+    port: parseInt(port, 10) || (dbType === 'postgres' ? 5432 : 3306),
+    username: String(username || '').trim(),
+    password: targetPassword || '',
+    dbType: dbType === 'postgres' ? 'postgres' : 'mysql',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (!hostConfig.host || !hostConfig.username) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Host and username are required.' } });
+  }
+
+  const result = await testDatabaseHostConnection(hostConfig);
+  if (!result.success) {
+    return res.status(400).json({ success: false, error: { code: 'CONNECTION_FAILED', message: result.message } });
+  }
+
+  res.json({ success: true, message: result.message });
+});
+
+// POST /api/v1/admin/database-hosts - Create or update database host
+router.post('/database-hosts', async (req: AuthenticatedRequest, res: Response) => {
+  const { id, name, host, port, username, password, dbType, nodeId, maxDatabases } = req.body;
+
+  if (!name || !host || !username) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Name, Host, and Username are required.' } });
+  }
+
+  const db = await getDb();
+  if (!db.databaseHosts) db.databaseHosts = [];
+
+  const cleanHost = String(host).trim();
+  const cleanPort = parseInt(port, 10) || (dbType === 'postgres' ? 5432 : 3306);
+  const cleanUsername = String(username).trim();
+  const cleanDbType: 'mysql' | 'postgres' = dbType === 'postgres' ? 'postgres' : 'mysql';
+
+  if (id) {
+    // Update existing
+    const existing = db.databaseHosts.find(h => h.id === id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database host not found.' } });
+    }
+
+    existing.name = String(name).trim();
+    existing.host = cleanHost;
+    existing.port = cleanPort;
+    existing.username = cleanUsername;
+    if (password && password !== '••••••••') {
+      existing.password = password;
+    }
+    existing.dbType = cleanDbType;
+    existing.nodeId = nodeId || undefined;
+    existing.maxDatabases = maxDatabases ? parseInt(maxDatabases, 10) : undefined;
+    existing.updatedAt = new Date().toISOString();
+
+    saveDbSync();
+    await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_DATABASE_HOST', existing.id, `Updated database host ${existing.name}`);
+    return res.json({ success: true, message: 'Database host updated successfully.', data: { ...existing, password: '••••••••' } });
+  } else {
+    // Create new
+    const newHost: DatabaseHost = {
+      id: `dbh_${Date.now()}`,
+      name: String(name).trim(),
+      host: cleanHost,
+      port: cleanPort,
+      username: cleanUsername,
+      password: password || '',
+      dbType: cleanDbType,
+      nodeId: nodeId || undefined,
+      maxDatabases: maxDatabases ? parseInt(maxDatabases, 10) : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.databaseHosts.push(newHost);
+    saveDbSync();
+    await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'CREATE_DATABASE_HOST', newHost.id, `Created database host ${newHost.name}`);
+    return res.json({ success: true, message: 'Database host created successfully.', data: { ...newHost, password: '••••••••' } });
+  }
+});
+
+// DELETE /api/v1/admin/database-hosts/:id - Delete database host
+router.delete('/database-hosts/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  if (!db.databaseHosts) db.databaseHosts = [];
+
+  const idx = db.databaseHosts.findIndex(h => h.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Database host not found.' } });
+  }
+
+  const [removed] = db.databaseHosts.splice(idx, 1);
+  saveDbSync();
+
+  await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'DELETE_DATABASE_HOST', removed.id, `Deleted database host ${removed.name}`);
+  res.json({ success: true, message: 'Database host removed successfully.' });
+});
+
+// PUT /api/v1/admin/settings/appearance - Update animation settings
+router.put('/settings/appearance', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  const db = await getDb();
+  const { enabled, pageTransitions, initialPanelAnimation, intensity } = req.body;
+
+  db.settings.animationSettings = {
+    enabled: typeof enabled === 'boolean' ? enabled : true,
+    pageTransitions: typeof pageTransitions === 'boolean' ? pageTransitions : true,
+    initialPanelAnimation: typeof initialPanelAnimation === 'boolean' ? initialPanelAnimation : true,
+    intensity: ['subtle', 'normal', 'enhanced'].includes(intensity) ? intensity : 'normal'
+  };
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_ANIMATION_SETTINGS',
+    'APPEARANCE',
+    `Updated animation settings (Enabled: ${db.settings.animationSettings.enabled}, Transitions: ${db.settings.animationSettings.pageTransitions}, Intensity: ${db.settings.animationSettings.intensity})`
+  );
+
+  res.json({
+    success: true,
+    message: 'Animation settings updated successfully.',
+    data: db.settings.animationSettings
+  });
 });
 
 export default router;

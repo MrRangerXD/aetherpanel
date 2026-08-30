@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Server as ServerIcon, Search, Play, Square, RotateCw, Trash2, 
   CheckSquare, Square as SquareOutline, AlertTriangle, X, Loader2, CheckCircle2 
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
+import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
 import { Server } from '../../types';
 import { useToast } from '../../lib/ToastContext';
 
@@ -21,6 +22,99 @@ export const AdminServers: React.FC = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [singleDeleteServer, setSingleDeleteServer] = useState<Server | null>(null);
   const [isDeletingSingle, setIsDeletingSingle] = useState(false);
+
+  // Admin Create Server Modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmail, setCreateEmail] = useState('');
+  const [createServerName, setCreateServerName] = useState('Custom Server');
+  const [createCategory, setCreateCategory] = useState<'minecraft' | 'bot'>('minecraft');
+  const [createSoftware, setCreateSoftware] = useState('Paper');
+  const [createVersion, setCreateVersion] = useState('26.2');
+  const [adminMcVersions, setAdminMcVersions] = useState<string[]>([]);
+  const [isLoadingAdminVersions, setIsLoadingAdminVersions] = useState(false);
+  const adminVersionReqIdRef = useRef<number>(0);
+  const [runtimesMap, setRuntimesMap] = useState<any>(null);
+  const [createRam, setCreateRam] = useState<number>(1024);
+  const [createCpu, setCreateCpu] = useState<number>(1);
+  const [createDisk, setCreateDisk] = useState<number>(15);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    fetchAllServers();
+    fetchRuntimes();
+    loadAdminMinecraftVersions('Paper');
+  }, []);
+
+  const loadAdminMinecraftVersions = async (software: string) => {
+    const reqId = ++adminVersionReqIdRef.current;
+    const cached = getCachedMinecraftVersions(software);
+    if (cached && cached.versions.length > 0) {
+      setAdminMcVersions(cached.versions);
+      setCreateVersion(prev => (cached.versions.includes('26.2') ? '26.2' : (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0])));
+      return;
+    }
+
+    setIsLoadingAdminVersions(true);
+    try {
+      const data = await fetchAuthoritativeMinecraftVersions(software);
+      if (reqId !== adminVersionReqIdRef.current) return;
+      if (data && data.versions && data.versions.length > 0) {
+        setAdminMcVersions(data.versions);
+        setCreateVersion(prev => (data.versions.includes('26.2') ? '26.2' : (data.versions.includes(prev) ? prev : data.latest || data.versions[0])));
+      }
+    } catch {
+      // fallback
+    } finally {
+      if (reqId === adminVersionReqIdRef.current) {
+        setIsLoadingAdminVersions(false);
+      }
+    }
+  };
+
+  const fetchRuntimes = async () => {
+    try {
+      const res = await apiRequest('/runtimes');
+      if (res.success && res.data) {
+        setRuntimesMap(res.data);
+      }
+    } catch (e) {}
+  };
+
+  const handleAdminCreateServer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+    if (!createEmail || !createServerName) {
+      setCreateError('User email and server name are required.');
+      return;
+    }
+
+    setIsCreating(true);
+    const res = await apiRequest('/admin/servers/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        userEmail: createEmail,
+        name: createServerName,
+        hostingCategory: createCategory,
+        software: createSoftware,
+        version: createVersion,
+        ramMB: createRam,
+        cpuCores: createCpu,
+        diskGB: createDisk
+      })
+    });
+    setIsCreating(false);
+
+    if (res.success) {
+      toast.success(res.message || 'Server provisioned and delivered successfully.');
+      setShowCreateModal(false);
+      setCreateEmail('');
+      setCreateServerName('Custom Server');
+      fetchAllServers();
+    } else {
+      setCreateError(res.error?.message || 'No user account was found with this email address.');
+    }
+  };
 
   const fetchAllServers = async () => {
     try {
@@ -211,15 +305,24 @@ export const AdminServers: React.FC = () => {
           <p className="text-xs text-zinc-400 mt-1">Full system-wide inventory of customer server instances.</p>
         </div>
 
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search servers across platform..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search servers across platform..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20 cursor-pointer whitespace-nowrap"
+          >
+            <ServerIcon className="h-4 w-4" />
+            <span>Create Server</span>
+          </button>
         </div>
       </div>
 
@@ -522,6 +625,212 @@ export const AdminServers: React.FC = () => {
                 <span>Permanently Delete {selectedIds.length} Servers</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Create Server Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-zinc-900 border border-amber-500/30 rounded-3xl p-6 max-w-lg w-full space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400">
+                  <ServerIcon className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Admin Provision Server</h3>
+                  <p className="text-xs text-amber-400 font-semibold">Assign custom specs & deliver to user account</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-zinc-500 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {createError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminCreateServer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">User Account Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Server Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={createServerName}
+                  onChange={(e) => setCreateServerName(e.target.value)}
+                  placeholder="Survival SMP / Bot Instance"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Hosting Category</label>
+                  <select
+                    value={createCategory}
+                    onChange={(e) => {
+                      const val = e.target.value as 'minecraft' | 'bot';
+                      setCreateCategory(val);
+                      if (val === 'minecraft') {
+                        setCreateSoftware('Paper');
+                        loadAdminMinecraftVersions('Paper');
+                      } else {
+                        setCreateSoftware('Node.js');
+                        setCreateVersion(runtimesMap?.nodejs?.defaultVersion || '20.x');
+                      }
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="minecraft">Minecraft Hosting</option>
+                    <option value="bot">Discord Bot & App</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Software Engine</label>
+                  <select
+                    value={createSoftware}
+                    onChange={(e) => {
+                      const sw = e.target.value;
+                      setCreateSoftware(sw);
+                      if (createCategory === 'minecraft') {
+                        loadAdminMinecraftVersions(sw);
+                      } else if (createCategory === 'bot') {
+                        const key = sw.toLowerCase().includes('python') ? 'python' : sw.toLowerCase().includes('bun') ? 'bun' : 'nodejs';
+                        if (runtimesMap && runtimesMap[key]) {
+                          setCreateVersion(runtimesMap[key].defaultVersion);
+                        }
+                      }
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  >
+                    {createCategory === 'minecraft' ? (
+                      <>
+                        <option value="Paper">Paper</option>
+                        <option value="Purpur">Purpur</option>
+                        <option value="Vanilla">Vanilla</option>
+                        <option value="Fabric">Fabric</option>
+                        <option value="Forge">Forge</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Node.js">Node.js</option>
+                        <option value="Python">Python</option>
+                        <option value="Bun">Bun</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  {createCategory === 'bot' ? 'Runtime Version *' : 'Minecraft Version *'}
+                  {createCategory === 'minecraft' && isLoadingAdminVersions && (
+                    <Loader2 className="inline h-3 w-3 animate-spin text-amber-400 ml-1.5" />
+                  )}
+                </label>
+                <select
+                  value={createVersion}
+                  onChange={(e) => setCreateVersion(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                >
+                  {createCategory === 'bot' ? (
+                    <>
+                      {runtimesMap && runtimesMap[createSoftware.toLowerCase().includes('python') ? 'python' : createSoftware.toLowerCase().includes('bun') ? 'bun' : 'nodejs']?.versions.map((ver: string) => (
+                        <option key={ver} value={ver}>{ver}</option>
+                      ))}
+                      {!runtimesMap && <option value={createVersion}>{createVersion}</option>}
+                    </>
+                  ) : (
+                    <>
+                      {adminMcVersions.length > 0 ? (
+                        adminMcVersions.map((ver, idx) => (
+                          <option key={ver} value={ver}>
+                            {ver} {idx === 0 && ver !== 'UNKNOWN' ? '(Latest)' : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="26.2">26.2 (Latest)</option>
+                      )}
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">RAM (MB)</label>
+                  <input
+                    type="number"
+                    min="256"
+                    step="256"
+                    value={createRam}
+                    onChange={(e) => setCreateRam(parseInt(e.target.value, 10) || 1024)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">CPU Cores</label>
+                  <input
+                    type="number"
+                    min="0.25"
+                    step="0.25"
+                    value={createCpu}
+                    onChange={(e) => setCreateCpu(parseFloat(e.target.value) || 1)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Disk (GB)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={createDisk}
+                    onChange={(e) => setCreateDisk(parseInt(e.target.value, 10) || 15)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  disabled={isCreating}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isCreating ? <Loader2 className="h-4 w-4 animate-spin text-zinc-950" /> : <ServerIcon className="h-4 w-4 text-zinc-950" />}
+                  <span>Provision & Deliver Server</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

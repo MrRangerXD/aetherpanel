@@ -10,9 +10,11 @@ import { useTheme } from '../../lib/ThemeContext';
 import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
 import { apiRequest } from '../../lib/api';
 import { DiscordAccount, ApiKey, WebhookSubscription } from '../../types';
+import { useToast } from '../../lib/ToastContext';
 
 export const UserSettings: React.FC = () => {
   const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
   const {
     accent, setAccent,
     customCursorEnabled, setCustomCursorEnabled,
@@ -104,7 +106,7 @@ export const UserSettings: React.FC = () => {
         fetchWebhooks();
       }
     } catch (err: any) {
-      alert(`Webhook registration failed: ${err.message}`);
+      toast.error(`Webhook registration failed: ${err.message}`);
     } finally {
       setCreatingWebhook(false);
     }
@@ -140,7 +142,7 @@ export const UserSettings: React.FC = () => {
         fetchWebhooks();
       }
     } catch (err: any) {
-      alert(`Failed to delete webhook: ${err.message}`);
+      toast.error(`Failed to delete webhook: ${err.message}`);
     }
   };
 

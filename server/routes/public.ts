@@ -56,12 +56,21 @@ router.get('/products', async (req: Request, res: Response) => {
   });
 });
 
-// GET /api/v1/public/plans
+// GET /api/v1/public/plans & GET /api/v1/plans
 router.get('/plans', async (req: Request, res: Response) => {
   const db = await getDb();
+  let plans = db.plans.filter(p => p.isActive);
+  const category = req.query.category as string;
+  if (category) {
+    plans = plans.filter(p => {
+      const prod = db.products.find(prod => prod.id === p.productId);
+      const planCat = prod?.category || (p.id.includes('bot') ? 'bot' : 'minecraft');
+      return planCat.toLowerCase() === category.toLowerCase();
+    });
+  }
   res.json({
     success: true,
-    data: db.plans.filter(p => p.isActive)
+    data: plans
   });
 });
 
@@ -77,7 +86,7 @@ router.get('/announcements', async (req: Request, res: Response) => {
 // GET /api/v1/public/settings
 router.get('/settings', async (req: Request, res: Response) => {
   const db = await getDb();
-  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit } = db.settings;
+  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit, pageAnimationsEnabled } = db.settings;
 
   res.json({
     success: true,
@@ -93,7 +102,8 @@ router.get('/settings', async (req: Request, res: Response) => {
       maintenanceMessage,
       defaultTheme,
       accentColor,
-      enablePlayit: enablePlayit !== false
+      enablePlayit: enablePlayit !== false,
+      pageAnimationsEnabled: pageAnimationsEnabled !== false
     }
   });
 });

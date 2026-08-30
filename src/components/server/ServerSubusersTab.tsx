@@ -28,6 +28,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'files.rename', label: 'Rename/Move Files', desc: 'Rename or move files' },
   { id: 'files.upload', label: 'Upload Files', desc: 'Upload files via the browser' },
   { id: 'files.download', label: 'Download Files', desc: 'Download files' },
+  { id: 'sftp.connect', label: 'SFTP Connect', desc: 'Allows connecting to server via SFTP' },
   { id: 'plugins.view', label: 'View Plugins', desc: 'View installed plugins' },
   { id: 'plugins.manage', label: 'Manage Plugins', desc: 'Install, toggle, and delete plugins' },
   { id: 'backups.view', label: 'View Backups', desc: 'View server backups' },

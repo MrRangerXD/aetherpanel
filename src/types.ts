@@ -102,8 +102,8 @@ export interface ServerTypeTheme {
   accentColor: string;
   overlayOpacity: number; // 0 to 1
   gradientEnabled: boolean;
-  cardStyle?: 'default' | 'compact' | 'glass';
-  badgeStyle?: 'solid' | 'outline' | 'glow';
+  cardStyle?: 'default' | 'compact' | 'glass' | 'bordered';
+  badgeStyle?: 'solid' | 'outline' | 'glow' | 'minimal';
   statusStyle?: 'default' | 'pill' | 'dot';
   defaultResourceLabels?: {
     cpu?: string;
@@ -119,7 +119,7 @@ export interface ServerType {
   name: string;
   slug: string;
   category: 'Minecraft' | 'Bot Hosting' | 'Other' | string;
-  runtime: 'Java' | 'Bedrock' | 'Node.js' | 'Bun' | 'Python' | string;
+  runtime: 'Java' | 'Node.js' | 'Bun' | 'Python' | string;
   description: string;
   icon: string;
   enabled: boolean;
@@ -153,6 +153,12 @@ export interface ServerTemplate {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ServerResources {
+  memoryMb: number;
+  cpuPercent: number;
+  diskGb: number;
 }
 
 export interface ServerResourceLimits {
@@ -235,6 +241,9 @@ export interface Server {
   serverTypeId?: string;
   serverType?: ServerType;
   isSubuser?: boolean;
+  isAdminCreated?: boolean;
+  createdByAdmin?: boolean;
+  provisionSource?: 'self_service' | 'admin_assigned';
   permissions?: string[];
   deploymentState?: ServerDeploymentState;
   status: ServerStatus;
@@ -244,6 +253,7 @@ export interface Server {
   software: string; // e.g., 'Paper', 'Purpur', 'Spigot', 'Node.js', 'Python'
   version: string; // e.g. '1.20.4', 'Node 20', 'Python 3.11'
   limits: ServerResourceLimits;
+  resources?: ServerResources;
   startup?: ServerStartupConfig;
   envVars?: ServerEnvVar[];
   selectedEnvPath?: string;
@@ -426,6 +436,7 @@ export interface ServerFile {
   path: string;
   size: number;
   isDir: boolean;
+  isFile?: boolean;
   updatedAt: string;
   extension?: string;
 }
@@ -450,6 +461,7 @@ export interface ServerBackup {
   storageKey?: string;
   checksum?: string;
   errorMessage?: string;
+  errorDetails?: string;
   createdAt: string;
   completedAt?: string;
 }
@@ -458,12 +470,30 @@ export interface ServerDatabase {
   id: string;
   installationId?: string;
   serverId: string;
+  databaseHostId?: string;
   name: string;
   username: string;
+  password?: string;
   host: string;
   port: number;
   dbType: 'mysql' | 'postgres';
+  connectionUri?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DatabaseHost {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  dbType: 'mysql' | 'postgres';
+  nodeId?: string;
+  maxDatabases?: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ScheduleType = 'one-time' | 'hourly' | 'daily' | 'weekly' | 'custom_cron';
@@ -703,6 +733,15 @@ export interface SystemSettings {
   themeSettings?: CustomThemeSettings;
   antiAbuse?: AntiAbuseSettings;
   enablePlayit?: boolean;
+  pageAnimationsEnabled?: boolean;
+  animationSettings?: AnimationSettings;
+}
+
+export interface AnimationSettings {
+  enabled: boolean;
+  pageTransitions: boolean;
+  initialPanelAnimation: boolean;
+  intensity: 'subtle' | 'normal' | 'enhanced';
 }
 
 export interface PluginItem {
