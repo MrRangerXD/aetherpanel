@@ -1061,6 +1061,14 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           };
         }
 
+        if (!dbCache.settings.socialLinks) {
+          dbCache.settings.socialLinks = {
+            discord: dbCache.settings.discordUrl || 'https://discord.gg/aetherpanel',
+            twitter: 'https://twitter.com/aetherpanel',
+            github: 'https://github.com/aetherpanel'
+          };
+        }
+
         // Filter out demo user and demo customer data
         const demoUserIds = ['usr_demo', 'usr_demo_customer'];
         const demoEmails = ['demo@aetherpanel.com', 'demo@example.com'];
@@ -1704,6 +1712,27 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
         'BACKUP_FAILED',
         'RESOURCE_WARNING'
       ]
+    },
+    socialLinks: {
+      discord: 'https://discord.gg/aetherpanel',
+      twitter: 'https://twitter.com/aetherpanel',
+      github: 'https://github.com/aetherpanel'
+    },
+    themeSettings: {
+      activeThemeId: 'golden',
+      activeFontId: 'Plus Jakarta Sans',
+      cardStyle: 'rounded-2xl',
+      glowIntensity: 'vibrant',
+      allowUserCustomization: true,
+      backgroundBlur: 'none',
+      backgroundOverlayOpacity: 75,
+      assets: {
+        logoUrl: '',
+        faviconUrl: '',
+        bgPatternUrl: '',
+        bannerUrl: '',
+        loginBgUrl: ''
+      }
     }
   };
 

@@ -86,7 +86,7 @@ router.get('/announcements', async (req: Request, res: Response) => {
 // GET /api/v1/public/settings
 router.get('/settings', async (req: Request, res: Response) => {
   const db = await getDb();
-  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit, pageAnimationsEnabled } = db.settings;
+  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit, pageAnimationsEnabled, socialLinks } = db.settings;
 
   res.json({
     success: true,
@@ -95,6 +95,11 @@ router.get('/settings', async (req: Request, res: Response) => {
       brandTagline,
       supportEmail,
       discordUrl,
+      socialLinks: socialLinks || {
+        discord: discordUrl || 'https://discord.gg/aetherpanel',
+        twitter: 'https://twitter.com/aetherpanel',
+        github: 'https://github.com/aetherpanel'
+      },
       currencySymbol,
       currencyCode,
       registrationEnabled,
@@ -108,21 +113,48 @@ router.get('/settings', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/v1/public/settings/social-links and /social-links
+const getPublicSocialLinks = async (req: Request, res: Response) => {
+  const db = await getDb();
+  const socialLinks = db.settings.socialLinks || {
+    discord: db.settings.discordUrl || 'https://discord.gg/aetherpanel',
+    twitter: 'https://twitter.com/aetherpanel',
+    github: 'https://github.com/aetherpanel'
+  };
+  res.json({
+    success: true,
+    data: socialLinks
+  });
+};
+
+router.get('/settings/social-links', getPublicSocialLinks);
+router.get('/social-links', getPublicSocialLinks);
+
 // GET /api/v1/public/theme-settings
 router.get('/theme-settings', async (req: Request, res: Response) => {
   const db = await getDb();
-  const themeSettings = db.settings.themeSettings || {
+  const defaults = {
     activeThemeId: 'golden',
     activeFontId: 'Plus Jakarta Sans',
     cardStyle: 'rounded-2xl',
     glowIntensity: 'vibrant',
     allowUserCustomization: true,
+    backgroundBlur: 'none',
+    backgroundOverlayOpacity: 75,
     assets: {
       logoUrl: '',
       faviconUrl: '',
       bgPatternUrl: '',
       bannerUrl: '',
       loginBgUrl: ''
+    }
+  };
+  const themeSettings = {
+    ...defaults,
+    ...(db.settings.themeSettings || {}),
+    assets: {
+      ...defaults.assets,
+      ...(db.settings.themeSettings?.assets || {})
     }
   };
   res.json({

@@ -20,6 +20,13 @@ import { getUserAllocationStatus, adjustUserAllocations, countOwnedServers } fro
 import { resolveServerResources } from '../services/resourceResolverService';
 import { cleanupServerDatabases, testDatabaseHostConnection } from '../services/databaseService';
 import { detectEnvironmentCapabilities } from '../utils/environment';
+import {
+  getNetworkProtectionStatus,
+  probeFirewallCapabilities,
+  reconcileAllServerRules,
+  applyHostNetworkProtection,
+  removeServerPortRule
+} from '../services/networkProtectionService';
 
 const router = Router();
 
@@ -372,6 +379,9 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
       try {
         fs.rmSync(serverDir, { recursive: true, force: true });
       } catch (e) {}
+    }
+    if (srv.primaryPort) {
+      removeServerPortRule(srv.primaryPort, 'both', srv.id).catch(() => {});
     }
     db.allocations.filter(a => a.serverId === srv.id).forEach(a => {
       a.serverId = undefined;
@@ -1334,7 +1344,10 @@ router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) =
     targetNode.serverCount = Math.max(0, targetNode.serverCount - 1);
   }
 
-  // 4. Free allocations
+  // 4. Free allocations & cleanup host firewall
+  if (server.primaryPort) {
+    removeServerPortRule(server.primaryPort, 'both', server.id).catch(() => {});
+  }
   db.allocations.filter(a => a.serverId === server.id).forEach(a => {
     a.serverId = undefined;
     a.isAssigned = false;
@@ -1682,6 +1695,92 @@ router.put('/settings', async (req: AuthenticatedRequest, res: Response) => {
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_SETTINGS', 'SYSTEM', 'Updated system settings');
 
   res.json({ success: true, data: db.settings });
+});
+
+// Helper URL validator for social links
+const isValidSocialUrl = (url: string): boolean => {
+  if (!url) return true;
+  const trimmed = url.trim();
+  if (trimmed === '') return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+// GET /api/v1/admin/settings/social-links
+router.get('/settings/social-links', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const socialLinks = db.settings.socialLinks || {
+    discord: db.settings.discordUrl || 'https://discord.gg/aetherpanel',
+    twitter: 'https://twitter.com/aetherpanel',
+    github: 'https://github.com/aetherpanel'
+  };
+  res.json({ success: true, data: socialLinks });
+});
+
+// PUT /api/v1/admin/settings/social-links
+router.put('/settings/social-links', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  const { discord, twitter, github } = req.body || {};
+
+  const cleanDiscord = typeof discord === 'string' ? discord.trim() : '';
+  const cleanTwitter = typeof twitter === 'string' ? twitter.trim() : '';
+  const cleanGithub = typeof github === 'string' ? github.trim() : '';
+
+  if (cleanDiscord && !isValidSocialUrl(cleanDiscord)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_URL', message: 'Discord URL must be a valid HTTP or HTTPS URL (e.g. https://discord.gg/yourserver)' }
+    });
+  }
+
+  if (cleanTwitter && !isValidSocialUrl(cleanTwitter)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_URL', message: 'X / Twitter URL must be a valid HTTP or HTTPS URL (e.g. https://x.com/yourhandle)' }
+    });
+  }
+
+  if (cleanGithub && !isValidSocialUrl(cleanGithub)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_URL', message: 'GitHub URL must be a valid HTTP or HTTPS URL (e.g. https://github.com/yourrepo)' }
+    });
+  }
+
+  const db = await getDb();
+  db.settings.socialLinks = {
+    discord: cleanDiscord,
+    twitter: cleanTwitter,
+    github: cleanGithub
+  };
+
+  if (cleanDiscord) {
+    db.settings.discordUrl = cleanDiscord;
+  }
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_SOCIAL_LINKS',
+    'SETTINGS',
+    `Updated global social links (Discord: ${cleanDiscord || 'None'}, X/Twitter: ${cleanTwitter || 'None'}, GitHub: ${cleanGithub || 'None'})`
+  );
+
+  res.json({
+    success: true,
+    message: 'Social links updated successfully.',
+    data: db.settings.socialLinks
+  });
 });
 
 // GET /api/v1/admin/payment-settings
@@ -2457,7 +2556,7 @@ router.post('/users/:id/reset-password', handleAdminPasswordReset);
 // GET /api/v1/admin/theme-settings - Get global theme settings
 router.get('/theme-settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  const themeSettings = db.settings.themeSettings || {
+  const defaults = {
     activeThemeId: 'golden',
     activeFontId: 'Plus Jakarta Sans',
     cardStyle: 'rounded-2xl',
@@ -2473,14 +2572,18 @@ router.get('/theme-settings', async (req: AuthenticatedRequest, res: Response) =
       loginBgUrl: ''
     }
   };
+  const themeSettings = {
+    ...defaults,
+    ...(db.settings.themeSettings || {}),
+    assets: {
+      ...defaults.assets,
+      ...(db.settings.themeSettings?.assets || {})
+    }
+  };
 
   res.json({
     success: true,
-    data: {
-      backgroundBlur: 'none',
-      backgroundOverlayOpacity: 75,
-      ...themeSettings
-    }
+    data: themeSettings
   });
 });
 
@@ -2491,9 +2594,14 @@ router.put('/theme-settings', async (req: AuthenticatedRequest, res: Response) =
   }
 
   const db = await getDb();
+  const existingAssets = db.settings.themeSettings?.assets || {};
   db.settings.themeSettings = {
     ...db.settings.themeSettings,
-    ...req.body
+    ...req.body,
+    assets: {
+      ...existingAssets,
+      ...(req.body.assets || {})
+    }
   };
   saveDbSync();
 
@@ -2718,6 +2826,75 @@ router.put('/settings/appearance', async (req: AuthenticatedRequest, res: Respon
     message: 'Animation settings updated successfully.',
     data: db.settings.animationSettings
   });
+});
+
+// --- NETWORK PROTECTION CONTROLS ---
+
+// GET /api/v1/admin/network-protection/status - Get full live network protection status
+router.get('/network-protection/status', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = await getNetworkProtectionStatus();
+    res.json({ success: true, data: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'STATUS_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/network-protection/detect - Re-run capability detection & probe
+router.post('/network-protection/detect', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  try {
+    await probeFirewallCapabilities();
+    await applyHostNetworkProtection();
+    const status = await getNetworkProtectionStatus();
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'ADMIN_DETECT_NETWORK_CAPABILITIES',
+      'FIREWALL',
+      `Re-ran network protection capability probe. Detected backend: ${status.firewallBackend}`
+    );
+
+    res.json({ success: true, data: status, message: `Capabilities probed successfully. Active backend: ${status.firewallBackend}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'DETECT_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/network-protection/reconcile - Synchronize all server firewall rules
+router.post('/network-protection/reconcile', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  try {
+    const db = await getDb();
+    const result = await reconcileAllServerRules(db);
+    const status = await getNetworkProtectionStatus();
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'ADMIN_RECONCILE_NETWORK_RULES',
+      'FIREWALL',
+      `Reconciled ${result.reconciledCount} server port rules on ${result.backend}`
+    );
+
+    res.json({
+      success: true,
+      data: status,
+      summary: result,
+      message: `Successfully reconciled ${result.reconciledCount} server port rules across ${result.backend}.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'RECONCILE_ERROR', message: err.message } });
+  }
 });
 
 export default router;

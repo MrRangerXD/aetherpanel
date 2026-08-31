@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Gamepad2, Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
-  Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame
+  Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame,
+  Sliders, Gauge, Layers
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../../lib/ThemeContext';
@@ -96,6 +97,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     <motion.div {...motionDivProps} className="space-y-24 py-8">
       {/* Hero Section */}
       <motion.section {...motionChildProps} className="relative overflow-hidden px-4 sm:px-6 lg:px-8">
+        {/* Subtle warm orange/gold ambient glow behind the main heading */}
+        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[700px] sm:w-[900px] lg:w-[1100px] h-[400px] bg-amber-500/[0.065] rounded-full blur-[150px] pointer-events-none -z-10" />
+        
+        {/* Extremely subtle teal ambient glow on the side */}
+        <div className="absolute top-28 -left-24 w-[400px] sm:w-[500px] h-[320px] bg-teal-500/[0.035] rounded-full blur-[140px] pointer-events-none -z-10" />
+
         <div className="mx-auto max-w-7xl">
           <div className="text-center space-y-6 max-w-3xl mx-auto">
             
@@ -147,70 +154,118 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
           </div>
 
-          {/* Interactive Cloud Infrastructure Preview Card */}
-          <div className="mt-14 max-w-5xl mx-auto rounded-3xl border border-zinc-800 bg-zinc-950/90 p-4 sm:p-6 shadow-2xl relative group">
-            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-violet-600/20 to-cyan-500/20 blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
-            
-            <div className="relative rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden">
-              {/* Window Header */}
-              <div className="px-4 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-rose-500/80 inline-block"></span>
-                  <span className="h-3 w-3 rounded-full bg-amber-500/80 inline-block"></span>
-                  <span className="h-3 w-3 rounded-full bg-emerald-500/80 inline-block"></span>
-                  <span className="text-xs font-mono text-zinc-400 ml-2">node-us1.aetherpanel.com — Live Container Engine</span>
+          {/* Premium Infrastructure Showcase Panel */}
+          <div className="mt-14 max-w-5xl mx-auto">
+            <div className="relative rounded-3xl bg-zinc-950/80 border border-zinc-800/80 p-6 sm:p-8 lg:p-10 shadow-2xl backdrop-blur-sm overflow-hidden">
+              {/* Subtle top ambient gradient line */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6 divide-y md:divide-y-0 md:divide-x divide-zinc-800/60">
+                {/* 1. Instant Deployment */}
+                <div className="space-y-3.5 pt-4 md:pt-0 md:px-4 first:md:pl-0">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Instant Deployment
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Deploy Minecraft servers and applications quickly with streamlined provisioning and simple management.
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    ● ONLINE (20.0 TPS)
-                  </span>
+
+                {/* 2. Performance Focused */}
+                <div className="space-y-3.5 pt-6 md:pt-0 md:px-4">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Cpu className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Performance Focused
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Flexible resource allocations and reliable infrastructure built for demanding workloads.
+                  </p>
+                </div>
+
+                {/* 3. Full Control */}
+                <div className="space-y-3.5 pt-6 md:pt-0 md:px-4 last:md:pr-0">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Sliders className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Full Control
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Manage files, startup settings, databases, backups, networking and more from one panel.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Infrastructure Built for Performance Section */}
+          <div className="mt-20 sm:mt-24 max-w-6xl mx-auto">
+            <div className="text-center max-w-2xl mx-auto mb-10 space-y-2.5">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans">
+                Infrastructure Built for Performance
+              </h2>
+              <p className="text-sm sm:text-base text-zinc-400 leading-relaxed">
+                Enterprise-grade hardware, ultra-low latency routing, and intuitive management tools designed for peak stability.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {/* Card 1: Instant Deployment */}
+              <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 transition-colors space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white">Instant Deployment</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Spin up Minecraft nodes and bot instances in seconds with automated container initialization and pre-configured runtimes.
+                  </p>
                 </div>
               </div>
 
-              {/* Window Dashboard Preview Body */}
-              <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                  <div className="text-xs text-zinc-400 font-mono flex items-center justify-between">
-                    <span>CPU LOAD</span>
-                    <span className="text-violet-400 font-bold">14.2%</span>
+              {/* Card 2: Reliable Infrastructure */}
+              <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 transition-colors space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Server className="h-5 w-5" />
                   </div>
-                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-500 rounded-full w-[14%]"></div>
-                  </div>
-                  <span className="text-[10px] text-zinc-400">AMD Ryzen 9 7950X (4 vCPU allocated)</span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                  <div className="text-xs text-zinc-400 font-mono flex items-center justify-between">
-                    <span>RAM USAGE</span>
-                    <span className="text-cyan-400 font-bold">3.4 GB / 8 GB</span>
-                  </div>
-                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-cyan-500 rounded-full w-[42%]"></div>
-                  </div>
-                  <span className="text-[10px] text-zinc-400">DDR5 ECC 4800MHz Memory</span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                  <div className="text-xs text-zinc-400 font-mono flex items-center justify-between">
-                    <span>DISK I/O</span>
-                    <span className="text-emerald-400 font-bold">8.4 GB / 60 GB</span>
-                  </div>
-                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full w-[14%]"></div>
-                  </div>
-                  <span className="text-[10px] text-zinc-400">PCIe 4.0 NVMe Enterprise SSD</span>
+                  <h3 className="text-base font-semibold text-white">Reliable Infrastructure</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Powered by high-clock compute nodes, enterprise Gen4 NVMe arrays, and dedicated DDoS protection for continuous uptime.
+                  </p>
                 </div>
               </div>
 
-              {/* Terminal Logs Preview */}
-              <div className="p-4 bg-black font-mono text-xs text-zinc-300 space-y-1 border-t border-zinc-800 max-h-36 overflow-hidden">
-                <p className="text-emerald-400">[01:28:40 INFO]: Paper version 1.20.4-R0.1-SNAPSHOT (Java 21) initialized.</p>
-                <p className="text-zinc-400">[01:28:41 INFO]: Loading 14 plugins (LuckPerms, EssentialsX, Vault, WorldEdit)...</p>
-                <p className="text-cyan-400">[01:28:42 INFO]: Bound to server IP 104.22.14.88:25565 [DDoS Shield Active]</p>
-                <p className="text-emerald-400">[01:28:43 SUCCESS]: Done (2.108s)! Server ready for player connections.</p>
+              {/* Card 3: Full Server Control */}
+              <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 transition-colors space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Cpu className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white">Full Server Control</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Enjoy total flexibility with comprehensive file management, real-time command console, customizable JVM flags, and automated task schedules.
+                  </p>
+                </div>
               </div>
 
+              {/* Card 4: Flexible Connectivity */}
+              <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 transition-colors space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Globe2 className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white">Flexible Connectivity</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Connect seamlessly using custom subdomains, integrated port allocation, high-speed SFTP access, and optional Playit tunnel integration.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

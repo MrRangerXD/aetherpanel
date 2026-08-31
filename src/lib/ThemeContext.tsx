@@ -199,14 +199,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem('aether_theme_assets', JSON.stringify(themeAssets));
 
-    if (themeAssets.faviconUrl) {
-      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+    const favUrl = themeAssets.faviconUrl?.trim();
+    let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+    if (favUrl) {
       if (!link) {
         link = document.createElement('link');
         link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
+        document.head.appendChild(link);
       }
-      link.href = themeAssets.faviconUrl;
+      link.href = favUrl;
+    } else if (link) {
+      link.href = '/favicon.ico';
     }
 
     // Dynamic wallpaper, blur, and opacity styling tag
@@ -218,8 +221,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const blurVal = backgroundBlur === 'none' ? '0px' : backgroundBlur;
-    const bgUrl = themeAssets.bgPatternUrl || '';
-    const opacityVal = backgroundOverlayOpacity / 100;
+    const bgUrl = themeAssets.bgPatternUrl?.trim() || '';
+    const opacityVal = (backgroundOverlayOpacity ?? 75) / 100;
+    const isBlurred = blurVal !== '0px';
 
     styleTag.innerHTML = `
       body {
@@ -233,11 +237,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         right: 0;
         bottom: 0;
         z-index: -20;
-        background-image: ${bgUrl ? `url('${bgUrl}')` : 'none'};
+        background-image: ${bgUrl ? `url("${bgUrl}")` : 'none'};
         background-size: cover;
         background-attachment: fixed;
         background-position: center;
+        background-repeat: no-repeat;
+        filter: blur(${blurVal});
+        -webkit-filter: blur(${blurVal});
+        transform: ${isBlurred ? 'scale(1.08)' : 'none'};
         pointer-events: none;
+        transition: filter 0.3s ease, transform 0.3s ease;
       }
       body::after {
         content: "";
@@ -247,10 +256,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         right: 0;
         bottom: 0;
         z-index: -10;
-        background-color: rgba(9, 9, 11, ${opacityVal}) !important;
-        backdrop-filter: blur(${blurVal}) !important;
-        -webkit-backdrop-filter: blur(${blurVal}) !important;
+        background-color: ${bgUrl ? `rgba(9, 9, 11, ${opacityVal})` : 'transparent'} !important;
         pointer-events: none;
+        transition: background-color 0.3s ease;
       }
     `;
   }, [themeAssets, backgroundBlur, backgroundOverlayOpacity]);

@@ -15,6 +15,8 @@ export const AdminAppearance: React.FC = () => {
     setTheme,
     themeAssets,
     setThemeAssets,
+    setBackgroundBlur: setBackgroundBlurContext,
+    setBackgroundOverlayOpacity: setBackgroundOverlayOpacityContext,
     applySystemThemeSettings
   } = useTheme();
 
@@ -132,7 +134,7 @@ export const AdminAppearance: React.FC = () => {
     setLoading(false);
   };
 
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     setSelectedThemeId('golden');
     setSelectedFontId('Plus Jakarta Sans');
     setLogoUrl('');
@@ -145,6 +147,47 @@ export const AdminAppearance: React.FC = () => {
     setBackgroundBlur('none');
     setBackgroundOverlayOpacity(75);
     setTheme('dark');
+
+    // Immediately update context to restore defaults
+    setThemeAssets({
+      logoUrl: '',
+      faviconUrl: '',
+      bgPatternUrl: '',
+      bannerUrl: ''
+    });
+    setBackgroundBlurContext('none');
+    setBackgroundOverlayOpacityContext(75);
+    setActiveThemeId('golden');
+    setActiveFontId('Plus Jakarta Sans');
+
+    // Persist defaults to backend
+    const defaultPayload = {
+      activeThemeId: 'golden',
+      activeFontId: 'Plus Jakarta Sans',
+      cardStyle: 'rounded-2xl',
+      glowIntensity: 'vibrant',
+      allowUserCustomization: true,
+      backgroundBlur: 'none',
+      backgroundOverlayOpacity: 75,
+      assets: {
+        logoUrl: '',
+        faviconUrl: '',
+        bgPatternUrl: '',
+        bannerUrl: ''
+      }
+    };
+
+    setLoading(true);
+    const res = await apiRequest('/admin/theme-settings', {
+      method: 'PUT',
+      body: JSON.stringify(defaultPayload)
+    });
+    if (res.success) {
+      applySystemThemeSettings(defaultPayload as any);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    }
+    setLoading(false);
   };
 
   return (
@@ -414,7 +457,11 @@ export const AdminAppearance: React.FC = () => {
                 <input
                   type="text"
                   value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLogoUrl(val);
+                    setThemeAssets({ logoUrl: val.trim() });
+                  }}
                   placeholder="https://example.com/logo.png"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
                 />
@@ -425,7 +472,11 @@ export const AdminAppearance: React.FC = () => {
                 <input
                   type="text"
                   value={faviconUrl}
-                  onChange={(e) => setFaviconUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFaviconUrl(val);
+                    setThemeAssets({ faviconUrl: val.trim() });
+                  }}
                   placeholder="https://example.com/favicon.ico"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
                 />
@@ -438,7 +489,11 @@ export const AdminAppearance: React.FC = () => {
                 <input
                   type="text"
                   value={bgPatternUrl}
-                  onChange={(e) => setBgPatternUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBgPatternUrl(val);
+                    setThemeAssets({ bgPatternUrl: val.trim() });
+                  }}
                   placeholder="https://i.imgur.com/... or https://...gif"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
                 />
@@ -473,7 +528,11 @@ export const AdminAppearance: React.FC = () => {
                 <label className="block text-zinc-300 font-medium mb-1.5">Background Blur Intensity</label>
                 <select
                   value={backgroundBlur}
-                  onChange={(e) => setBackgroundBlur(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBackgroundBlur(val);
+                    setBackgroundBlurContext(val);
+                  }}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
                 >
                   <option value="none">None (0px)</option>
@@ -497,7 +556,11 @@ export const AdminAppearance: React.FC = () => {
                   max="95"
                   step="5"
                   value={backgroundOverlayOpacity}
-                  onChange={(e) => setBackgroundOverlayOpacity(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setBackgroundOverlayOpacity(val);
+                    setBackgroundOverlayOpacityContext(val);
+                  }}
                   className="w-full accent-amber-500 cursor-pointer"
                 />
                 <p className="text-[10px] text-zinc-500 mt-1">

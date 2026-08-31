@@ -1,12 +1,15 @@
 import React from 'react';
 import { Github, Twitter, Disc as Discord, Shield, Heart } from 'lucide-react';
 import { AetherLogo } from './AetherLogo';
+import { useBranding } from '../lib/BrandingContext';
 
 interface FooterProps {
   onNavigate: (page: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const { socialLinks } = useBranding();
+
   return (
     <footer className="border-t border-zinc-800/80 bg-zinc-950 text-zinc-400">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -19,15 +22,42 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.
             </p>
             <div className="flex items-center gap-3 text-zinc-400">
-              <a href="https://discord.gg" target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors">
-                <Discord className="h-4 w-4" />
-              </a>
-              <a href="https://twitter.com" target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors">
-                <Twitter className="h-4 w-4" />
-              </a>
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors">
-                <Github className="h-4 w-4" />
-              </a>
+              {socialLinks.discord && (
+                <a
+                  id="footer_social_discord"
+                  href={socialLinks.discord}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors"
+                  aria-label="Discord"
+                >
+                  <Discord className="h-4 w-4" />
+                </a>
+              )}
+              {socialLinks.twitter && (
+                <a
+                  id="footer_social_twitter"
+                  href={socialLinks.twitter}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors"
+                  aria-label="X / Twitter"
+                >
+                  <Twitter className="h-4 w-4" />
+                </a>
+              )}
+              {socialLinks.github && (
+                <a
+                  id="footer_social_github"
+                  href={socialLinks.github}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="p-2 rounded-lg bg-zinc-900 hover:text-white hover:bg-zinc-800 transition-colors"
+                  aria-label="GitHub"
+                >
+                  <Github className="h-4 w-4" />
+                </a>
+              )}
             </div>
           </div>
 

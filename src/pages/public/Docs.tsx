@@ -4,11 +4,14 @@ import {
   ChevronRight, Layers, Database, Lock, Globe, 
   Zap, Server, HardDrive, Share2, AlertCircle
 } from 'lucide-react';
+import { useBranding } from '../../lib/BrandingContext';
 
 type DocSection = 'getting-started' | 'minecraft' | 'bot' | 'sftp' | 'security' | 'databases' | 'subusers' | 'api' | 'domains';
 
 export const Docs: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DocSection>('getting-started');
+  const { socialLinks, discordUrl } = useBranding();
+  const currentDiscord = socialLinks?.discord || discordUrl || 'https://discord.gg';
 
   const categories = [
     { id: 'getting-started', name: 'Getting Started', icon: Zap },
@@ -67,7 +70,7 @@ export const Docs: React.FC = () => {
                   Our community discord is active 24/7 for technical support.
                 </p>
                 <button 
-                  onClick={() => window.open('https://discord.gg', '_blank')}
+                  onClick={() => window.open(currentDiscord, '_blank')}
                   className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   Join Discord

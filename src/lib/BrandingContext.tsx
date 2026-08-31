@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiRequest } from './api';
+import { SocialLinks } from '../types';
 
 interface BrandingContextType {
   brandName: string;
   brandTagline: string;
   supportEmail: string;
   discordUrl: string;
+  socialLinks: SocialLinks;
   maintenanceMode: boolean;
   maintenanceMessage: string;
   enablePlayit: boolean;
@@ -14,6 +16,7 @@ interface BrandingContextType {
   updateBrandNameLocally: (newName: string) => void;
   setEnablePlayitLocally: (enabled: boolean) => void;
   setPageAnimationsEnabledLocally: (enabled: boolean) => void;
+  setSocialLinksLocally: (links: SocialLinks) => void;
 }
 
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
@@ -24,7 +27,20 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [brandTagline, setBrandTagline] = useState<string>('Premium Minecraft & Discord Bot Hosting');
   const [supportEmail, setSupportEmail] = useState<string>('support@aetherpanel.com');
-  const [discordUrl, setDiscordUrl] = useState<string>('https://discord.gg');
+  const [discordUrl, setDiscordUrl] = useState<string>('https://discord.gg/aetherpanel');
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => {
+    const saved = localStorage.getItem('aether_social_links');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      discord: 'https://discord.gg/aetherpanel',
+      twitter: 'https://twitter.com/aetherpanel',
+      github: 'https://github.com/aetherpanel'
+    };
+  });
   const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string>('AetherPanel is currently performing scheduled system upgrades.');
   const [enablePlayit, setEnablePlayit] = useState<boolean>(() => {
@@ -47,6 +63,13 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (res.data.brandTagline) setBrandTagline(res.data.brandTagline);
         if (res.data.supportEmail) setSupportEmail(res.data.supportEmail);
         if (res.data.discordUrl) setDiscordUrl(res.data.discordUrl);
+        if (res.data.socialLinks) {
+          setSocialLinks(res.data.socialLinks);
+          localStorage.setItem('aether_social_links', JSON.stringify(res.data.socialLinks));
+          if (res.data.socialLinks.discord) {
+            setDiscordUrl(res.data.socialLinks.discord);
+          }
+        }
         if (res.data.maintenanceMode !== undefined) setMaintenanceMode(res.data.maintenanceMode);
         if (res.data.maintenanceMessage) setMaintenanceMessage(res.data.maintenanceMessage);
         if (res.data.enablePlayit !== undefined) {
@@ -93,6 +116,14 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('aether_page_animations_enabled', String(enabled));
   };
 
+  const setSocialLinksLocally = (links: SocialLinks) => {
+    setSocialLinks(links);
+    localStorage.setItem('aether_social_links', JSON.stringify(links));
+    if (links.discord) {
+      setDiscordUrl(links.discord);
+    }
+  };
+
   return (
     <BrandingContext.Provider
       value={{
@@ -100,6 +131,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         brandTagline,
         supportEmail,
         discordUrl,
+        socialLinks,
         maintenanceMode,
         maintenanceMessage,
         enablePlayit,
@@ -107,7 +139,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         refreshBranding: fetchBranding,
         updateBrandNameLocally,
         setEnablePlayitLocally,
-        setPageAnimationsEnabledLocally
+        setPageAnimationsEnabledLocally,
+        setSocialLinksLocally
       }}
     >
       {children}

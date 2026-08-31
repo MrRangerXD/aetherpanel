@@ -4,14 +4,66 @@ import {
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
   AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy,
-  Database, Plus, Trash2, Edit3, X
+  Database, Plus, Trash2, Edit3, X, Disc as DiscordIcon, Twitter, Github, Share2
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
-import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings, DatabaseHost } from '../../types';
+import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings, DatabaseHost, SocialLinks, NetworkProtectionStatus } from '../../types';
 
 export const AdminSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp' | 'databases'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp' | 'databases' | 'network_protection'>('general');
+
+  // Network Protection States
+  const [netProtectStatus, setNetProtectStatus] = useState<NetworkProtectionStatus | null>(null);
+  const [loadingNetProtect, setLoadingNetProtect] = useState(false);
+  const [reconcilingRules, setReconcilingRules] = useState(false);
+  const [detectingCapabilities, setDetectingCapabilities] = useState(false);
+  const [netProtectMsg, setNetProtectMsg] = useState<string | null>(null);
+
+  const fetchNetworkProtectionStatus = async () => {
+    setLoadingNetProtect(true);
+    try {
+      const res = await apiRequest('/admin/network-protection/status');
+      if (res.success && res.data) {
+        setNetProtectStatus(res.data);
+      }
+    } catch {}
+    setLoadingNetProtect(false);
+  };
+
+  const handleRunDetectCapabilities = async () => {
+    setDetectingCapabilities(true);
+    setNetProtectMsg(null);
+    try {
+      const res = await apiRequest('/admin/network-protection/detect', { method: 'POST' });
+      if (res.success && res.data) {
+        setNetProtectStatus(res.data);
+        setNetProtectMsg(res.message || 'Capability detection completed successfully.');
+      } else {
+        setNetProtectMsg(res.error?.message || 'Failed to detect capabilities.');
+      }
+    } catch (err: any) {
+      setNetProtectMsg(err.message || 'Error running capability detection.');
+    }
+    setDetectingCapabilities(false);
+  };
+
+  const handleReconcileRules = async () => {
+    setReconcilingRules(true);
+    setNetProtectMsg(null);
+    try {
+      const res = await apiRequest('/admin/network-protection/reconcile', { method: 'POST' });
+      if (res.success && res.data) {
+        setNetProtectStatus(res.data);
+        setNetProtectMsg(res.message || 'Server firewall rules reconciled successfully.');
+      } else {
+        setNetProtectMsg(res.error?.message || 'Failed to reconcile rules.');
+      }
+    } catch (err: any) {
+      setNetProtectMsg(err.message || 'Error reconciling server rules.');
+    }
+    setReconcilingRules(false);
+  };
 
   // General Settings
   const [brandName, setBrandName] = useState('AetherPanel');
@@ -23,6 +75,16 @@ export const AdminSettings: React.FC = () => {
   const [enablePlayit, setEnablePlayit] = useState(true);
   const [togglingGlobalPlayit, setTogglingGlobalPlayit] = useState(false);
   const [pageAnimationsEnabled, setPageAnimationsEnabled] = useState(true);
+
+  // Social Links Settings
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>({
+    discord: 'https://discord.gg/aetherpanel',
+    twitter: 'https://twitter.com/aetherpanel',
+    github: 'https://github.com/aetherpanel'
+  });
+  const [savingSocialLinks, setSavingSocialLinks] = useState(false);
+  const [socialLinksSuccess, setSocialLinksSuccess] = useState<string | null>(null);
+  const [socialLinksError, setSocialLinksError] = useState<string | null>(null);
 
   // Auth Provider Settings
   const [authProviders, setAuthProviders] = useState<AuthProviderSettings>({
@@ -163,6 +225,13 @@ export const AdminSettings: React.FC = () => {
       setMaintenanceMode(res.data.maintenanceMode ?? false);
       setEnablePlayit(res.data.enablePlayit ?? true);
       setPageAnimationsEnabled(res.data.pageAnimationsEnabled ?? true);
+      if (res.data.socialLinks) {
+        setSocialLinks({
+          discord: res.data.socialLinks.discord ?? '',
+          twitter: res.data.socialLinks.twitter ?? '',
+          github: res.data.socialLinks.github ?? ''
+        });
+      }
       if (res.data.paymentGateways) {
         setGateways(res.data.paymentGateways);
       }
@@ -380,7 +449,34 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
-  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally } = useBranding();
+  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally, setSocialLinksLocally } = useBranding();
+
+  const handleSaveSocialLinks = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavingSocialLinks(true);
+    setSocialLinksSuccess(null);
+    setSocialLinksError(null);
+
+    try {
+      const res = await apiRequest('/admin/settings/social-links', {
+        method: 'PUT',
+        body: JSON.stringify(socialLinks)
+      });
+
+      if (res.success) {
+        setSocialLinksSuccess(res.message || 'Social links updated successfully.');
+        setSocialLinksLocally(socialLinks);
+        await refreshBranding();
+        setTimeout(() => setSocialLinksSuccess(null), 4000);
+      } else {
+        setSocialLinksError(res.error?.message || 'Failed to update social links.');
+      }
+    } catch (err: any) {
+      setSocialLinksError(err?.message || 'An error occurred while saving social links.');
+    } finally {
+      setSavingSocialLinks(false);
+    }
+  };
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -394,13 +490,15 @@ export const AdminSettings: React.FC = () => {
         registrationEnabled,
         maintenanceMode,
         enablePlayit,
-        pageAnimationsEnabled
+        pageAnimationsEnabled,
+        socialLinks
       })
     });
     if (res.success) {
       updateBrandNameLocally(brandName);
       setEnablePlayitLocally(enablePlayit);
       setPageAnimationsEnabledLocally(pageAnimationsEnabled);
+      setSocialLinksLocally(socialLinks);
       await refreshBranding();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -540,6 +638,12 @@ export const AdminSettings: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'network_sftp' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
             <Globe className="h-3.5 w-3.5" /> Network & SFTP
+          </button>
+          <button
+            onClick={() => { setActiveTab('network_protection'); fetchNetworkProtectionStatus(); }}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'network_protection' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-amber-400" /> Network Protection
           </button>
           <button
             onClick={() => { setActiveTab('databases'); fetchDatabaseHosts(); }}
@@ -711,6 +815,89 @@ export const AdminSettings: React.FC = () => {
                 />
                 <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
+            </div>
+          </div>
+
+          {/* SOCIAL LINKS */}
+          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Share2 className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Social Links</h3>
+                  <p className="text-[11px] text-zinc-400">Configure global Discord, X / Twitter, and GitHub profile links across the panel.</p>
+                </div>
+              </div>
+            </div>
+
+            {socialLinksSuccess && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0" /> {socialLinksSuccess}
+              </div>
+            )}
+
+            {socialLinksError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-semibold text-rose-400 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" /> {socialLinksError}
+              </div>
+            )}
+
+            <div className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                  <DiscordIcon className="w-3.5 h-3.5 text-amber-400" /> Discord URL
+                </label>
+                <input
+                  type="url"
+                  value={socialLinks.discord}
+                  onChange={(e) => setSocialLinks(prev => ({ ...prev, discord: e.target.value }))}
+                  placeholder="https://discord.gg/example"
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                  <Twitter className="w-3.5 h-3.5 text-amber-400" /> X / Twitter URL
+                </label>
+                <input
+                  type="url"
+                  value={socialLinks.twitter}
+                  onChange={(e) => setSocialLinks(prev => ({ ...prev, twitter: e.target.value }))}
+                  placeholder="https://x.com/example"
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                  <Github className="w-3.5 h-3.5 text-amber-400" /> GitHub URL
+                </label>
+                <input
+                  type="url"
+                  value={socialLinks.github}
+                  onChange={(e) => setSocialLinks(prev => ({ ...prev, github: e.target.value }))}
+                  placeholder="https://github.com/example"
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <p className="text-[11px] text-zinc-500">
+                Leaving a link empty will automatically hide that icon in the public footer and navigation.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleSaveSocialLinks()}
+                disabled={savingSocialLinks}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors shrink-0"
+              >
+                {savingSocialLinks ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Save Social Links
+              </button>
             </div>
           </div>
 
@@ -1598,6 +1785,336 @@ export const AdminSettings: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* TAB: Network Protection */}
+      {activeTab === 'network_protection' && (
+        <div className="space-y-6">
+          {loadingNetProtect ? (
+            <div className="flex flex-col items-center justify-center p-12 bg-zinc-900 border border-zinc-800 rounded-3xl space-y-3">
+              <Loader2 className="h-8 w-8 text-amber-500 animate-spin" />
+              <p className="text-xs text-zinc-400">Probing host firewall capabilities and reconciling server port rules...</p>
+            </div>
+          ) : (
+            <>
+              {/* Header & Main Controls */}
+              <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-zinc-800 pb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-amber-400" /> Host Network Protection & Dynamic Firewall
+                    </h2>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Non-destructive iptables/nftables/ufw firewall management, SYN flood mitigation, rate limiting, and dynamic server port allocation.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={loadingNetProtect}
+                      onClick={fetchNetworkProtectionStatus}
+                      className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${loadingNetProtect ? 'animate-spin text-amber-400' : ''}`} />
+                      <span>Refresh Status</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={detectingCapabilities}
+                      onClick={handleRunDetectCapabilities}
+                      className="px-3.5 py-2 rounded-xl bg-cyan-950/80 hover:bg-cyan-900/80 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    >
+                      <Sparkles className={`h-3.5 w-3.5 ${detectingCapabilities ? 'animate-spin' : ''}`} />
+                      <span>{detectingCapabilities ? 'Probing...' : 'Re-run Detection'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={reconcilingRules}
+                      onClick={handleReconcileRules}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/10 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${reconcilingRules ? 'animate-spin' : ''}`} />
+                      <span>{reconcilingRules ? 'Reconciling...' : 'Reconcile Rules'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Optional Action Result Notification */}
+                {netProtectMsg && (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                      <span>{netProtectMsg}</span>
+                    </div>
+                    <button onClick={() => setNetProtectMsg(null)} className="text-zinc-400 hover:text-white">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 4 Primary Status Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: Host Firewall */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Host Firewall</div>
+                    <div className="text-base font-bold flex items-center gap-2">
+                      {netProtectStatus?.hostFirewall === 'active' ? (
+                        <>
+                          <span className="text-emerald-400 uppercase tracking-wide">Active</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ONLINE</span>
+                        </>
+                      ) : netProtectStatus?.hostFirewall === 'restricted' ? (
+                        <>
+                          <span className="text-cyan-400 uppercase tracking-wide">Restricted</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">SHIELD MODE</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-rose-400 uppercase tracking-wide">Unavailable</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">INACTIVE</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 font-mono">
+                      Backend: <span className="text-amber-400">{netProtectStatus?.firewallBackend || 'Unknown'}</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Connection Protection */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Connection Shield</div>
+                    <div className="text-base font-bold flex items-center gap-2">
+                      {netProtectStatus?.connectionProtection === 'active' ? (
+                        <span className="text-emerald-400 flex items-center gap-1.5 text-xs font-bold">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" /> FULL HARDENING
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 flex items-center gap-1.5 text-xs font-bold">
+                          <AlertTriangle className="h-4 w-4 text-amber-400" /> APP LEVEL PROTECTION
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-zinc-400">
+                      SYN flood limits & packet filters active
+                    </div>
+                  </div>
+
+                  {/* Card 3: Panel API Protection */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Panel API Protection</div>
+                    <div className="text-base font-bold flex items-center gap-2">
+                      <span className="text-emerald-400 flex items-center gap-1.5 text-xs font-bold">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" /> RATE-LIMITED
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-zinc-400">
+                      240 req/min general, auth brute-force shield
+                    </div>
+                  </div>
+
+                  {/* Card 4: Managed Server Ports */}
+                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Managed Server Ports</div>
+                    <div className="text-base font-bold text-amber-400 font-mono">
+                      {netProtectStatus?.managedPortCount || 0} Ports Authorized
+                    </div>
+                    <div className="text-[11px] text-zinc-400">
+                      Automatic rule sync for created servers
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown Panels */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Panel 1: Dynamic Preserved Ports */}
+                <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+                    <Key className="h-4 w-4 text-amber-400" /> Preserved System Ports
+                  </h3>
+
+                  <div className="space-y-3 text-xs">
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-white">Active SSH Port</div>
+                        <div className="text-[10px] text-zinc-400">Auto-detected from sshd config</div>
+                      </div>
+                      <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                        :{netProtectStatus?.sshPort || 22}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-white">AetherPanel Web UI</div>
+                        <div className="text-[10px] text-zinc-400">Frontend & REST API</div>
+                      </div>
+                      <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                        :{netProtectStatus?.panelPort || 3000}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-white">SFTP Server Daemon</div>
+                        <div className="text-[10px] text-zinc-400">High-speed file transfer</div>
+                      </div>
+                      <span className="font-mono text-cyan-400 font-bold bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">
+                        :{netProtectStatus?.sftpPort || 2022}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-white">AetherNode Daemon</div>
+                        <div className="text-[10px] text-zinc-400">Node communication endpoint</div>
+                      </div>
+                      <span className="font-mono text-zinc-300 font-bold bg-zinc-800 px-2.5 py-1 rounded-lg">
+                        :{netProtectStatus?.daemonPort || 8080}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Panel 2: Host Environment */}
+                <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+                    <Cpu className="h-4 w-4 text-amber-400" /> Host Environment & Privileges
+                  </h3>
+
+                  <div className="space-y-3 text-xs">
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                      <div className="text-[10px] uppercase text-zinc-500 font-mono">Environment Virtualization</div>
+                      <div className="font-semibold text-white">{netProtectStatus?.environment?.containerType || 'VPS / Linux Host'}</div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                      <div className="text-[10px] uppercase text-zinc-500 font-mono">Privilege Level</div>
+                      <div className="font-semibold text-emerald-400">
+                        {netProtectStatus?.environment?.isRoot ? 'Privileged (Root UID 0)' : 'Unprivileged Container'}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                      <div className="text-[10px] uppercase text-zinc-500 font-mono">Kernel Netfilter Control</div>
+                      <div className="font-semibold text-zinc-300">
+                        {netProtectStatus?.environment?.isWritable ? 'Direct Netfilter Table Injection' : 'Application-Level Shield Active'}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+                      <div className="text-[10px] uppercase text-zinc-500 font-mono">Last Rule Reconciliation</div>
+                      <div className="font-mono text-[11px] text-zinc-400">
+                        {netProtectStatus?.lastReconciled ? new Date(netProtectStatus.lastReconciled).toLocaleString() : 'Just now'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Panel 3: Active Protections */}
+                <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+                    <Lock className="h-4 w-4 text-amber-400" /> Security Rules & Pass-Through
+                  </h3>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                      <span className="text-zinc-300 font-medium">SYN Flood Mitigation</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${netProtectStatus?.activeProtections?.synFloodMitigation ? 'bg-emerald-500/10 text-emerald-400' : 'bg-cyan-500/10 text-cyan-400'}`}>
+                        {netProtectStatus?.activeProtections?.synFloodMitigation ? 'KERNEL LEVEL' : 'APP LEVEL'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                      <span className="text-zinc-300 font-medium">Invalid Packet Drop</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                        ACTIVE
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                      <span className="text-zinc-300 font-medium">Bot Outbound Pass-Through</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                        DISCORD / DNS / HTTPS
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                      <span className="text-zinc-300 font-medium">Auth Brute-Force Protection</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                        30 ATTEMPTS / 5M
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                      <span className="text-zinc-300 font-medium">Isolated Rule Chains</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        NON-DESTRUCTIVE
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Managed Server Port Registry */}
+              <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-amber-400" /> Active Server Port Firewall Registry
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Dynamically authorized inbound TCP/UDP ports allocated for Minecraft servers and Discord bots.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono px-3 py-1 rounded-xl bg-zinc-950 text-amber-400 border border-zinc-800 font-bold">
+                    {netProtectStatus?.managedPorts?.length || 0} Total Allocated
+                  </span>
+                </div>
+
+                {!netProtectStatus?.managedPorts || netProtectStatus.managedPorts.length === 0 ? (
+                  <div className="p-8 text-center rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <Globe className="h-8 w-8 text-zinc-600 mx-auto" />
+                    <div className="text-xs text-zinc-400">No custom game server port rules active yet.</div>
+                    <p className="text-[11px] text-zinc-500">Creating a Minecraft or application server automatically authorizes its port across the firewall backend.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase text-[10px]">
+                          <th className="py-2.5 px-3">Port</th>
+                          <th className="py-2.5 px-3">Protocol</th>
+                          <th className="py-2.5 px-3">Associated Server</th>
+                          <th className="py-2.5 px-3">Server ID</th>
+                          <th className="py-2.5 px-3 text-right">Rule Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {netProtectStatus.managedPorts.map((mp, i) => (
+                          <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="py-3 px-3 font-mono font-bold text-amber-400">:{mp.port}</td>
+                            <td className="py-3 px-3 font-mono uppercase text-zinc-300">{mp.protocol}</td>
+                            <td className="py-3 px-3 text-white font-medium">{mp.serverName || 'System Server'}</td>
+                            <td className="py-3 px-3 font-mono text-zinc-500 text-[11px]">{mp.serverId || 'N/A'}</td>
+                            <td className="py-3 px-3 text-right">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <CheckCircle2 className="h-3 w-3" /> ALLOWED
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </>
           )}

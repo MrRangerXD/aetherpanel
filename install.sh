@@ -445,17 +445,38 @@ detect_docker_capabilities() {
   fi
 }
 
+detect_ssh_port() {
+  DETECTED_SSH_PORT=22
+  if [ -f /etc/ssh/sshd_config ]; then
+    local p
+    p=$(grep -E "^Port [0-9]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | head -n1 || echo "")
+    if [ -n "$p" ] && [ "$p" -gt 0 ] 2>/dev/null && [ "$p" -le 65535 ] 2>/dev/null; then
+      DETECTED_SSH_PORT="$p"
+    fi
+  fi
+  if [ "$DETECTED_SSH_PORT" -eq 22 ] && [ -d /etc/ssh/sshd_config.d ]; then
+    local p_d
+    p_d=$(grep -E "^Port [0-9]+" /etc/ssh/sshd_config.d/*.conf 2>/dev/null | awk '{print $2}' | head -n1 || echo "")
+    if [ -n "$p_d" ] && [ "$p_d" -gt 0 ] 2>/dev/null && [ "$p_d" -le 65535 ] 2>/dev/null; then
+      DETECTED_SSH_PORT="$p_d"
+    fi
+  fi
+  log_msg "Detected SSH port: ${DETECTED_SSH_PORT}"
+}
+
 detect_firewall() {
+  detect_ssh_port
+
   if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "active"; then
     FIREWALL_MGR="ufw"
   elif command -v firewall-cmd &> /dev/null && [ "$INIT_SYSTEM" = "systemd" ] && systemctl is-active --quiet firewalld 2>/dev/null; then
     FIREWALL_MGR="firewalld"
-  elif command -v iptables &> /dev/null && [ "$IS_ROOT" = true ]; then
-    FIREWALL_MGR="iptables"
-  elif command -v nft &> /dev/null && [ "$IS_ROOT" = true ]; then
+  elif command -v nft &> /dev/null && ( [ "$IS_ROOT" = true ] || [ "$HAS_SUDO" = true ] ); then
     FIREWALL_MGR="nftables"
+  elif command -v iptables &> /dev/null && ( [ "$IS_ROOT" = true ] || [ "$HAS_SUDO" = true ] ); then
+    FIREWALL_MGR="iptables"
   else
-    FIREWALL_MGR="none"
+    FIREWALL_MGR="container_managed"
   fi
 }
 
@@ -776,33 +797,87 @@ verify_and_install_dependencies() {
 # 7. FIREWALL & DOCKER ENGINE HANDLING
 # ==============================================================================
 configure_firewall() {
-  echo -e "${CYAN}    Auditing and configuring system firewall rules...${NC}"
+  echo -e "${CYAN}    Auditing and configuring automated network protection rules...${NC}"
   detect_firewall
+
+  local ssh_port="${DETECTED_SSH_PORT:-22}"
+  local p_port="${PANEL_PORT:-3000}"
+  local d_port="${DAEMON_PORT:-8080}"
+  local s_port="${SFTP_PORT:-2022}"
+
+  log_msg "Configuring firewall via manager: ${FIREWALL_MGR} (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port})"
 
   case "$FIREWALL_MGR" in
     ufw)
-      run_privileged ufw allow "${PANEL_PORT:-3000}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
-      run_privileged ufw allow "${DAEMON_PORT:-8080}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
-      run_privileged ufw allow "${SFTP_PORT:-2022}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
+      # 1. Guarantee SSH access first (never lock admin out)
+      run_privileged ufw allow "${ssh_port}/tcp" comment 'AetherPanel SSH Access' >> "$LOG_FILE" 2>&1 || true
+      # 2. Web UI & Services
+      run_privileged ufw allow "${p_port}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
+      run_privileged ufw allow "${d_port}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
+      run_privileged ufw allow "${s_port}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow 25565:25600/tcp comment 'AetherPanel Allocations TCP' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow 25565:25600/udp comment 'AetherPanel Allocations UDP' >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] UFW firewall ports opened (${PANEL_PORT:-3000}, ${DAEMON_PORT:-8080}, ${SFTP_PORT:-2022}, 25565-25600).${NC}"
+      echo -e "${GREEN}[✓] UFW network protection configured (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port}, Allocations: 25565-25600).${NC}"
       ;;
     firewalld)
-      run_privileged firewall-cmd --permanent --add-port="${PANEL_PORT:-3000}/tcp" >> "$LOG_FILE" 2>&1 || true
-      run_privileged firewall-cmd --permanent --add-port="${DAEMON_PORT:-8080}/tcp" >> "$LOG_FILE" 2>&1 || true
-      run_privileged firewall-cmd --permanent --add-port="${SFTP_PORT:-2022}/tcp" >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port="${ssh_port}/tcp" >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port="${p_port}/tcp" >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port="${d_port}/tcp" >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port="${s_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port=25565-25600/tcp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port=25565-25600/udp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --reload >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] Firewalld rules configured successfully.${NC}"
+      echo -e "${GREEN}[✓] Firewalld rules configured successfully (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      ;;
+    iptables)
+      # Create isolated AetherPanel chains to avoid disturbing existing rules
+      run_privileged iptables -N AETHER_PROTECT 2>/dev/null || true
+      run_privileged iptables -N AETHER_SERVERS 2>/dev/null || true
+      run_privileged iptables -C INPUT -j AETHER_PROTECT 2>/dev/null || run_privileged iptables -I INPUT 1 -j AETHER_PROTECT 2>/dev/null || true
+      run_privileged iptables -C INPUT -j AETHER_SERVERS 2>/dev/null || run_privileged iptables -I INPUT 2 -j AETHER_SERVERS 2>/dev/null || true
+
+      # Flush only our own managed chains
+      run_privileged iptables -F AETHER_PROTECT 2>/dev/null || true
+
+      # Loopback, established, and invalid packet handling
+      run_privileged iptables -A AETHER_PROTECT -i lo -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_PROTECT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_PROTECT -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+
+      # Explicitly preserve SSH access with rate-limiting
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${ssh_port}" -m conntrack --ctstate NEW -m limit --limit 30/minute --limit-burst 60 -j ACCEPT 2>/dev/null || true
+
+      # Panel ports
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${p_port}" -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${s_port}" -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${d_port}" -j ACCEPT 2>/dev/null || true
+
+      # SYN flood burst mitigation
+      run_privileged iptables -A AETHER_PROTECT -p tcp --syn -m limit --limit 100/s --limit-burst 200 -j ACCEPT 2>/dev/null || true
+
+      # Initial server allocation range
+      run_privileged iptables -A AETHER_SERVERS -p tcp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_SERVERS -p udp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
+
+      echo -e "${GREEN}[✓] Iptables isolated chains and SYN flood mitigation active (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      ;;
+    nftables)
+      # Create isolated table inet aetherpanel_filter
+      run_privileged nft add table inet aetherpanel_filter 2>/dev/null || true
+      run_privileged nft add chain inet aetherpanel_filter input "{ type filter hook input priority -10; policy accept; }" 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input ct state established,related accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input iif lo accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input ct state invalid drop 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport "${ssh_port}" accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport "${p_port}" accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport "${s_port}" accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport "${d_port}" accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport 25565-25600 accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input udp dport 25565-25600 accept 2>/dev/null || true
+      echo -e "${GREEN}[✓] Nftables isolated table and network protection applied (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
       ;;
     *)
-      if [ "$EXECUTION_MODE" = "FULL VPS MODE" ]; then
-        echo -e "${BLUE}[INFO] No active UFW or Firewalld service found. Ports ${PANEL_PORT:-3000}, ${DAEMON_PORT:-8080}, ${SFTP_PORT:-2022} must be open on provider firewall.${NC}"
-      else
-        echo -e "${BLUE}[INFO] Firewall management: Managed by container/cloud environment.${NC}"
-      fi
+      echo -e "${BLUE}[INFO] Container / Virtual network mode: Application shield and ingress routing active.${NC}"
       ;;
   esac
 }

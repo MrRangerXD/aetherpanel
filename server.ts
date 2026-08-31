@@ -32,6 +32,8 @@ import { startSftpDaemon } from './server/sftpServer';
 import { reconcileServerStatesOnBoot } from './server/provider';
 import { initializePlayitOnBoot } from './server/playitService';
 import { initializeRuntime } from './server/init';
+import { initializeNetworkProtectionOnBoot } from './server/services/networkProtectionService';
+import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
 
 dotenv.config();
 
@@ -47,9 +49,13 @@ async function startServer() {
     app.set('trust proxy', true);
   }
 
-  // Basic Body Parsers
+  // Basic Body Parsers with error interception
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(safePayloadErrorHandler);
+
+  // General API Request Protection
+  app.use('/api', generalApiRateLimiter);
 
   // Helper Cookie Parser
   app.use((req, res, next) => {
@@ -111,7 +117,17 @@ async function startServer() {
     res.json({ success: true, data: settings });
   });
 
-  app.use('/api/v1/auth', authRoutes);
+  app.get('/api/v1/settings/social-links', async (req, res) => {
+    const db = await getDb();
+    const socialLinks = db.settings.socialLinks || {
+      discord: db.settings.discordUrl || 'https://discord.gg/aetherpanel',
+      twitter: 'https://twitter.com/aetherpanel',
+      github: 'https://github.com/aetherpanel'
+    };
+    res.json({ success: true, data: socialLinks });
+  });
+
+  app.use('/api/v1/auth', sensitiveAuthRateLimiter, authRoutes);
   app.use('/api/v1/account', authRoutes);
   app.use('/api/v1/public', publicRoutes);
   app.use('/api/v1/plans', publicRoutes);
@@ -218,6 +234,12 @@ async function startServer() {
       initializePlayitOnBoot();
     } catch (e) {
       console.warn('[AetherPanel] Playit auto-recovery boot notice:', e);
+    }
+
+    try {
+      initializeNetworkProtectionOnBoot();
+    } catch (e) {
+      console.warn('[AetherPanel] Network protection boot notice:', e);
     }
   });
 

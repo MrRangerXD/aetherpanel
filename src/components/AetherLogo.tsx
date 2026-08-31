@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBranding } from '../lib/BrandingContext';
+import { useTheme } from '../lib/ThemeContext';
 
 interface AetherLogoProps {
   variant?: 'full' | 'compact';
@@ -15,6 +16,49 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
   onClick
 }) => {
   const { brandName } = useBranding();
+  const { themeAssets } = useTheme();
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const customLogoUrl = themeAssets?.logoUrl?.trim();
+
+  // Reset image load error state whenever customLogoUrl changes
+  useEffect(() => {
+    setImgFailed(false);
+  }, [customLogoUrl]);
+
+  // If a custom logo URL is provided and loading hasn't failed, display the custom logo image
+  if (customLogoUrl && !imgFailed) {
+    if (variant === 'compact') {
+      return (
+        <div 
+          onClick={onClick} 
+          className={`inline-flex items-center cursor-pointer select-none group shrink-0 ${className}`}
+        >
+          <img
+            src={customLogoUrl}
+            alt={brandName}
+            onError={() => setImgFailed(true)}
+            className="h-8 w-auto object-contain rounded-lg transition-transform group-hover:scale-105"
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        onClick={onClick} 
+        className={`inline-flex items-center gap-2 cursor-pointer select-none group shrink-0 ${className}`}
+      >
+        <img
+          src={customLogoUrl}
+          alt={brandName}
+          onError={() => setImgFailed(true)}
+          className="object-contain rounded-lg transition-transform group-hover:scale-105"
+          style={{ height: typeof height === 'number' ? `${height}px` : height, maxWidth: '200px' }}
+        />
+      </div>
+    );
+  }
 
   // Parse brand name prefix & suffix for styling (e.g., "AetherPanel" -> "Aether" + "Panel")
   let prefix = brandName;

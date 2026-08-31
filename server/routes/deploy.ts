@@ -9,6 +9,7 @@ import { dispatchWebhookEvent } from '../webhookService';
 import { RESERVED_SYSTEM_PORTS, isPortReserved, resolveNodePublicEndpoint, resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getUserAllocationStatus, canUserDeployServer } from '../services/allocationService';
 import { resolveServerResources } from '../services/resourceResolverService';
+import { applyServerPortRule } from '../services/networkProtectionService';
 
 const router = Router();
 
@@ -386,6 +387,11 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
     targetNode.serverCount += 1;
 
     db.servers.push(newServer);
+
+    // Apply network protection and host firewall rule for server allocation
+    if (assignedPort) {
+      applyServerPortRule(assignedPort, 'both', newServer.id, newServer.name).catch(() => {});
+    }
 
     // Create Order Record
     const order: Order = {

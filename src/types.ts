@@ -362,13 +362,24 @@ export interface SftpConnectionInfo {
 
 export type PlayitAgentState = 
   | 'NOT_INSTALLED'
+  | 'NOT_CONFIGURED'
   | 'INSTALLING'
+  | 'INSTALLED'
   | 'STARTING'
+  | 'AWAITING_CLAIM'
   | 'RUNNING_UNCLAIMED'
+  | 'CLAIM_URL_AVAILABLE'
   | 'CLAIMING'
+  | 'CLAIMED'
+  | 'CONNECTING'
   | 'RUNNING_CLAIMED'
+  | 'ONLINE'
+  | 'OFFLINE'
+  | 'STOPPING'
   | 'STOPPED'
   | 'CRASHED'
+  | 'UNAVAILABLE'
+  | 'BLOCKED'
   | 'ERROR';
 
 export interface PlayitStatus {
@@ -376,8 +387,8 @@ export interface PlayitStatus {
   isRunning: boolean;
   isClaimed: boolean;
   status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
-  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
   accountStatus: 'Connected' | 'Unlinked' | 'Pending';
   tunnelManagement: 'Managed externally';
   claimUrl?: string;
@@ -395,8 +406,8 @@ export interface NodePlayitStatus {
   isRunning: boolean;
   isClaimed: boolean;
   status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
-  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIMED';
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
+  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
   accountStatus: 'Connected' | 'Unlinked' | 'Pending';
   tunnelManagement: 'Managed externally';
   claimUrl?: string;
@@ -712,6 +723,47 @@ export interface AntiAbuseSettings {
   loginLockoutDurationSec: number;
 }
 
+export interface SocialLinks {
+  discord: string;
+  twitter: string;
+  github: string;
+}
+
+export interface NetworkProtectionStatus {
+  hostFirewall: 'active' | 'unavailable' | 'error' | 'restricted';
+  connectionProtection: 'active' | 'partial' | 'unavailable';
+  panelProtection: 'active' | 'partial';
+  managedServerPorts: 'active' | 'partial' | 'unavailable';
+  firewallBackend: string;
+  sshPort: number;
+  panelPort: number;
+  sftpPort: number;
+  daemonPort: number;
+  managedPortCount: number;
+  managedPorts: Array<{
+    port: number;
+    protocol: 'tcp' | 'udp' | 'both';
+    serverId?: string;
+    serverName?: string;
+    status: 'active' | 'pending';
+  }>;
+  activeProtections: {
+    synFloodMitigation: boolean;
+    rateLimiting: boolean;
+    invalidPacketDrop: boolean;
+    outboundPassThrough: boolean;
+    requestAbuseShield: boolean;
+  };
+  environment: {
+    isRoot: boolean;
+    containerType: string;
+    isWritable: boolean;
+    platform: string;
+  };
+  lastReconciled: string;
+  message?: string;
+}
+
 export interface SystemSettings {
   platformName?: string;
   brandName: string;
@@ -735,6 +787,7 @@ export interface SystemSettings {
   enablePlayit?: boolean;
   pageAnimationsEnabled?: boolean;
   animationSettings?: AnimationSettings;
+  socialLinks?: SocialLinks;
 }
 
 export interface AnimationSettings {

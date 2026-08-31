@@ -33,6 +33,7 @@ import {
 import { ServerBackup, ServerDatabase, ServerSchedule, ServerActivity } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerSftpInfo } from '../sftpResolver';
+import { removeServerPortRule } from '../services/networkProtectionService';
 import { resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getNodePlayitStatus } from '../playit/playitService';
 import { resolveServerType } from './serverTypes';
@@ -1855,6 +1856,11 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
     targetNode.usedCpuCores = Math.max(0, targetNode.usedCpuCores - (server.limits?.cpuCores || 0));
     targetNode.usedDiskGB = Math.max(0, (targetNode.usedDiskGB || 0) - (server.limits?.diskGB || 0));
     targetNode.serverCount = Math.max(0, targetNode.serverCount - 1);
+  }
+
+  // Clean up host firewall / network protection rule
+  if (server.primaryPort) {
+    removeServerPortRule(server.primaryPort, 'both', server.id).catch(() => {});
   }
 
   // Remove from DB

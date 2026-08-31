@@ -19,6 +19,8 @@ export type PlayitAgentState =
   | 'STOPPING'
   | 'STOPPED'
   | 'CRASHED'
+  | 'UNAVAILABLE'
+  | 'BLOCKED'
   | 'ERROR';
 
 export interface PlayitDiagnosticCheck {
@@ -32,7 +34,7 @@ export interface PlayitStatus {
   isRunning: boolean;
   isClaimed: boolean;
   status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
   claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
   accountStatus: 'Connected' | 'Unlinked' | 'Pending';
   tunnelManagement: 'Managed externally';
@@ -51,7 +53,7 @@ export interface NodePlayitStatus {
   isRunning: boolean;
   isClaimed: boolean;
   status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
   claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
   accountStatus: 'Connected' | 'Unlinked' | 'Pending';
   tunnelManagement: 'Managed externally';
@@ -225,8 +227,10 @@ export function downloadPlayitBinarySync(): { success: boolean; error?: string }
       downloadUrl = 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-aarch64';
     } else if (arch === 'x64' || arch === 'amd64') {
       downloadUrl = 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64';
+    } else if (arch === 'arm') {
+      downloadUrl = 'https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-armv7';
     } else {
-      return { success: false, error: `Unsupported architecture: ${arch}` };
+      return { success: false, error: `Unsupported architecture for Playit agent: ${arch}` };
     }
 
     console.log(`[PLAYIT] Downloading official Playit.GG agent binary (${arch}) from ${downloadUrl}...`);
@@ -273,18 +277,28 @@ export function checkPlayitBinary(): { exists: boolean; runnable: boolean; versi
 
   try {
     // Check if the binary actually runs and returns help output
-    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 5000 });
+    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3500 });
     return { exists: true, runnable: true, version: '1.0.10' };
   } catch (err: any) {
-    const errStr = String(err.message || err);
+    const errStr = String(err.stderr || err.stdout || err.message || err);
     
     // Check for common execution errors
-    if (errStr.includes('format error') || errStr.includes('exec format') || err.status === 126 || err.status === 127) {
+    if (errStr.includes('format error') || errStr.includes('exec format') || err.status === 126 || err.status === 127 || errStr.includes('Bad address')) {
+      const isGvisor = os.release().toLowerCase().includes('gvisor');
+      if (isGvisor || errStr.includes('Bad address') || err.status === 126) {
+        return {
+          exists: true,
+          runnable: false,
+          version: '1.0.10',
+          reason: 'Host environment restriction (gVisor container sandbox syscall barrier: Bad address / code 126). Execution requires a full Linux kernel / VPS.'
+        };
+      }
+
       console.warn(`[PLAYIT] Binary execution format mismatch or corruption detected (Arch: ${os.arch()}). Re-downloading...`);
       const result = downloadPlayitBinarySync();
       if (result.success) {
         try {
-          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 5000 });
+          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3500 });
           return { exists: true, runnable: true, version: '1.0.10' };
         } catch (retryErr: any) {
           return { exists: true, runnable: false, version: '1.0.10', reason: `Re-downloaded binary execution check failed: ${retryErr.message}` };
@@ -347,10 +361,11 @@ function resolveTruthfulState(
   isCrashed: boolean,
   hasError: boolean,
   hasClaimUrl: boolean,
-  isClaiming: boolean = false
+  isClaiming: boolean = false,
+  isBlockedOrUnavailable: boolean = false
 ): {
   status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR';
+  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
   claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
   accountStatus: 'Connected' | 'Unlinked' | 'Pending';
 } {
@@ -363,7 +378,16 @@ function resolveTruthfulState(
     };
   }
 
-  if (hasError) {
+  if (isBlockedOrUnavailable && !isRunning) {
+    return {
+      status: 'UNAVAILABLE',
+      agentStatus: 'UNAVAILABLE',
+      claimStatus: isClaimed ? 'CLAIMED' : 'UNCLAIMED',
+      accountStatus: isClaimed ? 'Connected' : 'Unlinked'
+    };
+  }
+
+  if (hasError && !isRunning) {
     return {
       status: 'ERROR',
       agentStatus: 'ERROR',
@@ -546,7 +570,8 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
   const finalClaimUrl = isClaimed ? undefined : (claimUrl || realSavedUrl);
   const finalClaimCode = isClaimed ? undefined : (claimCode || realSavedCode);
 
-  const hasError = !!savedConfig.errorReason || !binCheck.runnable;
+  const isBlocked = !binCheck.runnable;
+  const hasError = !!savedConfig.errorReason;
   const states = resolveTruthfulState(
     true,
     running,
@@ -555,7 +580,8 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
     !!isCrashed,
     hasError,
     !!finalClaimUrl,
-    !!savedConfig.isClaiming
+    !!savedConfig.isClaiming,
+    isBlocked
   );
 
   const finalPid = running ? storedPid : undefined;
@@ -574,7 +600,7 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
     agentVersion: binCheck.version || '1.0.10',
     pid: finalPid,
     logs,
-    errorReason: savedConfig.errorReason,
+    errorReason: savedConfig.errorReason || (!binCheck.runnable ? binCheck.reason : undefined),
     lastCheckedAt: new Date().toISOString()
   };
 }
@@ -642,7 +668,16 @@ export async function installPlayitAgent(serverId: string): Promise<PlayitStatus
 
     const binCheck = checkPlayitBinary();
     if (!binCheck.runnable) {
-      throw new Error(`Incompatible Playit environment: ${binCheck.reason || 'Binary uncallable'}`);
+      const blockedStatus = {
+        isInstalled: true,
+        isRunning: false,
+        crashed: false,
+        errorReason: binCheck.reason || 'Binary uncallable due to host sandbox restriction',
+        agentVersion: '1.0.10',
+        lastCheckedAt: new Date().toISOString()
+      };
+      fs.writeFileSync(configFile, JSON.stringify(blockedStatus, null, 2), 'utf-8');
+      return await getPlayitStatus(serverId);
     }
 
     if (fs.existsSync(logFile)) {
@@ -1134,7 +1169,8 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
 
   const isStarting = active ? (Date.now() - active.lastStarted < 3000) : false;
   const isCrashed = active?.crashed || false;
-  const hasError = !binCheck.runnable;
+  const isBlocked = !binCheck.runnable;
+  const hasError = !binCheck.exists;
 
   const states = resolveTruthfulState(
     !!node.playitAgentInstalled,
@@ -1144,7 +1180,8 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
     isCrashed,
     hasError,
     !!claimUrl,
-    false
+    false,
+    isBlocked
   );
 
   return {
@@ -1162,6 +1199,7 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
     lastCheckedAt: new Date().toISOString(),
     agentVersion: binCheck.version || '1.0.10',
     pid: active && running ? active.pid : undefined,
+    errorReason: !binCheck.runnable ? binCheck.reason : undefined,
     logs: logsArray
   };
 }
