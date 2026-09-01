@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
-import { getDb, saveDbSync } from '../db';
+import { getDb, saveDbSync, getDbSync } from '../db';
 import { appendConsoleLog, emitServerStatus } from '../provider';
 
 export interface SupervisorProcess {
@@ -149,6 +149,41 @@ export class RuntimeSupervisor {
       fs.closeSync(stderrFd);
       throw new Error(`Failed to spawn process for ${serverId}: PID is missing.`);
     }
+
+    // Attach exit handler BEFORE unref to track lifecycle cleanly
+    child.on('exit', (code, signal) => {
+      console.log(`[RuntimeSupervisor] Process PID ${child.pid} for ${serverId} exited with code ${code}, signal ${signal}`);
+      try {
+        const statePath = paths.stateJson;
+        if (fs.existsSync(statePath)) {
+          const stateData: RuntimeState = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+          stateData.status = 'stopped';
+          stateData.pid = undefined;
+          fs.writeFileSync(statePath, JSON.stringify(stateData, null, 2), 'utf-8');
+        }
+      } catch {}
+
+      try {
+        const db = getDbSync();
+        const server = db.servers.find(s => s.id === serverId);
+        if (server && (server.status === 'running' || server.status === 'starting')) {
+          server.status = code === 0 ? 'stopped' : 'error';
+          server.cpuUsage = 0;
+          server.ramUsageMB = 0;
+          if (code !== 0 && code !== null) {
+            if (!server.startup) server.startup = {};
+            server.startup.lastCrashReason = `Process exited with exit code ${code}`;
+            appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Process PID ${child.pid} exited with code ${code}.`);
+          } else if (signal) {
+            appendConsoleLog(serverId, `[AetherDaemon/INFO]: Process PID ${child.pid} terminated by signal ${signal}.`);
+          }
+          saveDbSync();
+          emitServerStatus(serverId, server.status);
+        }
+      } catch {}
+
+      this.stopTailers(serverId);
+    });
 
     // Unreference from parent event loop to decouple lifetime
     child.unref();

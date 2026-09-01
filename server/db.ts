@@ -985,6 +985,12 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
             enablePlayit: true
           };
         }
+        if (!dbCache.settings.heroDescription) {
+          dbCache.settings.heroDescription = 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.';
+        }
+        if (!dbCache.settings.footerDescription) {
+          dbCache.settings.footerDescription = 'Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.';
+        }
         if (dbCache.settings.enablePlayit === undefined) {
           dbCache.settings.enablePlayit = true;
         }

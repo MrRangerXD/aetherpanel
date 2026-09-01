@@ -12,12 +12,18 @@ interface BrandingContextType {
   maintenanceMessage: string;
   enablePlayit: boolean;
   pageAnimationsEnabled: boolean;
+  heroDescription: string;
+  footerDescription: string;
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
   setEnablePlayitLocally: (enabled: boolean) => void;
   setPageAnimationsEnabledLocally: (enabled: boolean) => void;
   setSocialLinksLocally: (links: SocialLinks) => void;
+  setHomepageDescriptionsLocally: (hero: string, footer: string) => void;
 }
+
+const DEFAULT_HERO_DESCRIPTION = 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.';
+const DEFAULT_FOOTER_DESCRIPTION = 'Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.';
 
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
@@ -51,6 +57,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const saved = localStorage.getItem('aether_page_animations_enabled');
     return saved !== null ? saved === 'true' : true;
   });
+  const [heroDescription, setHeroDescription] = useState<string>(DEFAULT_HERO_DESCRIPTION);
+  const [footerDescription, setFooterDescription] = useState<string>(DEFAULT_FOOTER_DESCRIPTION);
 
   const fetchBranding = useCallback(async () => {
     try {
@@ -79,6 +87,16 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (res.data.pageAnimationsEnabled !== undefined) {
           setPageAnimationsEnabled(res.data.pageAnimationsEnabled);
           localStorage.setItem('aether_page_animations_enabled', String(res.data.pageAnimationsEnabled));
+        }
+        if (typeof res.data.heroDescription === 'string' && res.data.heroDescription.trim().length > 0) {
+          setHeroDescription(res.data.heroDescription);
+        } else {
+          setHeroDescription(DEFAULT_HERO_DESCRIPTION);
+        }
+        if (typeof res.data.footerDescription === 'string' && res.data.footerDescription.trim().length > 0) {
+          setFooterDescription(res.data.footerDescription);
+        } else {
+          setFooterDescription(DEFAULT_FOOTER_DESCRIPTION);
         }
       }
     } catch (err) {
@@ -124,6 +142,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const setHomepageDescriptionsLocally = (hero: string, footer: string) => {
+    if (hero) setHeroDescription(hero);
+    if (footer) setFooterDescription(footer);
+  };
+
   return (
     <BrandingContext.Provider
       value={{
@@ -136,11 +159,14 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         maintenanceMessage,
         enablePlayit,
         pageAnimationsEnabled,
+        heroDescription,
+        footerDescription,
         refreshBranding: fetchBranding,
         updateBrandNameLocally,
         setEnablePlayitLocally,
         setPageAnimationsEnabledLocally,
-        setSocialLinksLocally
+        setSocialLinksLocally,
+        setHomepageDescriptionsLocally
       }}
     >
       {children}

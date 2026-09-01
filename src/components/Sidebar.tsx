@@ -25,7 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { accentClasses, accent, setAccent } = useTheme();
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950 flex-col justify-between min-h-[calc(100vh-4rem)]">
+    <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col justify-between min-h-[calc(100vh-4rem)]">
       <div>
         {/* Brand Header / Server Quick Switcher */}
         <div className="p-4 border-b border-zinc-800/80">

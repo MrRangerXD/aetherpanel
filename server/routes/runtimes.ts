@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { verifyRuntimeExecutables } from '../utils/runtimeResolver';
 
 const router = Router();
 
@@ -63,9 +64,48 @@ export function isValidRuntimeVersion(software: string, version: string): boolea
 
 // GET /api/v1/runtimes
 router.get('/', (req: Request, res: Response) => {
+  const verified = verifyRuntimeExecutables();
+  
   res.json({
     success: true,
-    data: RUNTIMES_DATA
+    data: {
+      bun: {
+        ...RUNTIMES_DATA.bun,
+        available: verified.bun.available,
+        installed: verified.bun.available,
+        version: verified.bun.version,
+        executable: verified.bun.executable,
+        reason: verified.bun.reason
+      },
+      node: {
+        ...RUNTIMES_DATA.nodejs,
+        available: verified.node.available,
+        installed: verified.node.available,
+        version: verified.node.version,
+        executable: verified.node.executable,
+        reason: verified.node.reason
+      },
+      npm: {
+        available: verified.npm.available,
+        version: verified.npm.version,
+        executable: verified.npm.executable,
+        reason: verified.npm.reason
+      },
+      python: {
+        ...RUNTIMES_DATA.python,
+        available: verified.python.available,
+        installed: verified.python.available,
+        version: verified.python.version,
+        executable: verified.python.executable,
+        reason: verified.python.reason
+      },
+      pip: {
+        available: verified.pip.available,
+        version: verified.pip.version,
+        executable: verified.pip.executable,
+        reason: verified.pip.reason
+      }
+    }
   });
 });
 

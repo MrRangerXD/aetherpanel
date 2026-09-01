@@ -66,6 +66,9 @@ export const AdminSettings: React.FC = () => {
   };
 
   // General Settings
+  const DEFAULT_HERO_DESCRIPTION = 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.';
+  const DEFAULT_FOOTER_DESCRIPTION = 'Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.';
+
   const [brandName, setBrandName] = useState('AetherPanel');
   const [brandTagline, setBrandTagline] = useState('Premium Minecraft & Discord Bot Hosting');
   const [supportEmail, setSupportEmail] = useState('support@aetherpanel.com');
@@ -75,6 +78,13 @@ export const AdminSettings: React.FC = () => {
   const [enablePlayit, setEnablePlayit] = useState(true);
   const [togglingGlobalPlayit, setTogglingGlobalPlayit] = useState(false);
   const [pageAnimationsEnabled, setPageAnimationsEnabled] = useState(true);
+
+  // Homepage Content Settings
+  const [heroDescription, setHeroDescription] = useState(DEFAULT_HERO_DESCRIPTION);
+  const [footerDescription, setFooterDescription] = useState(DEFAULT_FOOTER_DESCRIPTION);
+  const [savingHomepageContent, setSavingHomepageContent] = useState(false);
+  const [homepageContentSuccess, setHomepageContentSuccess] = useState<string | null>(null);
+  const [homepageContentError, setHomepageContentError] = useState<string | null>(null);
 
   // Social Links Settings
   const [socialLinks, setSocialLinks] = useState<SocialLinks>({
@@ -225,6 +235,12 @@ export const AdminSettings: React.FC = () => {
       setMaintenanceMode(res.data.maintenanceMode ?? false);
       setEnablePlayit(res.data.enablePlayit ?? true);
       setPageAnimationsEnabled(res.data.pageAnimationsEnabled ?? true);
+      if (res.data.heroDescription) {
+        setHeroDescription(res.data.heroDescription);
+      }
+      if (res.data.footerDescription) {
+        setFooterDescription(res.data.footerDescription);
+      }
       if (res.data.socialLinks) {
         setSocialLinks({
           discord: res.data.socialLinks.discord ?? '',
@@ -449,7 +465,73 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
-  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally, setSocialLinksLocally } = useBranding();
+  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally, setSocialLinksLocally, setHomepageDescriptionsLocally } = useBranding();
+
+  const handleSaveHomepageContent = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavingHomepageContent(true);
+    setHomepageContentSuccess(null);
+    setHomepageContentError(null);
+
+    try {
+      const res = await apiRequest('/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          heroDescription,
+          footerDescription
+        })
+      });
+
+      if (res.success) {
+        setHomepageContentSuccess('Homepage & Footer descriptions updated successfully.');
+        setHomepageDescriptionsLocally(heroDescription, footerDescription);
+        await refreshBranding();
+        setTimeout(() => setHomepageContentSuccess(null), 4000);
+      } else {
+        setHomepageContentError(res.error?.message || 'Failed to update descriptions.');
+      }
+    } catch (err: any) {
+      setHomepageContentError(err?.message || 'An error occurred while saving descriptions.');
+    } finally {
+      setSavingHomepageContent(false);
+    }
+  };
+
+  const handleResetHomepageContent = async () => {
+    if (!window.confirm('Are you sure you want to reset the Hero and Footer descriptions to default text?')) return;
+    setSavingHomepageContent(true);
+    setHomepageContentSuccess(null);
+    setHomepageContentError(null);
+
+    const defaultHero = DEFAULT_HERO_DESCRIPTION;
+    const defaultFooter = DEFAULT_FOOTER_DESCRIPTION;
+
+    setHeroDescription(defaultHero);
+    setFooterDescription(defaultFooter);
+
+    try {
+      const res = await apiRequest('/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          heroDescription: defaultHero,
+          footerDescription: defaultFooter
+        })
+      });
+
+      if (res.success) {
+        setHomepageContentSuccess('Homepage & Footer descriptions reset to default successfully.');
+        setHomepageDescriptionsLocally(defaultHero, defaultFooter);
+        await refreshBranding();
+        setTimeout(() => setHomepageContentSuccess(null), 4000);
+      } else {
+        setHomepageContentError(res.error?.message || 'Failed to reset descriptions.');
+      }
+    } catch (err: any) {
+      setHomepageContentError(err?.message || 'An error occurred while resetting descriptions.');
+    } finally {
+      setSavingHomepageContent(false);
+    }
+  };
 
   const handleSaveSocialLinks = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -491,7 +573,9 @@ export const AdminSettings: React.FC = () => {
         maintenanceMode,
         enablePlayit,
         pageAnimationsEnabled,
-        socialLinks
+        socialLinks,
+        heroDescription,
+        footerDescription
       })
     });
     if (res.success) {
@@ -499,6 +583,7 @@ export const AdminSettings: React.FC = () => {
       setEnablePlayitLocally(enablePlayit);
       setPageAnimationsEnabledLocally(pageAnimationsEnabled);
       setSocialLinksLocally(socialLinks);
+      setHomepageDescriptionsLocally(heroDescription, footerDescription);
       await refreshBranding();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -897,6 +982,90 @@ export const AdminSettings: React.FC = () => {
               >
                 {savingSocialLinks ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save Social Links
+              </button>
+            </div>
+          </div>
+
+          {/* HOMEPAGE & FOOTER CONTENT */}
+          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Edit3 className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Homepage & Footer Content</h3>
+                  <p className="text-[11px] text-zinc-400">Configure descriptions displayed on the public homepage hero section and global footer.</p>
+                </div>
+              </div>
+            </div>
+
+            {homepageContentSuccess && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0" /> {homepageContentSuccess}
+              </div>
+            )}
+
+            {homepageContentError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-semibold text-rose-400 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" /> {homepageContentError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center justify-between">
+                  <span>Homepage Hero Description</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Public Hero Section</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={heroDescription}
+                  onChange={(e) => setHeroDescription(e.target.value)}
+                  placeholder="Enter homepage hero description..."
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-sans leading-relaxed resize-y"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Used for the description text displayed below the primary headline on the public homepage.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center justify-between">
+                  <span>Footer Description</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Global Footer Branding</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={footerDescription}
+                  onChange={(e) => setFooterDescription(e.target.value)}
+                  placeholder="Enter footer description..."
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-sans leading-relaxed resize-y"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Used for the description displayed beside or below the platform logo in the global public footer.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={handleResetHomepageContent}
+                disabled={savingHomepageContent}
+                className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors shrink-0"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reset to Default
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveHomepageContent()}
+                disabled={savingHomepageContent}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors shrink-0"
+              >
+                {savingHomepageContent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Save Homepage Content
               </button>
             </div>
           </div>

@@ -200,17 +200,28 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('aether_theme_assets', JSON.stringify(themeAssets));
 
     const favUrl = themeAssets.faviconUrl?.trim();
-    let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-    if (favUrl) {
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.head.appendChild(link);
-      }
-      link.href = favUrl;
-    } else if (link) {
-      link.href = '/favicon.ico';
+    const targetFavicon = favUrl || '/favicon.svg';
+
+    // Query or create favicon link tags globally
+    let faviconLinks = Array.from(
+      document.querySelectorAll<HTMLLinkElement>("link[rel*='icon'], link[rel='apple-touch-icon']")
+    );
+
+    if (faviconLinks.length === 0) {
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+      faviconLinks = [link];
     }
+
+    faviconLinks.forEach((link) => {
+      link.href = targetFavicon;
+      if (favUrl) {
+        link.removeAttribute('type');
+      } else {
+        link.setAttribute('type', 'image/svg+xml');
+      }
+    });
 
     // Dynamic wallpaper, blur, and opacity styling tag
     let styleTag = document.getElementById('aether-custom-bg-styles') as HTMLStyleElement | null;
@@ -220,7 +231,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       document.head.appendChild(styleTag);
     }
 
-    const blurVal = backgroundBlur === 'none' ? '0px' : backgroundBlur;
+    const blurVal = !backgroundBlur || backgroundBlur === 'none' ? '0px' : backgroundBlur;
     const bgUrl = themeAssets.bgPatternUrl?.trim() || '';
     const opacityVal = (backgroundOverlayOpacity ?? 75) / 100;
     const isBlurred = blurVal !== '0px';
@@ -244,7 +255,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         background-repeat: no-repeat;
         filter: blur(${blurVal});
         -webkit-filter: blur(${blurVal});
-        transform: ${isBlurred ? 'scale(1.08)' : 'none'};
+        transform: ${isBlurred ? 'scale(1.08)' : 'scale(1)'};
         pointer-events: none;
         transition: filter 0.3s ease, transform 0.3s ease;
       }
@@ -311,12 +322,29 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const applySystemThemeSettings = (settings: CustomThemeSettings) => {
     // Admins can apply system theme settings globally
-    if (settings.activeThemeId) setActiveThemeIdState(settings.activeThemeId);
-    if (settings.activeFontId) setActiveFontIdState(settings.activeFontId);
-    if (settings.backgroundBlur) setBackgroundBlurState(settings.backgroundBlur);
-    if (settings.backgroundOverlayOpacity !== undefined) setBackgroundOverlayOpacityState(settings.backgroundOverlayOpacity);
-    if (settings.assets) setThemeAssetsState(prev => ({ ...prev, ...settings.assets }));
-    setAllowUserCustomization(settings.allowUserCustomization);
+    if (settings.activeThemeId) {
+      setActiveThemeIdState(settings.activeThemeId);
+      localStorage.setItem('aether_active_theme_id', settings.activeThemeId);
+    }
+    if (settings.activeFontId) {
+      setActiveFontIdState(settings.activeFontId);
+      localStorage.setItem('aether_active_font_id', settings.activeFontId);
+    }
+    if (settings.backgroundBlur) {
+      setBackgroundBlurState(settings.backgroundBlur);
+      localStorage.setItem('aether_background_blur', settings.backgroundBlur);
+    }
+    if (settings.backgroundOverlayOpacity !== undefined) {
+      setBackgroundOverlayOpacityState(settings.backgroundOverlayOpacity);
+      localStorage.setItem('aether_background_overlay_opacity', String(settings.backgroundOverlayOpacity));
+    }
+    if (settings.assets) {
+      setThemeAssetsState(settings.assets);
+      localStorage.setItem('aether_theme_assets', JSON.stringify(settings.assets));
+    }
+    if (settings.allowUserCustomization !== undefined) {
+      setAllowUserCustomization(settings.allowUserCustomization);
+    }
   };
 
   const getAccentClasses = (): ThemeContextType['accentClasses'] => {

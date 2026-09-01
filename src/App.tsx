@@ -247,7 +247,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       {/* Maintenance Mode Warning Banner for Public Pages */}
       {maintenanceMode && isPublicPage && (
         <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">

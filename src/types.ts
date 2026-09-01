@@ -788,6 +788,8 @@ export interface SystemSettings {
   pageAnimationsEnabled?: boolean;
   animationSettings?: AnimationSettings;
   socialLinks?: SocialLinks;
+  heroDescription?: string;
+  footerDescription?: string;
 }
 
 export interface AnimationSettings {

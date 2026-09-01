@@ -86,7 +86,10 @@ router.get('/announcements', async (req: Request, res: Response) => {
 // GET /api/v1/public/settings
 router.get('/settings', async (req: Request, res: Response) => {
   const db = await getDb();
-  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit, pageAnimationsEnabled, socialLinks } = db.settings;
+  const { brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode, registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor, enablePlayit, pageAnimationsEnabled, socialLinks, heroDescription, footerDescription } = db.settings;
+
+  const DEFAULT_HERO = 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.';
+  const DEFAULT_FOOTER = 'Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.';
 
   res.json({
     success: true,
@@ -108,7 +111,9 @@ router.get('/settings', async (req: Request, res: Response) => {
       defaultTheme,
       accentColor,
       enablePlayit: enablePlayit !== false,
-      pageAnimationsEnabled: pageAnimationsEnabled !== false
+      pageAnimationsEnabled: pageAnimationsEnabled !== false,
+      heroDescription: (typeof heroDescription === 'string' && heroDescription.trim().length > 0) ? heroDescription : DEFAULT_HERO,
+      footerDescription: (typeof footerDescription === 'string' && footerDescription.trim().length > 0) ? footerDescription : DEFAULT_FOOTER
     }
   });
 });

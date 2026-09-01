@@ -8,7 +8,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
-  const { socialLinks } = useBranding();
+  const { socialLinks, footerDescription } = useBranding();
 
   return (
     <footer className="border-t border-zinc-800/80 bg-zinc-950 text-zinc-400">
@@ -19,7 +19,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div className="space-y-4 md:col-span-1">
             <AetherLogo onClick={() => onNavigate('home')} />
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.
+              {footerDescription}
             </p>
             <div className="flex items-center gap-3 text-zinc-400">
               {socialLinks.discord && (

@@ -7,6 +7,7 @@ import { Server, ServerFile, ServerBackup, ServerDatabase, ServerActivity } from
 import { dispatchDiscordNotification } from './discordService';
 import { buildBotStartupCommand } from '../src/lib/startup';
 import { RuntimeSupervisor } from './utils/runtimeSupervisor';
+import { resolveBotRuntimeExecutable, resolveNpmExecutable, resolveNpmExecutablePath, getAugmentedEnv } from './utils/runtimeResolver';
 
 const SERVERS_DIR = path.join(process.cwd(), 'data', 'servers');
 
@@ -14,7 +15,7 @@ const SERVERS_DIR = path.join(process.cwd(), 'data', 'servers');
 interface ActiveProcessEntry {
   child?: ChildProcess;
   startedAt: Date;
-  runnerType: 'minecraft' | 'bot_node' | 'bot_python' | 'custom';
+  runnerType: 'minecraft' | 'bot_node' | 'bot_python' | 'bot_bun' | 'custom';
   pid?: number;
 }
 
@@ -172,8 +173,53 @@ export function initializeServerFiles(serverId: string, productCategory: string,
       fs.mkdirSync(pluginsDir, { recursive: true });
     }
   } else if (productCategory === 'bot') {
-    // Empty bot server root: user uploads or creates application files
-    // Ensure directory exists without generating fake application files
+    const swLower = (software || '').toLowerCase();
+    const isBun = swLower.includes('bun');
+    const isPython = swLower.includes('python');
+
+    if (isBun) {
+      const indexPath = path.join(dir, 'index.ts');
+      const pkgPath = path.join(dir, 'package.json');
+      if (!fs.existsSync(indexPath)) {
+        fs.writeFileSync(indexPath, `// Bun Bot Application\nconsole.log("[AetherPanel] Bun Bot server initialized.");\nconsole.log(\`[AetherPanel] Bun Version: \${Bun.version}\`);\nconsole.log(\`[AetherPanel] Port: \${process.env.PORT || 3000}\`);\n\nsetInterval(() => { /* keep alive */ }, 5000);\n`);
+      }
+      if (!fs.existsSync(pkgPath)) {
+        fs.writeFileSync(pkgPath, JSON.stringify({
+          name: 'bun-bot-app',
+          version: '1.0.0',
+          module: 'index.ts',
+          type: 'module',
+          scripts: {
+            start: 'bun run index.ts'
+          }
+        }, null, 2));
+      }
+    } else if (isPython) {
+      const mainPath = path.join(dir, 'main.py');
+      const reqPath = path.join(dir, 'requirements.txt');
+      if (!fs.existsSync(mainPath)) {
+        fs.writeFileSync(mainPath, `# Python Bot Application\nimport os, sys, time\nprint("[AetherPanel] Python Bot server initialized.")\nprint(f"[AetherPanel] Python Version: {sys.version.split()[0]}")\nprint(f"[AetherPanel] Port: {os.environ.get('PORT', '3000')}")\n\nwhile True:\n    time.sleep(5)\n`);
+      }
+      if (!fs.existsSync(reqPath)) {
+        fs.writeFileSync(reqPath, `# Python dependencies\n`);
+      }
+    } else {
+      const indexPath = path.join(dir, 'index.js');
+      const pkgPath = path.join(dir, 'package.json');
+      if (!fs.existsSync(indexPath)) {
+        fs.writeFileSync(indexPath, `// Node.js Bot Application\nconsole.log("[AetherPanel] Node.js Bot server initialized.");\nconsole.log(\`[AetherPanel] Node Version: \${process.version}\`);\nconsole.log(\`[AetherPanel] Port: \${process.env.PORT || 3000}\`);\n\nsetInterval(() => { /* keep alive */ }, 5000);\n`);
+      }
+      if (!fs.existsSync(pkgPath)) {
+        fs.writeFileSync(pkgPath, JSON.stringify({
+          name: 'node-bot-app',
+          version: '1.0.0',
+          main: 'index.js',
+          scripts: {
+            start: 'node index.js'
+          }
+        }, null, 2));
+      }
+    }
   }
 }
 
@@ -186,21 +232,27 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
   if (!server) throw new Error('Server not found');
 
   const dir = getServerDir(serverId);
-  const { runtime, executable } = buildBotStartupCommand(server, server.startup);
+  const { runtime } = buildBotStartupCommand(server, server.startup, dir);
 
   appendConsoleLog(serverId, `[AetherInstaller/INFO]: Starting dependency installation for ${runtime}...`);
+
+  const runtimeInfo = resolveBotRuntimeExecutable(runtime, server.version);
+  if (!runtimeInfo.available) {
+    const errorMsg = `[Installer/ERROR]: RUNTIME_UNAVAILABLE - ${runtimeInfo.reason || 'Runtime executable unavailable'}`;
+    appendConsoleLog(serverId, errorMsg);
+    return { success: false, status: 'STARTUP_FAILED', output: errorMsg };
+  }
 
   if (runtime === 'python') {
     const reqPath = path.join(dir, 'requirements.txt');
     if (!fs.existsSync(reqPath)) {
-      const msg = `[Installer/ERROR]: 'requirements.txt' not found. requirements.txt not found.`;
+      const msg = `[Installer/INFO]: 'requirements.txt' not found in server root. Skipping package installation.`;
       appendConsoleLog(serverId, msg);
-      return { success: false, status: 'NO_REQUIREMENTS_FILE', output: msg };
+      return { success: true, status: 'NO_REQUIREMENTS_FILE', output: msg };
     }
 
-    const pipCheck = spawnSync(executable, ['-m', 'pip', '--version'], { shell: false });
-    if (pipCheck.status !== 0 || pipCheck.error) {
-      const errorMsg = `[Installer/ERROR]: PIP_NOT_FOUND - Pip module is not available for interpreter '${executable}'.`;
+    if (!runtimeInfo.pipAvailable) {
+      const errorMsg = `[Installer/ERROR]: PIP_NOT_FOUND - Pip module is not available for interpreter '${runtimeInfo.executable}'.`;
       appendConsoleLog(serverId, errorMsg);
       return { success: false, status: 'PIP_NOT_FOUND', output: errorMsg };
     }
@@ -209,7 +261,7 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
     if (!fs.existsSync(pkgPath)) {
       const msg = `[Installer/INFO]: 'package.json' not found in server root. Skipping package installation.`;
       appendConsoleLog(serverId, msg);
-      return { success: false, status: 'NO_PACKAGE_FILE', output: msg };
+      return { success: true, status: 'NO_PACKAGE_FILE', output: msg };
     }
   }
 
@@ -218,15 +270,30 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
     let args = ['install'];
 
     if (runtime === 'python') {
-      cmd = executable;
+      cmd = runtimeInfo.executable;
       args = ['-m', 'pip', 'install', '-r', 'requirements.txt'];
     } else if (runtime === 'bun') {
-      cmd = 'bun';
+      cmd = runtimeInfo.executable;
+      args = ['install'];
+    } else if (runtime === 'nodejs') {
+      cmd = resolveNpmExecutablePath();
       args = ['install'];
     }
 
     let output = '';
-    const child = spawn(cmd, args, { cwd: dir, env: process.env, shell: false });
+    let isSettled = false;
+
+    const child = spawn(cmd, args, { cwd: dir, env: getAugmentedEnv(), shell: false });
+
+    const timeout = setTimeout(() => {
+      if (!isSettled) {
+        isSettled = true;
+        try { child.kill('SIGKILL'); } catch {}
+        const msg = `[Installer/ERROR]: Dependency installation process timed out after 120 seconds.`;
+        appendConsoleLog(serverId, msg);
+        resolve({ success: false, status: 'DEPENDENCY_INSTALL_FAILED', output: output + '\n' + msg });
+      }
+    }, 120000);
 
     child.stdout?.on('data', (data) => {
       const txt = data.toString();
@@ -241,11 +308,17 @@ export async function installServerDependencies(serverId: string): Promise<{ suc
     });
 
     child.on('error', (err) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timeout);
       appendConsoleLog(serverId, `[Installer/ERROR]: Failed to run ${cmd}: ${err.message}`);
       resolve({ success: false, status: 'DEPENDENCY_INSTALL_FAILED', output: output + '\n' + err.message });
     });
 
     child.on('close', (code) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timeout);
       if (code === 0) {
         appendConsoleLog(serverId, `[Installer/SUCCESS]: Dependencies installed successfully (Exit Code 0).`);
         resolve({ success: true, status: 'DEPENDENCY_INSTALL_SUCCESS', output });
@@ -264,6 +337,7 @@ const remoteCommandQueues: Map<string, string[]> = new Map();
 
 // Track intentional stops/kills to prevent treating normal shutdowns as crashes
 const intendedStops: Set<string> = new Set();
+const serverLocks: Set<string> = new Set();
 // Stable uptime timers map to reset crash counters after stable operation
 const uptimeTimers: Map<string, NodeJS.Timeout> = new Map();
 // Auto restart timers map
@@ -372,15 +446,14 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
     }
   } else {
     // Bot Runtime
-    const { startupFile, runtime, executable } = buildBotStartupCommand(server, server.startup);
-    const scriptPath = path.join(dir, startupFile);
-    if (!fs.existsSync(scriptPath)) {
-      return { ok: false, code: 'NO_ENTRY_FILE', reason: `Startup failed. File: ${startupFile}. Reason: Startup file was not found.` };
+    const botCmdInfo = buildBotStartupCommand(server, server.startup, dir);
+    if (!botCmdInfo.hasEntryFile) {
+      return { ok: false, code: 'NO_ENTRY_FILE', reason: botCmdInfo.missingReason || `Startup failed. Entry file for ${botCmdInfo.runtime} was not found.` };
     }
 
-    const checkExec = spawnSync(executable, ['--version'], { shell: false });
-    if (checkExec.status !== 0 && checkExec.status !== null && checkExec.error) {
-      return { ok: false, code: 'RUNTIME_UNAVAILABLE', reason: `${runtime === 'python' ? 'Python' : runtime === 'bun' ? 'Bun' : 'Node.js'} runtime unavailable.` };
+    const runtimeInfo = resolveBotRuntimeExecutable(botCmdInfo.runtime, server.version);
+    if (!runtimeInfo.available) {
+      return { ok: false, code: 'RUNTIME_UNAVAILABLE', reason: `${botCmdInfo.runtime === 'python' ? 'Python' : botCmdInfo.runtime === 'bun' ? 'Bun' : 'Node.js'} runtime unavailable: ${runtimeInfo.reason}` };
     }
   }
 
@@ -475,9 +548,35 @@ export async function startServer(serverId: string): Promise<boolean> {
   }
 
   if (category === 'bot') {
-    const { runtime, startupFile, executable, args, compiledCommand } = buildBotStartupCommand(server, server.startup);
+    const botCmdInfo = buildBotStartupCommand(server, server.startup, dir);
+    const { runtime, startupFile, args, compiledCommand, hasEntryFile, missingReason } = botCmdInfo;
+    if (!hasEntryFile) {
+      const errReason = missingReason || `Startup failed. Entry file for ${runtime} was not found.`;
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: ${errReason}`);
+      server.status = 'error';
+      if (!server.startup) server.startup = {};
+      server.startup.lastCrashReason = errReason;
+      saveDbSync();
+      emitServerStatus(serverId, 'error', { error: errReason });
+      return false;
+    }
+
+    const runtimeInfo = resolveBotRuntimeExecutable(runtime, server.version);
+    if (!runtimeInfo.available) {
+      const errReason = `${runtime === 'python' ? 'Python' : runtime === 'bun' ? 'Bun' : 'Node.js'} runtime unavailable: ${runtimeInfo.reason}`;
+      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: ${errReason}`);
+      server.status = 'error';
+      if (!server.startup) server.startup = {};
+      server.startup.lastCrashReason = errReason;
+      saveDbSync();
+      emitServerStatus(serverId, 'error', { error: errReason });
+      return false;
+    }
+
+    const executable = runtimeInfo.executable;
+
     if (!server.startup) server.startup = {};
-    server.startup.compiledCommand = compiledCommand;
+    server.startup.compiledCommand = `${executable} ${args.join(' ')}`;
     server.startup.entryFile = startupFile;
 
     if (runtime === 'python') {
@@ -489,6 +588,37 @@ export async function startServer(serverId: string): Promise<boolean> {
           appendConsoleLog(serverId, `[AetherDaemon/WARN]: PIP_NOT_FOUND - Pip module unavailable for interpreter '${executable}'. Proceeding to start application without installing packages.`);
         } else if (depRes.status === 'DEPENDENCY_INSTALL_FAILED') {
           appendConsoleLog(serverId, `[AetherDaemon/ERROR]: DEPENDENCY_INSTALL_FAILED - Failed installing requirements.txt. Aborting startup.`);
+          server.status = 'error';
+          if (!server.startup) server.startup = {};
+          server.startup.lastCrashReason = 'DEPENDENCY_INSTALL_FAILED';
+          saveDbSync();
+          emitServerStatus(serverId, 'error', { error: 'DEPENDENCY_INSTALL_FAILED' });
+          return false;
+        }
+      }
+    } else if (runtime === 'bun') {
+      const pkgPath = path.join(dir, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        appendConsoleLog(serverId, `[AetherDaemon/INFO]: Detected 'package.json' in Bun server root. Running dependency preflight check...`);
+        const depRes = await installServerDependencies(serverId);
+        if (!depRes.success && depRes.status === 'DEPENDENCY_INSTALL_FAILED') {
+          appendConsoleLog(serverId, `[AetherDaemon/ERROR]: DEPENDENCY_INSTALL_FAILED - Failed running 'bun install'. Aborting startup.`);
+          server.status = 'error';
+          if (!server.startup) server.startup = {};
+          server.startup.lastCrashReason = 'DEPENDENCY_INSTALL_FAILED';
+          saveDbSync();
+          emitServerStatus(serverId, 'error', { error: 'DEPENDENCY_INSTALL_FAILED' });
+          return false;
+        }
+      }
+    } else if (runtime === 'nodejs') {
+      const pkgPath = path.join(dir, 'package.json');
+      const nodeModulesPath = path.join(dir, 'node_modules');
+      if (fs.existsSync(pkgPath) && !fs.existsSync(nodeModulesPath)) {
+        appendConsoleLog(serverId, `[AetherDaemon/INFO]: Detected 'package.json' in Node.js server root and missing node_modules. Running dependency preflight check...`);
+        const depRes = await installServerDependencies(serverId);
+        if (!depRes.success && depRes.status === 'DEPENDENCY_INSTALL_FAILED') {
+          appendConsoleLog(serverId, `[AetherDaemon/ERROR]: DEPENDENCY_INSTALL_FAILED - Failed running 'npm install'. Aborting startup.`);
           server.status = 'error';
           if (!server.startup) server.startup = {};
           server.startup.lastCrashReason = 'DEPENDENCY_INSTALL_FAILED';
@@ -518,7 +648,7 @@ export async function startServer(serverId: string): Promise<boolean> {
     try {
       intendedStops.delete(serverId);
 
-      const runnerType = runtime === 'python' ? 'bot_python' : 'bot_node';
+      const runnerType = runtime === 'python' ? 'bot_python' : runtime === 'bun' ? 'bot_bun' : 'bot_node';
       const processInfo = await RuntimeSupervisor.spawn(serverId, executable, args, {
         cwd: dir,
         env: cleanEnv,
