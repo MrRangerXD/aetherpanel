@@ -699,6 +699,7 @@ export interface CustomThemeSettings {
     logoUrl?: string;
     faviconUrl?: string;
     bgPatternUrl?: string; // Supports normal URLs, Imgur, GIF URLs
+    backgroundWallpaperUrl?: string;
     bannerUrl?: string;
     loginBgUrl?: string;
   };

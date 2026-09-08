@@ -23,6 +23,7 @@ interface ThemeContextType {
     logoUrl?: string;
     faviconUrl?: string;
     bgPatternUrl?: string;
+    backgroundWallpaperUrl?: string;
     bannerUrl?: string;
     loginBgUrl?: string;
   };
@@ -223,55 +224,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
-    // Dynamic wallpaper, blur, and opacity styling tag
-    let styleTag = document.getElementById('aether-custom-bg-styles') as HTMLStyleElement | null;
-    if (!styleTag) {
-      styleTag = document.createElement('style');
-      styleTag.id = 'aether-custom-bg-styles';
-      document.head.appendChild(styleTag);
+    // Clean up any legacy dynamic background style tag to ensure GlobalBackground controls rendering
+    const legacyStyleTag = document.getElementById('aether-custom-bg-styles');
+    if (legacyStyleTag) {
+      legacyStyleTag.remove();
     }
-
-    const blurVal = !backgroundBlur || backgroundBlur === 'none' ? '0px' : backgroundBlur;
-    const bgUrl = themeAssets.bgPatternUrl?.trim() || '';
-    const opacityVal = (backgroundOverlayOpacity ?? 75) / 100;
-    const isBlurred = blurVal !== '0px';
-
-    styleTag.innerHTML = `
-      body {
-        background-color: #09090b !important;
-      }
-      body::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: -20;
-        background-image: ${bgUrl ? `url("${bgUrl}")` : 'none'};
-        background-size: cover;
-        background-attachment: fixed;
-        background-position: center;
-        background-repeat: no-repeat;
-        filter: blur(${blurVal});
-        -webkit-filter: blur(${blurVal});
-        transform: ${isBlurred ? 'scale(1.08)' : 'scale(1)'};
-        pointer-events: none;
-        transition: filter 0.3s ease, transform 0.3s ease;
-      }
-      body::after {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: -10;
-        background-color: ${bgUrl ? `rgba(9, 9, 11, ${opacityVal})` : 'transparent'} !important;
-        pointer-events: none;
-        transition: background-color 0.3s ease;
-      }
-    `;
   }, [themeAssets, backgroundBlur, backgroundOverlayOpacity]);
 
   useEffect(() => {
@@ -317,7 +274,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const setThemeAssets = (assets: Partial<ThemeContextType['themeAssets']>) => {
     if (!allowUserCustomization) return;
-    setThemeAssetsState(prev => ({ ...prev, ...assets }));
+    setThemeAssetsState(prev => {
+      const wallpaper = assets.backgroundWallpaperUrl || assets.bgPatternUrl || prev.backgroundWallpaperUrl || prev.bgPatternUrl;
+      const next = {
+        ...prev,
+        ...assets,
+        backgroundWallpaperUrl: wallpaper,
+        bgPatternUrl: wallpaper
+      };
+      localStorage.setItem('aether_theme_assets', JSON.stringify(next));
+      return next;
+    });
   };
 
   const applySystemThemeSettings = (settings: CustomThemeSettings) => {
@@ -339,8 +306,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localStorage.setItem('aether_background_overlay_opacity', String(settings.backgroundOverlayOpacity));
     }
     if (settings.assets) {
-      setThemeAssetsState(settings.assets);
-      localStorage.setItem('aether_theme_assets', JSON.stringify(settings.assets));
+      const wallpaper = settings.assets.backgroundWallpaperUrl || settings.assets.bgPatternUrl;
+      const normalizedAssets = {
+        ...settings.assets,
+        backgroundWallpaperUrl: wallpaper,
+        bgPatternUrl: wallpaper
+      };
+      setThemeAssetsState(normalizedAssets);
+      localStorage.setItem('aether_theme_assets', JSON.stringify(normalizedAssets));
     }
     if (settings.allowUserCustomization !== undefined) {
       setAllowUserCustomization(settings.allowUserCustomization);

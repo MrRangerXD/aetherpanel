@@ -26,6 +26,7 @@ class FileTailer {
   private position: number = 0;
   private watcher: fs.FSWatcher | null = null;
   private intervalId: NodeJS.Timeout | null = null;
+  private remainder: string = '';
 
   constructor(serverId: string, filePath: string) {
     this.serverId = serverId;
@@ -41,15 +42,26 @@ class FileTailer {
       this.position = fs.statSync(this.filePath).size;
       this.fd = fs.openSync(this.filePath, 'r');
 
-      this.watcher = fs.watch(this.filePath, (event) => {
-        if (event === 'change') {
-          this.readNewData();
-        }
-      });
+      try {
+        this.watcher = fs.watch(this.filePath, (event) => {
+          if (event === 'change') {
+            this.readNewData();
+          }
+        });
+        this.watcher.on('error', () => {
+          // Gracefully ignore watcher errors (e.g. NFS/LXC filesystem constraints)
+          try { this.watcher?.close(); } catch {}
+          this.watcher = null;
+        });
+      } catch {
+        // Fallback safely to interval polling if fs.watch is unsupported by container filesystem
+        this.watcher = null;
+      }
 
+      // Fast polling fallback ensuring zero-lag console streaming across VPS setups
       this.intervalId = setInterval(() => {
         this.readNewData();
-      }, 500);
+      }, 250);
     } catch (err) {
       console.error(`[FileTailer] Error starting for ${this.filePath}:`, err);
     }
@@ -61,6 +73,7 @@ class FileTailer {
       const stats = fs.statSync(this.filePath);
       if (stats.size < this.position) {
         this.position = 0;
+        this.remainder = '';
       }
       if (stats.size === this.position) return;
 
@@ -70,7 +83,14 @@ class FileTailer {
       this.position = stats.size;
 
       const text = buffer.toString('utf8');
-      appendConsoleLog(this.serverId, text);
+      const combined = this.remainder + text;
+      const lines = combined.split('\n');
+      // The last element is either empty (if ended with \n) or an incomplete line chunk
+      this.remainder = lines.pop() || '';
+
+      for (const line of lines) {
+        appendConsoleLog(this.serverId, line);
+      }
     } catch (err) {
       // Stream or descriptor closed
     }
@@ -91,11 +111,16 @@ class FileTailer {
       } catch {}
       this.fd = null;
     }
+    if (this.remainder.trim()) {
+      appendConsoleLog(this.serverId, this.remainder);
+      this.remainder = '';
+    }
   }
 }
 
 export class RuntimeSupervisor {
   private static activeTailers = new Map<string, { stdout: FileTailer; stderr: FileTailer }>();
+  private static activeChildren = new Map<string, ChildProcess>();
 
   private static getRuntimePaths(serverId: string) {
     const serverDir = path.join(process.cwd(), 'data', 'servers', serverId);
@@ -153,6 +178,7 @@ export class RuntimeSupervisor {
     // Attach exit handler BEFORE unref to track lifecycle cleanly
     child.on('exit', (code, signal) => {
       console.log(`[RuntimeSupervisor] Process PID ${child.pid} for ${serverId} exited with code ${code}, signal ${signal}`);
+      RuntimeSupervisor.activeChildren.delete(serverId);
       try {
         const statePath = paths.stateJson;
         if (fs.existsSync(statePath)) {
@@ -184,6 +210,9 @@ export class RuntimeSupervisor {
 
       this.stopTailers(serverId);
     });
+
+    // Retain child reference for interactive stdin control
+    this.activeChildren.set(serverId, child);
 
     // Unreference from parent event loop to decouple lifetime
     child.unref();
@@ -314,9 +343,71 @@ export class RuntimeSupervisor {
     }
   }
 
+  static getChild(serverId: string): ChildProcess | undefined {
+    return this.activeChildren.get(serverId);
+  }
+
+  static writeStdin(serverId: string, command: string): { success: boolean; message: string; error?: string } {
+    const paths = this.getRuntimePaths(serverId);
+
+    // 1. Check if server runtime state exists
+    if (!fs.existsSync(paths.stateJson)) {
+      return { success: false, message: 'Server is offline (no active runtime state).', error: 'NOT_RUNNING' };
+    }
+
+    let stateData: RuntimeState;
+    try {
+      stateData = JSON.parse(fs.readFileSync(paths.stateJson, 'utf-8'));
+    } catch {
+      return { success: false, message: 'Failed to read server runtime state.', error: 'STATE_READ_FAILED' };
+    }
+
+    if (!stateData.pid) {
+      return { success: false, message: 'Server process is not running (missing PID).', error: 'MISSING_PID' };
+    }
+
+    // 2. Verify process is alive via signal 0
+    try {
+      process.kill(stateData.pid, 0);
+    } catch {
+      // Clean up stale state
+      stateData.status = 'stopped';
+      stateData.pid = undefined;
+      try { fs.writeFileSync(paths.stateJson, JSON.stringify(stateData, null, 2), 'utf-8'); } catch {}
+      this.activeChildren.delete(serverId);
+      return { success: false, message: `Server process PID ${stateData.pid} has already terminated.`, error: 'STALE_PID' };
+    }
+
+    // 3. Obtain child process standard input stream
+    const child = this.activeChildren.get(serverId);
+    if (!child) {
+      return {
+        success: false,
+        message: 'Server process is detached from active session. Restart server to attach interactive stdin.',
+        error: 'DETACHED_SESSION'
+      };
+    }
+
+    if (!child.stdin || !child.stdin.writable) {
+      return {
+        success: false,
+        message: 'Process standard input (stdin) is not writable.',
+        error: 'STDIN_NOT_WRITABLE'
+      };
+    }
+
+    try {
+      child.stdin.write(`${command}\n`);
+      return { success: true, message: `Command dispatched to process stdin.` };
+    } catch (err: any) {
+      return { success: false, message: `Failed writing to process stdin: ${err.message}`, error: 'WRITE_FAILED' };
+    }
+  }
+
   static async stop(serverId: string): Promise<boolean> {
     const paths = this.getRuntimePaths(serverId);
     this.stopTailers(serverId);
+    this.activeChildren.delete(serverId);
 
     if (!fs.existsSync(paths.stateJson)) return false;
 
@@ -403,6 +494,7 @@ export class RuntimeSupervisor {
   static clean(serverId: string) {
     const paths = this.getRuntimePaths(serverId);
     this.stopTailers(serverId);
+    this.activeChildren.delete(serverId);
     try {
       if (fs.existsSync(paths.runtimeDir)) {
         fs.rmSync(paths.runtimeDir, { recursive: true, force: true });

@@ -1146,8 +1146,7 @@ export async function sendServerCommand(serverId: string, command: string): Prom
   const server = db.servers.find(s => s.id === serverId);
 
   if (!server) {
-    const errorMsg = 'Server not found.';
-    return errorMsg;
+    return 'Server not found.';
   }
 
   // Check if server is running on a remote node
@@ -1165,27 +1164,46 @@ export async function sendServerCommand(serverId: string, command: string): Prom
     return `Dispatched command '${command}' to remote node daemon for server ${serverId}.`;
   }
 
-  const entry = activeProcesses.get(serverId);
+  // Check supervisor status and in-memory process status
+  const supervisorStatus = RuntimeSupervisor.getStatus(serverId);
+  const isSupervisorRunning = supervisorStatus === 'running' || supervisorStatus === 'starting';
 
-  if (server.status !== 'running' || !entry) {
+  const entry = activeProcesses.get(serverId);
+  const isMemoryRunning = Boolean(entry && entry.child && !entry.child.killed);
+
+  if (server.status !== 'running' && !isSupervisorRunning && !isMemoryRunning) {
     const errorMsg = 'Server is offline. Start the server to send commands.';
     appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${errorMsg})`);
     return errorMsg;
   }
 
-  appendConsoleLog(serverId, `[UserCommand]: > ${command}`);
+  // 1. Try RuntimeSupervisor writeStdin
+  if (isSupervisorRunning || RuntimeSupervisor.getChild(serverId)) {
+    const writeResult = RuntimeSupervisor.writeStdin(serverId, command);
+    if (writeResult.success) {
+      appendConsoleLog(serverId, `[UserCommand]: > ${command}`);
+      return `Sent '${command}' to running process stdin.`;
+    } else {
+      appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${writeResult.message})`);
+      return `Failed: ${writeResult.message}`;
+    }
+  }
 
-  if (entry.child && entry.child.stdin && entry.child.stdin.writable) {
+  // 2. Try in-memory activeProcesses child stdin
+  if (entry && entry.child && entry.child.stdin && entry.child.stdin.writable) {
     try {
       entry.child.stdin.write(`${command}\n`);
+      appendConsoleLog(serverId, `[UserCommand]: > ${command}`);
       return `Sent '${command}' to running process stdin.`;
     } catch (err: any) {
-      appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Stdin write failure: ${err.message}`);
+      appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${err.message})`);
       return `Failed to write to stdin: ${err.message}`;
     }
   }
 
-  return `Command dispatched.`;
+  const errorMsg = 'Server process stdin is unavailable or not attached.';
+  appendConsoleLog(serverId, `[UserCommand/ERROR]: > ${command} (Failed: ${errorMsg})`);
+  return `Failed: ${errorMsg}`;
 }
 
 export const sendServerConsoleInput = sendServerCommand;

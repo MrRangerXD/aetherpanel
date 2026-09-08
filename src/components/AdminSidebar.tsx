@@ -16,26 +16,25 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
   const { user, logout } = useAuth();
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950/80 backdrop-blur-md flex-col justify-between min-h-[calc(100vh-4rem)]">
-      <div>
-        {/* Admin Header */}
-        <div className="p-4 border-b border-amber-500/20 bg-amber-500/5">
-          <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs uppercase tracking-wider">
-            <ShieldAlert className="h-4 w-4" />
-            <span>Admin Control Plane</span>
-          </div>
-          <p className="text-[11px] text-zinc-400 mt-1">Platform Management Console</p>
+    <aside className="hidden lg:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950/80 backdrop-blur-md flex-col h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] sticky top-16 select-none">
+      {/* Admin Header (Pinned Top) */}
+      <div className="p-4 border-b border-amber-500/20 bg-amber-500/5 shrink-0">
+        <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs uppercase tracking-wider">
+          <ShieldAlert className="h-4 w-4" />
+          <span>Admin Control Plane</span>
         </div>
+        <p className="text-[11px] text-zinc-400 mt-1">Platform Management Console</p>
+      </div>
 
-        {/* Admin Navigation */}
-        <div className="p-3 space-y-1">
-          <button
-            onClick={() => onNavigate('admin-dashboard')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <Sliders className="h-4 w-4" />
-            <span>System Overview</span>
-          </button>
+      {/* Admin Navigation (Independently Scrollable) */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 scrollbar-thin">
+        <button
+          onClick={() => onNavigate('admin-dashboard')}
+          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'admin-dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+        >
+          <Sliders className="h-4 w-4" />
+          <span>System Overview</span>
+        </button>
 
           <button
             onClick={() => onNavigate('admin-users')}
@@ -197,11 +196,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
             <Sliders className="h-4 w-4" />
             <span>Platform Settings</span>
           </button>
-        </div>
       </div>
 
-      {/* Back to User Dashboard */}
-      <div className="p-3 border-t border-zinc-800/80 space-y-2">
+      {/* Back to User Dashboard (Pinned Bottom) */}
+      <div className="p-3 border-t border-zinc-800/80 space-y-2 shrink-0 bg-zinc-950/90">
         <button
           onClick={() => onNavigate('dashboard')}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 transition-colors"

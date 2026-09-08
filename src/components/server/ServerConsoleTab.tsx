@@ -58,6 +58,9 @@ function parseTerminalLine(rawText: string) {
   return { cleaned, colorClass, isStderr, isWarn, isSuccess, isUserCmd, isDaemon };
 }
 
+type ConnectionState = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED' | 'ERROR';
+const MAX_BUFFER_LINES = 2000;
+
 export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: ServerConsoleTabProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [command, setCommand] = useState('');
@@ -67,7 +70,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const [filterQuery, setFilterQuery] = useState('');
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'polling' | 'disconnected'>('connecting');
+  const [wsStatus, setWsStatus] = useState<ConnectionState>('CONNECTING');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastAck, setLastAck] = useState<string | null>(null);
 
@@ -78,6 +81,9 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const logQueueRef = useRef<string[]>([]);
+  const rafIdRef = useRef<number | null>(null);
 
   const isMinecraft =
     /minecraft|paper|purpur|velocity|bungeecord|forge|fabric|spigot|pocketmine/i.test(server.software || '') ||
@@ -136,6 +142,34 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     }
   }, []);
 
+  // Flushes accumulated incoming logs in a single batch on the animation frame
+  const flushLogQueue = useCallback(() => {
+    if (!isMountedRef.current) return;
+    const incoming = logQueueRef.current;
+    if (incoming.length === 0) {
+      rafIdRef.current = null;
+      return;
+    }
+    logQueueRef.current = [];
+    rafIdRef.current = null;
+
+    setLogs((prev) => {
+      const updated = [...prev, ...incoming];
+      return updated.length > MAX_BUFFER_LINES ? updated.slice(updated.length - MAX_BUFFER_LINES) : updated;
+    });
+
+    if (isAutoScrollRef.current) {
+      requestAnimationFrame(() => {
+        const el = consoleContainerRef.current;
+        if (el && isAutoScrollRef.current) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+    } else {
+      setUnreadCount((c) => c + incoming.length);
+    }
+  }, []);
+
   // REST API Fallback Fetching
   const fetchConsoleLogs = useCallback(async () => {
     try {
@@ -143,10 +177,10 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
       const res = await fetch(`/api/v1/servers/${server.id}/console`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      if (res.ok) {
+      if (res.ok && isMountedRef.current) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data?.logs)) {
-          setLogs(json.data.logs);
+          setLogs(json.data.logs.slice(-MAX_BUFFER_LINES));
           if (isAutoScrollRef.current) {
             requestAnimationFrame(() => scrollConsoleToBottom(false));
           }
@@ -155,16 +189,32 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     } catch {}
   }, [server.id, scrollConsoleToBottom]);
 
+  const switchToPolling = useCallback(() => {
+    if (!isMountedRef.current) return;
+    setWsStatus('DISCONNECTED');
+    if (!pollIntervalRef.current) {
+      fetchConsoleLogs();
+      pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
+    }
+  }, [fetchConsoleLogs]);
+
   // WebSocket Connection Management
   const connectWebSocket = useCallback(() => {
+    if (!isMountedRef.current) return;
+
+    // Clean up previous socket to prevent duplicate streams
     if (wsRef.current) {
       try {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onclose = null;
         wsRef.current.close();
       } catch {}
       wsRef.current = null;
     }
 
-    setWsStatus(reconnectAttemptsRef.current > 0 ? 'reconnecting' : 'connecting');
+    setWsStatus(reconnectAttemptsRef.current > 0 ? 'RECONNECTING' : 'CONNECTING');
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const token = localStorage.getItem('aether_token') || '';
@@ -175,7 +225,8 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setWsStatus('connected');
+        if (!isMountedRef.current) return;
+        setWsStatus('CONNECTED');
         reconnectAttemptsRef.current = 0;
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
@@ -184,49 +235,50 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
       };
 
       ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'init' || data.type === 'backlog') {
             if (Array.isArray(data.logs)) {
-              setLogs(data.logs);
+              setLogs(data.logs.slice(-MAX_BUFFER_LINES));
               if (isAutoScrollRef.current) {
                 requestAnimationFrame(() => scrollConsoleToBottom(false));
               }
             }
           } else if (data.type === 'log' && typeof data.line === 'string') {
-            setLogs((prev) => {
-              const updated = [...prev, data.line];
-              return updated.length > 1500 ? updated.slice(updated.length - 1500) : updated;
-            });
-
-            if (isAutoScrollRef.current) {
-              requestAnimationFrame(() => {
-                const el = consoleContainerRef.current;
-                if (el && isAutoScrollRef.current) {
-                  el.scrollTop = el.scrollHeight;
-                }
-              });
-            } else {
-              setUnreadCount((c) => c + 1);
+            // Push to queue and schedule batch flush
+            logQueueRef.current.push(data.line);
+            if (rafIdRef.current === null) {
+              rafIdRef.current = requestAnimationFrame(flushLogQueue);
             }
           } else if (data.type === 'status_change') {
             onRefreshServer?.();
           } else if (data.type === 'command_ack') {
             setLastAck(data.result || 'Executed');
-            setTimeout(() => setLastAck(null), 3000);
+            setTimeout(() => {
+              if (isMountedRef.current) setLastAck(null);
+            }, 3000);
           }
         } catch {}
       };
 
       ws.onerror = () => {
-        switchToPolling();
+        if (!isMountedRef.current) return;
+        if (wsRef.current?.readyState !== WebSocket.OPEN) {
+          setWsStatus('ERROR');
+        }
       };
 
-      ws.onclose = () => {
-        if (reconnectAttemptsRef.current < 5) {
+      ws.onclose = (event) => {
+        if (!isMountedRef.current) return;
+        // Exponential backoff reconnect
+        if (reconnectAttemptsRef.current < 6) {
           reconnectAttemptsRef.current += 1;
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current), 8000);
-          reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
+          setWsStatus('RECONNECTING');
+          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current - 1), 8000);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isMountedRef.current) connectWebSocket();
+          }, delay);
         } else {
           switchToPolling();
         }
@@ -234,23 +286,21 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     } catch {
       switchToPolling();
     }
-  }, [server.id, onRefreshServer, scrollConsoleToBottom]);
-
-  const switchToPolling = useCallback(() => {
-    setWsStatus('polling');
-    if (!pollIntervalRef.current) {
-      fetchConsoleLogs();
-      pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
-    }
-  }, [fetchConsoleLogs]);
+  }, [server.id, onRefreshServer, scrollConsoleToBottom, flushLogQueue, switchToPolling]);
 
   // Connect on mount or when server.id changes, with strict cleanup
   useEffect(() => {
+    isMountedRef.current = true;
     connectWebSocket();
 
     return () => {
+      isMountedRef.current = false;
       if (wsRef.current) {
         try {
+          wsRef.current.onopen = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onclose = null;
           wsRef.current.close();
         } catch {}
         wsRef.current = null;
@@ -263,6 +313,11 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      logQueueRef.current = [];
     };
   }, [connectWebSocket]);
 
@@ -399,37 +454,37 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           {/* Connection Status Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
             <span className="text-zinc-500">Live Stream:</span>
-            {wsStatus === 'connected' && (
-              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+            {wsStatus === 'CONNECTED' && (
+              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold tracking-wider">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                Connected
+                CONNECTED
               </span>
             )}
-            {wsStatus === 'connecting' && (
-              <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+            {wsStatus === 'CONNECTING' && (
+              <span className="flex items-center gap-1.5 text-amber-400 font-semibold tracking-wider">
                 <RotateCw className="h-3 w-3 animate-spin" />
-                Connecting...
+                CONNECTING
               </span>
             )}
-            {wsStatus === 'reconnecting' && (
-              <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+            {wsStatus === 'RECONNECTING' && (
+              <span className="flex items-center gap-1.5 text-amber-400 font-semibold tracking-wider">
                 <RotateCw className="h-3 w-3 animate-spin" />
-                Reconnecting...
+                RECONNECTING
               </span>
             )}
-            {wsStatus === 'polling' && (
-              <span className="flex items-center gap-1.5 text-cyan-400 font-semibold">
-                <Wifi className="h-3 w-3" />
-                Polling Fallback
+            {wsStatus === 'DISCONNECTED' && (
+              <span className="flex items-center gap-1.5 text-zinc-400 font-semibold tracking-wider">
+                <WifiOff className="h-3 w-3 text-zinc-500" />
+                DISCONNECTED
               </span>
             )}
-            {wsStatus === 'disconnected' && (
-              <span className="flex items-center gap-1.5 text-rose-400 font-semibold">
-                <WifiOff className="h-3 w-3" />
-                Connection Lost
+            {wsStatus === 'ERROR' && (
+              <span className="flex items-center gap-1.5 text-rose-400 font-semibold tracking-wider">
+                <AlertTriangle className="h-3 w-3 text-rose-400" />
+                ERROR
               </span>
             )}
           </div>
@@ -438,7 +493,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
             <span className="text-zinc-500">Buffer:</span>
             <span className="text-zinc-300 font-bold">{logs.length}</span>
-            <span className="text-zinc-600 hidden xs:inline">/ 1500 lines</span>
+            <span className="text-zinc-600 hidden xs:inline">/ {MAX_BUFFER_LINES} lines</span>
           </div>
 
           {/* Runtime Type Badge */}
@@ -505,7 +560,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
             title="Reconnect Console Stream"
             className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
           >
-            <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'connecting' || wsStatus === 'reconnecting' ? 'animate-spin text-amber-400' : ''}`} />
+            <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING' ? 'animate-spin text-amber-400' : ''}`} />
           </button>
         </div>
       </div>

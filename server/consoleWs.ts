@@ -16,21 +16,46 @@ interface WsClientInfo {
 
 const activeClients: Set<WsClientInfo> = new Set();
 
+function rejectSocket(socket: any, code: number, reason: string) {
+  try {
+    socket.end(
+      `HTTP/1.1 ${code} ${reason}\r\n` +
+      `Connection: close\r\n` +
+      `Content-Type: text/plain; charset=utf-8\r\n` +
+      `Content-Length: ${Buffer.byteLength(reason)}\r\n\r\n` +
+      reason
+    );
+  } catch {
+    try { socket.destroy(); } catch {}
+  }
+}
+
 export function setupConsoleWebSocket(httpServer: HttpServer) {
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', async (req, socket, head) => {
+    socket.on('error', () => {
+      try { socket.destroy(); } catch {}
+    });
+
     const parsed = parseUrl(req.url || '', true);
     const pathname = parsed.pathname || '';
 
-    // Match /ws/console/:serverId or /api/v1/servers/:serverId/ws-console
-    const match = pathname.match(/^\/(?:api\/v1\/servers|ws\/console)\/([a-zA-Z0-9_-]+)(?:\/ws-console)?/);
+    // Match /ws/console/:serverId or /api/v1/servers/:serverId/ws-console with optional trailing slash
+    const match = pathname.match(/^\/(?:api\/v1\/servers\/([a-zA-Z0-9_-]+)\/ws-console|ws\/console\/([a-zA-Z0-9_-]+))\/?$/);
     if (!match) {
-      return; // Handled by standard express / vite
+      return; // Handled by standard express / vite / other upgrade listeners
     }
 
-    const serverId = match[1];
+    const serverId = match[1] || match[2];
     let token = (parsed.query.token as string) || '';
+
+    if (!token && req.headers['authorization']) {
+      const parts = req.headers['authorization'].split(' ');
+      if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+        token = parts[1].trim();
+      }
+    }
 
     if (!token && req.headers['sec-websocket-protocol']) {
       token = req.headers['sec-websocket-protocol'].split(',')[0].trim();
@@ -45,29 +70,25 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     const clientInstallId = (parsed.query.installationId as string) || (req.headers['x-installation-id'] as string);
     const currentInstallationId = getInstallationId();
     if (clientInstallId && clientInstallId !== currentInstallationId) {
-      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-      socket.destroy();
+      rejectSocket(socket, 403, 'Forbidden');
       return;
     }
 
     if (!token) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
+      rejectSocket(socket, 401, 'Unauthorized');
       return;
     }
 
     const user = await verifyToken(token);
     if (!user) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
+      rejectSocket(socket, 401, 'Unauthorized');
       return;
     }
 
     const db = await getDb();
     const server = db.servers.find(s => s.id === serverId);
     if (!server) {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
+      rejectSocket(socket, 404, 'Not Found');
       return;
     }
 
@@ -77,8 +98,7 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     const isSubuserWithConsoleView = subuser && subuser.permissions.includes('console.view');
 
     if (!isOwner && !isAdmin && !isSubuserWithConsoleView) {
-      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-      socket.destroy();
+      rejectSocket(socket, 403, 'Forbidden');
       return;
     }
 

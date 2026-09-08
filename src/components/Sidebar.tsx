@@ -25,55 +25,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { accentClasses, accent, setAccent } = useTheme();
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col justify-between min-h-[calc(100vh-4rem)]">
-      <div>
-        {/* Brand Header / Server Quick Switcher */}
-        <div className="p-4 border-b border-zinc-800/80">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-            Active Workspace
-          </div>
-
-          {userServers.length > 0 ? (
-            <div className="relative">
-              <select
-                value={currentServerId || 'overview'}
-                onChange={(e) => {
-                  if (e.target.value === 'overview') {
-                    onNavigate('dashboard');
-                  } else if (onSelectServer) {
-                    onSelectServer(e.target.value);
-                  }
-                }}
-                className="w-full appearance-none rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-amber-500 pr-8"
-              >
-                <option value="overview">All Servers ({userServers.length})</option>
-                <optgroup label="Your Servers">
-                  {userServers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.software})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-              <ChevronDown className="absolute right-3 top-3.5 h-4 w-4 text-zinc-400 pointer-events-none" />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-400">
-              <Cpu className="h-4 w-4 text-amber-400 shrink-0" />
-              <span>No active servers yet</span>
-            </div>
-          )}
+    <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] sticky top-16 select-none">
+      {/* Brand Header / Server Quick Switcher (Pinned Top) */}
+      <div className="p-4 border-b border-zinc-800/80 shrink-0">
+        <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          Active Workspace
         </div>
 
-        {/* Primary Navigation */}
-        <div className="p-3 space-y-1">
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'dashboard' ? 'bg-zinc-800/80 text-white font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
-          >
-            <LayoutDashboard className={`h-4 w-4 ${currentPage === 'dashboard' ? accentClasses.text : ''}`} />
-            <span>Dashboard</span>
-          </button>
+        {userServers.length > 0 ? (
+          <div className="relative">
+            <select
+              value={currentServerId || 'overview'}
+              onChange={(e) => {
+                if (e.target.value === 'overview') {
+                  onNavigate('dashboard');
+                } else if (onSelectServer) {
+                  onSelectServer(e.target.value);
+                }
+              }}
+              className="w-full appearance-none rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-amber-500 pr-8"
+            >
+              <option value="overview">All Servers ({userServers.length})</option>
+              <optgroup label="Your Servers">
+                {userServers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.software})
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <ChevronDown className="absolute right-3 top-3.5 h-4 w-4 text-zinc-400 pointer-events-none" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-400">
+            <Cpu className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>No active servers yet</span>
+          </div>
+        )}
+      </div>
+
+      {/* Primary Navigation (Independently Scrollable) */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 scrollbar-thin">
+        <button
+          onClick={() => onNavigate('dashboard')}
+          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === 'dashboard' ? 'bg-zinc-800/80 text-white font-semibold' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+        >
+          <LayoutDashboard className={`h-4 w-4 ${currentPage === 'dashboard' ? accentClasses.text : ''}`} />
+          <span>Dashboard</span>
+        </button>
 
           <button
             onClick={() => onNavigate('servers')}
@@ -151,11 +150,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Settings className={`h-4 w-4 ${currentPage === 'settings' ? accentClasses.text : ''}`} />
             <span>Settings</span>
           </button>
-        </div>
       </div>
 
-      {/* User Footer & Theme Controls */}
-      <div className="p-3 border-t border-zinc-800/80 space-y-3">
+      {/* User Footer & Theme Controls (Pinned Bottom) */}
+      <div className="p-3 border-t border-zinc-800/80 space-y-3 shrink-0 bg-zinc-950/90">
         {/* Accent Selector */}
         <div className="flex items-center justify-between px-2 text-xs text-zinc-400">
           <span>Accent Theme</span>

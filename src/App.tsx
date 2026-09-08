@@ -19,6 +19,7 @@ import { Footer } from './components/Footer';
 import { CustomCursor } from './components/CustomCursor';
 import { AdBanner } from './components/AdBanner';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { GlobalBackground } from './components/GlobalBackground';
 
 // Public Pages
 import { Home } from './pages/public/Home';
@@ -198,6 +199,7 @@ function AppContent() {
     if (isCustomerPage) {
       return (
         <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative font-sans select-none">
+          <GlobalBackground />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
           
           <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800/80 p-8 rounded-3xl backdrop-blur-md text-center space-y-6 relative shadow-2xl">
@@ -247,7 +249,10 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
+      {/* Authoritative Global Background System */}
+      <GlobalBackground />
+
       {/* Maintenance Mode Warning Banner for Public Pages */}
       {maintenanceMode && isPublicPage && (
         <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
@@ -277,7 +282,7 @@ function AppContent() {
       />
 
       {/* Main Body Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row">
+      <div className="flex-1 flex flex-col lg:flex-row relative z-10">
         
         {/* Customer Sidebar */}
         {isCustomerPage && user && (
@@ -285,7 +290,7 @@ function AppContent() {
             initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0"
+            className="shrink-0 lg:self-start lg:sticky lg:top-16"
           >
             <Sidebar
               currentPage={currentPage}
@@ -303,7 +308,7 @@ function AppContent() {
             initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0"
+            className="shrink-0 lg:self-start lg:sticky lg:top-16"
           >
             <AdminSidebar
               currentPage={currentPage}
@@ -313,7 +318,7 @@ function AppContent() {
         )}
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
+        <main className="flex-1 overflow-x-hidden min-h-[calc(100dvh-4rem)] flex flex-col justify-between p-4 lg:p-6">
           <div className="flex-1 flex flex-col">
             <PageTransition routeKey={currentPage}>
               <div className="flex-1 flex flex-col">
