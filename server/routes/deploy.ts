@@ -333,14 +333,14 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
       entryFile: selectedSoftware.toLowerCase().includes('python') ? 'main.py' : selectedSoftware.toLowerCase().includes('bun') ? 'index.ts' : 'index.js'
     } : {};
 
-    const dummyServer: Partial<Server> = {
+    const tempServerContext: Partial<Server> = {
       software: selectedSoftware,
       version: selectedVersion,
       limits: resourceLimits
     };
 
     if (category === 'bot') {
-      const cmdObj = buildBotStartupCommand(dummyServer, startupConfig);
+      const cmdObj = buildBotStartupCommand(tempServerContext, startupConfig);
       startupConfig.compiledCommand = cmdObj.compiledCommand;
     } else {
       startupConfig.compiledCommand = `java -Xms128M -Xmx${resourceLimits.ramMB}M -jar server.jar nogui`;

@@ -79,11 +79,23 @@ async function runTests() {
     // TEST 1: Path Traversal Protection
     // -------------------------------------------------------------
     console.log('\n--- 1. PATH TRAVERSAL & CANONICAL PATH SECURITY ---');
-    const traversalPath = safePath(testServerId, '../../../../etc/passwd');
-    assert(traversalPath.startsWith(serverDir), 'safePath prevents escaping root upwards');
+    let traversalBlocked = false;
+    try {
+      const traversalPath = safePath(testServerId, '../../../../etc/passwd');
+      traversalBlocked = traversalPath.startsWith(serverDir);
+    } catch {
+      traversalBlocked = true;
+    }
+    assert(traversalBlocked, 'safePath prevents escaping root upwards');
 
-    const nullByteTraversal = safePath(testServerId, 'subdir/\0/../../passwd');
-    assert(nullByteTraversal.startsWith(serverDir), 'safePath neutralizes null bytes');
+    let nullByteBlocked = false;
+    try {
+      const nullByteTraversal = safePath(testServerId, 'subdir/\0/../../passwd');
+      nullByteBlocked = nullByteTraversal.startsWith(serverDir);
+    } catch {
+      nullByteBlocked = true;
+    }
+    assert(nullByteBlocked, 'safePath neutralizes null bytes');
 
     // -------------------------------------------------------------
     // TEST 2: File Creation and Listing

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getServerDir } from './provider';
+import { downloadAndInstallPlugin } from './services/pluginManagerService';
 
 export interface RealPluginItem {
   id: string;
@@ -18,7 +19,7 @@ export interface RealPluginItem {
   downloadUrl?: string;
 }
 
-const USER_AGENT = 'AetherPanel/2.5 (admin@aetherpanel.in)';
+const USER_AGENT = 'AetherPanel/3.5 (admin@aetherpanel.in)';
 
 export async function searchModrinthPlugins(query: string): Promise<RealPluginItem[]> {
   try {
@@ -51,7 +52,8 @@ export async function searchModrinthPlugins(query: string): Promise<RealPluginIt
         platform: 'Spigot / Paper',
         provider: 'Modrinth',
         projectUrl: `https://modrinth.com/${hit.project_type || 'mod'}/${hit.slug}`,
-        downloadUrl: hit.versions && hit.versions.length ? `https://api.modrinth.com/v2/project/${hit.project_id}/version` : undefined
+        // Leave downloadUrl undefined so downloadAndInstallPlugin resolves the actual CDN .jar rather than an API endpoint
+        downloadUrl: undefined
       };
     });
   } catch (err: any) {
@@ -107,62 +109,12 @@ export async function searchRealPlugins(query: string): Promise<RealPluginItem[]
   return [...modrinthHits, ...hangarHits];
 }
 
-export async function downloadPluginJar(serverId: string, pluginName: string, directUrl?: string, projectId?: string, provider?: string): Promise<{ success: boolean; filename: string; size: number }> {
-  const baseDir = getServerDir(serverId);
-  const pluginsDir = path.join(baseDir, 'plugins');
-  if (!fs.existsSync(pluginsDir)) {
-    fs.mkdirSync(pluginsDir, { recursive: true });
-  }
-
-  const cleanName = pluginName.replace(/[^a-zA-Z0-9_\-]/g, '');
-  const jarFilename = `${cleanName}.jar`;
-  const targetPath = path.join(pluginsDir, jarFilename);
-
-  let targetDownloadUrl = directUrl;
-
-  // Resolve download URL from Modrinth API if only projectId provided
-  if (!targetDownloadUrl && projectId && provider === 'Modrinth') {
-    try {
-      const verRes = await fetch(`https://api.modrinth.com/v2/project/${projectId}/version`, {
-        headers: { 'User-Agent': USER_AGENT }
-      });
-      if (verRes.ok) {
-        const versions = await verRes.json() as any[];
-        if (versions && versions.length > 0 && versions[0].files && versions[0].files.length > 0) {
-          targetDownloadUrl = versions[0].files[0].url;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to resolve Modrinth download URL:', e);
-    }
-  }
-
-  if (!targetDownloadUrl) {
-    throw new Error('Unable to resolve download artifact URL from provider API.');
-  }
-
-  try {
-    const downloadRes = await fetch(targetDownloadUrl, {
-      headers: { 'User-Agent': USER_AGENT },
-      redirect: 'follow'
-    });
-
-    if (!downloadRes.ok) {
-      throw new Error(`Failed to download plugin artifact. HTTP ${downloadRes.status}`);
-    }
-
-    const arrayBuffer = await downloadRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    fs.writeFileSync(targetPath, buffer);
-
-    return {
-      success: true,
-      filename: jarFilename,
-      size: buffer.length
-    };
-  } catch (err: any) {
-    console.error(`Download plugin failed for ${pluginName}:`, err.message);
-    throw new Error(`Plugin download failed: ${err.message}`);
-  }
+export async function downloadPluginJar(
+  serverId: string,
+  pluginName: string,
+  directUrl?: string,
+  projectId?: string,
+  provider?: string
+): Promise<{ success: boolean; filename: string; size: number; message: string }> {
+  return await downloadAndInstallPlugin(serverId, pluginName, directUrl, projectId, provider);
 }

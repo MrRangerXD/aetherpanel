@@ -270,7 +270,10 @@ router.patch('/users/:id/allocation', async (req: AuthenticatedRequest, res: Res
 
   res.json({
     success: true,
-    data: adjResult.status,
+    data: {
+      ...adjResult.status,
+      serverLimit: adjResult.status?.limit
+    },
     message: 'Server allocation updated successfully.'
   });
 });
@@ -1220,14 +1223,14 @@ router.post('/servers/create', async (req: AuthenticatedRequest, res: Response) 
     entryFile: resolvedSoftware.toLowerCase().includes('python') ? 'main.py' : resolvedSoftware.toLowerCase().includes('bun') ? 'index.ts' : 'index.js'
   } : {};
 
-  const dummyServer: Partial<Server> = {
+  const tempServerContext: Partial<Server> = {
     software: resolvedSoftware,
     version: resolvedVersion,
     limits: serverLimits
   };
 
   if (category === 'bot') {
-    const cmdObj = buildBotStartupCommand(dummyServer, startupConfig);
+    const cmdObj = buildBotStartupCommand(tempServerContext, startupConfig);
     startupConfig.compiledCommand = cmdObj.compiledCommand;
   } else {
     startupConfig.compiledCommand = `java -Xms128M -Xmx${serverLimits.ramMB}M -jar server.jar nogui`;

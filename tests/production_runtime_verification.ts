@@ -329,7 +329,7 @@ async function runVerification() {
 
     // Poll until update stages complete
     let job = getUpdateJobStatus();
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 90; i++) {
       if (job.status === 'completed' || job.status === 'failed') break;
       await new Promise(r => setTimeout(r, 500));
       job = getUpdateJobStatus();

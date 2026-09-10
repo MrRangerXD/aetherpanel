@@ -164,7 +164,7 @@ export function canUserDeployServer(db: DatabaseSchema, user: User): {
     return {
       allowed: false,
       status,
-      errorCode: 'SERVER_ALLOCATION_LIMIT_REACHED',
+      errorCode: 'SERVER_LIMIT_REACHED',
       errorMessage: 'Your current plan supports only 1 server allocation.'
     };
   }

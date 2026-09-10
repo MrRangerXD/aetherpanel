@@ -359,6 +359,8 @@ function AppContent() {
                     onNavigate={handleNavigate}
                     onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
                     onRefreshServers={fetchServers}
+                    initialPlanId={pageParams?.planId}
+                    initialCategory={pageParams?.productCategory || pageParams?.category}
                   />
                 )}
                 {currentPage === 'server-manage' && (
@@ -404,7 +406,7 @@ function AppContent() {
           {/* Subtle Panel Footer for Customer & Admin Pages */}
           {!isPublicPage && (
             <footer className="py-3 px-6 border-t border-zinc-900/80 bg-zinc-950/60 text-[11px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8">
-              <span className="font-medium text-zinc-400">© 2025–2026 AetherPanel</span>
+              <span className="font-medium text-zinc-400">© 2025–2026 {brandName || 'AetherPanel'}</span>
               <span className="text-[10px] text-zinc-600 hidden sm:inline">Enterprise Distributed Control Plane</span>
             </footer>
           )}

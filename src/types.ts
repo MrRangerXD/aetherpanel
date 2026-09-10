@@ -816,6 +816,13 @@ export interface PluginItem {
   downloadUrl?: string;
   filename?: string;
   isEnabled?: boolean;
+  size?: number;
+  integrityStatus?: 'VALID' | 'CORRUPTED_JAR' | 'INVALID_JAR' | 'EMPTY_FILE' | 'PLUGIN_METADATA_MISSING';
+  integrityError?: string;
+  paperStatus?: 'LOADED' | 'FAILED_TO_LOAD' | 'NOT_STARTED' | 'DISABLED';
+  paperError?: string;
+  apiVersion?: string;
+  updatedAt?: string;
 }
 
 export interface HealthStatus {

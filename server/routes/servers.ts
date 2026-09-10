@@ -17,7 +17,7 @@ import {
   renameServerItem, moveServerItems, copyServerItems, compressServerItem, compressServerItems, decompressServerItem,
   readServerEnv, writeServerEnv, recordServerActivity,
   listMinecraftPlugins, toggleMinecraftPlugin, getServerDir, safePath,
-  installServerDependencies, clearConsoleBuffer
+  installServerDependencies, clearConsoleBuffer, getConsoleBuffer
 } from '../provider';
 import { closeServerConsoleClients, closeUserConsoleClient } from '../consoleWs';
 import {
@@ -59,7 +59,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const safeName = path.basename(file.originalname).replace(/[\/\\]/g, '_');
-    cb(null, safeName);
+    // Save to temporary file first so incomplete or corrupted uploads never write directly to destination
+    const tempPrefix = `.aetherpanel-upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-`;
+    cb(null, `${tempPrefix}${safeName}`);
   }
 });
 
@@ -669,7 +671,57 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
       return res.status(400).json({ success: false, error: { code: 'NO_FILES', message: 'No files provided.' } });
     }
 
-    const uploadedNames = files.map(f => f.originalname);
+    const relPath = ((req.query.path as string) || (req.body.path as string) || '').trim().replace(/^\/+/, '');
+    const isPluginsTarget = relPath === 'plugins' || relPath.startsWith('plugins/');
+
+    const uploadedNames: string[] = [];
+
+    for (const f of files) {
+      const originalClean = path.basename(f.originalname).replace(/[\/\\]/g, '_');
+      const tempPath = f.path;
+      const targetDir = path.dirname(tempPath);
+      const finalPath = path.join(targetDir, originalClean);
+
+      // If uploading to plugins/ or uploading a .jar file, validate JAR integrity
+      if (isPluginsTarget || originalClean.toLowerCase().endsWith('.jar')) {
+        const { validateJarIntegrity } = require('../services/pluginManagerService');
+        const validation = validateJarIntegrity(tempPath);
+
+        if (!validation.isValid) {
+          // Delete temporary file, do NOT leave corrupted file in plugins
+          try {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          } catch {}
+
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: validation.status || 'INVALID_JAR',
+              message: `Plugin JAR validation failed for '${originalClean}': ${validation.error || 'Invalid or corrupted JAR archive'}`
+            }
+          });
+        }
+      }
+
+      // Atomically move from temporary upload path to target final filename
+      try {
+        fs.renameSync(tempPath, finalPath);
+        uploadedNames.push(originalClean);
+      } catch (moveErr: any) {
+        try {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        } catch {}
+
+        return res.status(500).json({
+          success: false,
+          error: {
+            code: 'FILESYSTEM_WRITE_FAILED',
+            message: `Failed to promote file '${originalClean}': ${moveErr.message}`
+          }
+        });
+      }
+    }
+
     await recordServerActivity(
       req.params.id, req.user!.id, req.user!.username,
       'FILE_UPLOAD', `Uploaded files: ${uploadedNames.join(', ')}`
@@ -677,7 +729,9 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
 
     res.json({
       success: true,
-      message: `Uploaded ${files.length} file(s) successfully.`,
+      message: isPluginsTarget
+        ? `Uploaded and verified ${uploadedNames.length} plugin(s) successfully. Restart the server to load them.`
+        : `Uploaded ${uploadedNames.length} file(s) successfully.`,
       data: { filenames: uploadedNames }
     });
   });
@@ -850,11 +904,41 @@ router.post('/:id/plugins/install', authMiddleware, async (req: AuthenticatedReq
 
     res.json({
       success: true,
-      message: `Plugin '${name}' installed successfully to plugins/${result.filename}`,
+      message: result.message || `Plugin '${name}' installed successfully (✓ Valid JAR). Restart the server to load it.`,
       data: result
     });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'INSTALL_FAILED', message: err.message } });
+    const code = err.code || (err.message?.includes('END header') ? 'CORRUPTED_JAR' : 'INSTALL_FAILED');
+    res.status(400).json({ success: false, error: { code, message: err.message } });
+  }
+});
+
+// POST /api/v1/servers/:id/plugins/validate - Validate an existing plugin JAR
+router.post('/:id/plugins/validate', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'plugins.manage');
+  if (!access) return;
+
+  const { filename } = req.body;
+  if (!filename) return res.status(400).json({ success: false, error: { code: 'FILENAME_REQUIRED', message: 'Filename required.' } });
+
+  try {
+    const cleanFilename = path.basename(filename);
+    const targetPath = safePath(req.params.id, path.join('plugins', cleanFilename));
+    const { validateJarIntegrity, checkPluginPaperStatus } = require('../services/pluginManagerService');
+    const validation = validateJarIntegrity(targetPath);
+    const logs = getConsoleBuffer(req.params.id, true);
+    const paperStatus = checkPluginPaperStatus(req.params.id, validation.metadata?.name || cleanFilename, cleanFilename, logs);
+
+    res.json({
+      success: true,
+      data: {
+        filename: cleanFilename,
+        ...validation,
+        ...paperStatus
+      }
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_FAILED', message: err.message } });
   }
 });
 
@@ -881,14 +965,23 @@ router.delete('/:id/plugins/:filename', authMiddleware, async (req: Authenticate
   if (!access) return;
 
   const { filename } = req.params;
-  const baseDir = getServerDir(req.params.id);
-  const targetPath = path.join(baseDir, 'plugins', filename);
+  try {
+    const cleanFilename = path.basename(filename);
+    const targetPath = safePath(req.params.id, path.join('plugins', cleanFilename));
 
-  if (targetPath.startsWith(baseDir) && fs.existsSync(targetPath)) {
-    fs.unlinkSync(targetPath);
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
+
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'PLUGIN_DELETE', `Deleted plugin ${cleanFilename}`
+    );
+
+    res.json({ success: true, message: `Plugin file ${cleanFilename} deleted.` });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { code: 'DELETE_FAILED', message: err.message } });
   }
-
-  res.json({ success: true, message: 'Plugin file deleted.' });
 });
 
 // --- ENVIRONMENT VARIABLES (BOT HOSTING) ---

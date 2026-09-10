@@ -54,7 +54,7 @@ export function clearConsoleBuffer(serverId: string) {
   delete consoleBuffers[serverId];
 }
 
-function getConsoleBuffer(serverId: string, isRunning: boolean = false): string[] {
+export function getConsoleBuffer(serverId: string, isRunning: boolean = false): string[] {
   if (!consoleBuffers[serverId]) {
     if (!isRunning) {
       consoleBuffers[serverId] = [
@@ -1733,42 +1733,56 @@ export interface MinecraftPluginInfo {
   size: number;
   isEnabled: boolean;
   updatedAt: string;
+  integrityStatus?: 'VALID' | 'CORRUPTED_JAR' | 'INVALID_JAR' | 'EMPTY_FILE' | 'PLUGIN_METADATA_MISSING';
+  integrityError?: string;
+  paperStatus?: 'LOADED' | 'FAILED_TO_LOAD' | 'NOT_STARTED' | 'DISABLED';
+  paperError?: string;
+  metadata?: any;
 }
 
 export function listMinecraftPlugins(serverId: string): MinecraftPluginInfo[] {
-  const baseDir = getServerDir(serverId);
-  const pluginsDir = path.join(baseDir, 'plugins');
+  // Delegate to pluginManagerService with active console buffer
+  try {
+    const { listMinecraftPluginsWithIntegrity } = require('./services/pluginManagerService');
+    const logs = getConsoleBuffer(serverId, true);
+    return listMinecraftPluginsWithIntegrity(serverId, logs);
+  } catch (err: any) {
+    const baseDir = getServerDir(serverId);
+    const pluginsDir = path.join(baseDir, 'plugins');
 
-  if (!fs.existsSync(pluginsDir)) {
-    fs.mkdirSync(pluginsDir, { recursive: true });
-  }
-
-  const files = fs.readdirSync(pluginsDir);
-  const list: MinecraftPluginInfo[] = [];
-
-  for (const f of files) {
-    if (f.endsWith('.jar') || f.endsWith('.jar.disabled')) {
-      const fullPath = path.join(pluginsDir, f);
-      let stat = { size: 0, mtime: new Date() };
-      try {
-        stat = fs.statSync(fullPath);
-      } catch (e) {}
-
-      const isEnabled = !f.endsWith('.disabled');
-      const cleanName = f.replace(/\.jar(\.disabled)?$/, '');
-
-      list.push({
-        filename: f,
-        name: cleanName,
-        version: '1.0.0',
-        size: stat.size,
-        isEnabled,
-        updatedAt: stat.mtime.toISOString()
-      });
+    if (!fs.existsSync(pluginsDir)) {
+      fs.mkdirSync(pluginsDir, { recursive: true });
     }
-  }
 
-  return list;
+    const files = fs.readdirSync(pluginsDir);
+    const list: MinecraftPluginInfo[] = [];
+
+    for (const f of files) {
+      if (f.startsWith('.') || f.endsWith('.tmp')) continue;
+      if (f.endsWith('.jar') || f.endsWith('.jar.disabled')) {
+        const fullPath = path.join(pluginsDir, f);
+        let stat = { size: 0, mtime: new Date() };
+        try {
+          stat = fs.statSync(fullPath);
+        } catch (e) {}
+
+        const isEnabled = !f.endsWith('.disabled');
+        const cleanName = f.replace(/\.jar(\.disabled)?$/, '');
+
+        list.push({
+          filename: f,
+          name: cleanName,
+          version: '1.0.0',
+          size: stat.size,
+          isEnabled,
+          updatedAt: stat.mtime.toISOString(),
+          integrityStatus: 'VALID'
+        });
+      }
+    }
+
+    return list;
+  }
 }
 
 export function toggleMinecraftPlugin(serverId: string, filename: string): boolean {

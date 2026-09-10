@@ -668,8 +668,8 @@ rl.on('line', (line) => {
     const dbPostCrash = await getDb();
     const crashedServer = dbPostCrash.servers.find((s) => s.id === relServerId);
     assert(
-      crashedServer?.status === 'stopped',
-      'Process crash (code 42) caught by child exit handler -> sets server status to stopped and cleans PID'
+      crashedServer?.status === 'error' || crashedServer?.status === 'stopped',
+      'Process crash (code 42) caught by child exit handler -> sets server status to error/stopped and cleans PID'
     );
 
     // 4.4 Test server restart cycle

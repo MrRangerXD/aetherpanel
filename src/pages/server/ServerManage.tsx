@@ -100,6 +100,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const [installingPluginId, setInstallingPluginId] = useState<string | null>(null);
   const [installProgressStep, setInstallProgressStep] = useState<string | null>(null);
   const [isUploadingPlugin, setIsUploadingPlugin] = useState(false);
+  const [pluginNotice, setPluginNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Environment state (.env)
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string; isSecret?: boolean; isEnabled?: boolean; description?: string }>>([]);
@@ -481,10 +482,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   const handleInstallPlugin = async (item: PluginItem) => {
     setInstallingPluginId(item.id);
-    setInstallProgressStep('Contacting repository & resolving download URL...');
+    setInstallProgressStep(`Resolving download artifact for ${item.name}...`);
+    setPluginNotice(null);
 
     try {
-      setInstallProgressStep(`Downloading ${item.name} .jar package from ${item.provider || 'provider'}...`);
+      setInstallProgressStep(`Streaming & downloading ${item.name} from ${item.provider || 'repository'}...`);
       const res = await apiRequest(`/servers/${serverId}/plugins/install`, {
         method: 'POST',
         body: JSON.stringify({
@@ -496,21 +498,31 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       });
 
       if (res.success) {
-        setInstallProgressStep('Writing plugin .jar to server plugins/ directory...');
+        setInstallProgressStep('Validating JAR integrity & atomic promotion...');
+        setPluginNotice({
+          type: 'success',
+          message: res.message || `Plugin '${item.name}' installed successfully (✓ Valid JAR). Restart the server to load it.`
+        });
         setTimeout(() => {
           fetchPlugins();
           setPluginTab('installed');
           setInstallingPluginId(null);
           setInstallProgressStep(null);
           setSelectedPluginDetails(null);
-        }, 600);
+        }, 500);
       } else {
-        alert(res.error?.message || 'Plugin installation failed.');
+        setPluginNotice({
+          type: 'error',
+          message: `Installation Failed: ${res.error?.message || 'Invalid or corrupted JAR.'}`
+        });
         setInstallingPluginId(null);
         setInstallProgressStep(null);
       }
     } catch (err: any) {
-      alert(err.message || 'Installation failed.');
+      setPluginNotice({
+        type: 'error',
+        message: `Installation Failed: ${err.message || 'Download failed.'}`
+      });
       setInstallingPluginId(null);
       setInstallProgressStep(null);
     }
@@ -521,6 +533,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     if (!files || files.length === 0) return;
 
     setIsUploadingPlugin(true);
+    setPluginNotice(null);
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
       formData.append('files', files[i]);
@@ -535,13 +548,23 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       });
       const res = await response.json();
       if (res.success) {
+        setPluginNotice({
+          type: 'success',
+          message: res.message || 'Plugin uploaded and verified successfully (✓ Valid JAR). Restart the server to load it.'
+        });
         fetchPlugins();
         setPluginTab('installed');
       } else {
-        alert(res.error?.message || 'Failed to upload plugin file.');
+        setPluginNotice({
+          type: 'error',
+          message: `Upload Failed: ${res.error?.message || 'Invalid or corrupted plugin JAR.'}`
+        });
       }
     } catch (err: any) {
-      alert(err.message || 'Error uploading plugin file.');
+      setPluginNotice({
+        type: 'error',
+        message: `Upload Failed: ${err.message || 'Error uploading plugin file.'}`
+      });
     } finally {
       setIsUploadingPlugin(false);
       e.target.value = '';
@@ -1584,6 +1607,30 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             )}
           </div>
 
+          {pluginNotice && (
+            <div className={`p-3.5 rounded-xl border flex items-start justify-between gap-3 text-xs ${
+              pluginNotice.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                {pluginNotice.type === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
+                )}
+                <span className="font-medium">{pluginNotice.message}</span>
+              </div>
+              <button
+                onClick={() => setPluginNotice(null)}
+                className="text-zinc-400 hover:text-white text-xs px-1"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {pluginTab === 'installed' ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
@@ -1591,8 +1638,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
                     <tr>
                       <th className="p-3">Plugin Name</th>
-                      <th className="p-3">File</th>
-                      <th className="p-3">Status</th>
+                      <th className="p-3">File & Size</th>
+                      <th className="p-3">Integrity & Status</th>
                       <th className="p-3 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1608,17 +1655,70 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                     ) : (
                       installedPlugins.map((plug, idx) => (
                         <tr key={idx} className="hover:bg-zinc-900 transition-colors">
-                          <td className="p-3 font-bold text-white flex items-center gap-2">
-                            <Box className="h-4 w-4 text-violet-400" />
-                            <span>{plug.name}</span>
+                          <td className="p-3 font-bold text-white">
+                            <div className="flex items-center gap-2.5">
+                              <Box className={`h-4 w-4 shrink-0 ${plug.integrityStatus && plug.integrityStatus !== 'VALID' ? 'text-rose-400' : 'text-violet-400'}`} />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span>{plug.name}</span>
+                                  {plug.version && plug.version !== 'Corrupted' && (
+                                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700/50">v{plug.version}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </td>
-                          <td className="p-3 font-mono text-zinc-400 text-[11px]">{plug.filename}</td>
+                          <td className="p-3 font-mono text-zinc-400 text-[11px]">
+                            <div>{plug.filename}</div>
+                            {plug.size !== undefined && plug.size > 0 && (
+                              <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{(plug.size / 1024).toFixed(1)} KB</div>
+                            )}
+                          </td>
                           <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                              plug.isEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            }`}>
-                              {plug.isEnabled ? 'Enabled' : 'Disabled'}
-                            </span>
+                            {plug.integrityStatus && plug.integrityStatus !== 'VALID' ? (
+                              <div className="space-y-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-rose-500/10 text-rose-400 border-rose-500/20 inline-flex items-center gap-1">
+                                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                                  Corrupted JAR
+                                </span>
+                                <p className="text-[10px] text-rose-400 font-mono max-w-xs truncate" title={plug.integrityError}>
+                                  {plug.integrityError || 'zip END header not found'}
+                                </p>
+                              </div>
+                            ) : plug.paperStatus === 'FAILED_TO_LOAD' ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 text-amber-400 border-amber-500/20 inline-flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                    Paper failed to load plugin
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 font-mono border border-zinc-700">
+                                    ✓ Valid JAR
+                                  </span>
+                                </div>
+                                {plug.paperError && (
+                                  <p className="text-[10px] text-amber-400 font-mono max-w-xs truncate" title={plug.paperError}>
+                                    {plug.paperError}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                    plug.isEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                                  }`}>
+                                    {plug.isEnabled ? 'Installed' : 'Disabled'}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 font-mono border border-emerald-500/20">
+                                    ✓ Valid JAR
+                                  </span>
+                                </div>
+                                {plug.paperStatus === 'LOADED' && (
+                                  <p className="text-[10px] text-emerald-400 font-mono">Paper: Active</p>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-2">
