@@ -11,7 +11,7 @@ import {
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
   AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage,
-  ServerType, ServerTypeTheme, ServerSubuser
+  ServerType, ServerTypeTheme, ServerSubuser, CryptoInvoice
 } from '../src/types';
 import { migrateUserAllocations } from './services/allocationService';
 
@@ -62,6 +62,7 @@ export interface DatabaseSchema {
   webhooks: WebhookSubscription[];
   legalPages: LegalPage[];
   subusers: ServerSubuser[];
+  cryptoInvoices?: CryptoInvoice[];
 }
 
 
@@ -112,10 +113,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Gamepad2',
     runtime: 'minecraft',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.19.4', '1.18.2'],
-    defaultVersion: '26.2',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5', '1.12.2', '1.8.8'],
+    defaultVersion: '1.21.4',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar server.jar nogui',
-    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '26.2', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '1.21.4', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 2048,
     recommendedCpuCores: 1,
@@ -133,10 +134,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Zap',
     runtime: 'minecraft',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.19.4'],
-    defaultVersion: '26.2',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
+    defaultVersion: '1.21.4',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -XX:+UseG1GC -jar purpur.jar nogui',
-    environmentVars: { EULA: 'true', PURPUR_VERSION: '26.2', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', PURPUR_VERSION: '1.21.4', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 4096,
     recommendedCpuCores: 2,
@@ -154,10 +155,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Box',
     runtime: 'minecraft',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.1', '1.19.4'],
-    defaultVersion: '26.2',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5', '1.12.2', '1.8.9'],
+    defaultVersion: '1.21.4',
     startupCommand: 'java -Xms512M -Xmx{RAM_MB}M -jar server.jar nogui',
-    environmentVars: { EULA: 'true', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', MINECRAFT_VERSION: '1.21.4', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 2048,
     recommendedCpuCores: 1,
@@ -175,10 +176,10 @@ const defaultTemplates: ServerTemplate[] = [
     category: 'minecraft',
     icon: 'Cpu',
     runtime: 'minecraft',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.1', '1.19.4'],
-    defaultVersion: '26.2',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
+    defaultVersion: '1.21.4',
     startupCommand: 'java -Xms1024M -Xmx{RAM_MB}M -jar fabric-server-launch.jar nogui',
-    environmentVars: { EULA: 'true', FABRIC_VERSION: '0.15.7', SERVER_PORT: '{PORT}' },
+    environmentVars: { EULA: 'true', FABRIC_VERSION: '0.16.9', MINECRAFT_VERSION: '1.21.4', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
     recommendedRamMB: 4096,
     recommendedCpuCores: 2,
@@ -190,14 +191,35 @@ const defaultTemplates: ServerTemplate[] = [
     updatedAt: new Date().toISOString()
   },
   {
+    id: 'tpl_mc_neoforge',
+    name: 'NeoForge Modded Server',
+    description: 'Modern, high-performance community fork of Forge for modern 1.20.4 - 1.21.x mods.',
+    category: 'minecraft',
+    icon: 'Layers',
+    runtime: 'minecraft',
+    versions: ['1.21.4', '1.21.1', '1.20.6', '1.20.4'],
+    defaultVersion: '1.21.4',
+    startupCommand: 'java -Xms2048M -Xmx{RAM_MB}M @user_jvm_args.txt nogui',
+    environmentVars: { EULA: 'true', NEOFORGE_VERSION: '21.4.0', MINECRAFT_VERSION: '1.21.4', SERVER_PORT: '{PORT}' },
+    defaultPort: 25565,
+    recommendedRamMB: 6144,
+    recommendedCpuCores: 4,
+    recommendedDiskGB: 35,
+    status: 'active',
+    isPopular: true,
+    sortOrder: 5,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
     id: 'tpl_mc_forge',
     name: 'Forge Modded Server',
     description: 'Standard modding engine supporting heavy modpacks, Pixelmon, and custom launchers.',
     category: 'minecraft',
     icon: 'Hammer',
     runtime: 'minecraft',
-    versions: ['26.2', '1.20.4', '1.20.1', '1.19.2', '1.16.5'],
-    defaultVersion: '26.2',
+    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'],
+    defaultVersion: '1.20.4',
     startupCommand: 'java -Xms2048M -Xmx{RAM_MB}M @user_jvm_args.txt @libraries/net/minecraftforge/forge/forge-args.txt nogui',
     environmentVars: { EULA: 'true', FORGE_VERSION: '47.2.0', SERVER_PORT: '{PORT}' },
     defaultPort: 25565,
@@ -206,43 +228,22 @@ const defaultTemplates: ServerTemplate[] = [
     recommendedDiskGB: 40,
     status: 'active',
     isPopular: true,
-    sortOrder: 5,
+    sortOrder: 6,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
   {
     id: 'tpl_bot_python',
     name: 'Python Bot Engine',
-    description: 'Preconfigured Python 3.11 environment with pip, virtualenv, and Discord.py/Telethon libraries.',
+    description: 'Modern Python 3.12+ environment with pip, virtualenv, and Discord.py/Pycord/Telethon libraries.',
     category: 'bot',
     icon: 'Terminal',
     runtime: 'python',
-    versions: ['Python 3.11', 'Python 3.10', 'Python 3.9'],
-    defaultVersion: 'Python 3.11',
+    versions: ['Python 3.12 (Latest)', 'Python 3.13 (Preview)', 'Python 3.11 (Stable)', 'Python 3.10', 'Python 3.9'],
+    defaultVersion: 'Python 3.12 (Latest)',
     startupCommand: 'python3 main.py',
-    environmentVars: { PYTHONUNBUFFERED: '1', BOT_ENV: 'production' },
+    environmentVars: { PYTHONUNBUFFERED: '1', BOT_ENV: 'production', RUNTIME_VERSION: 'Python 3.12 (Latest)' },
     defaultPort: 8000,
-    recommendedRamMB: 1024,
-    recommendedCpuCores: 1,
-    recommendedDiskGB: 5,
-    status: 'active',
-    isPopular: true,
-    sortOrder: 6,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'tpl_bot_nodejs',
-    name: 'Node.js Application / Bot',
-    description: 'High-speed V8 JavaScript runtime supporting ES Modules, TypeScript, and PM2 process watchdog.',
-    category: 'bot',
-    icon: 'Bot',
-    runtime: 'nodejs',
-    versions: ['Node 20', 'Node 18', 'Node 16'],
-    defaultVersion: 'Node 20',
-    startupCommand: 'node index.js',
-    environmentVars: { NODE_ENV: 'production', PORT: '{PORT}' },
-    defaultPort: 8080,
     recommendedRamMB: 1024,
     recommendedCpuCores: 1,
     recommendedDiskGB: 5,
@@ -253,16 +254,16 @@ const defaultTemplates: ServerTemplate[] = [
     updatedAt: new Date().toISOString()
   },
   {
-    id: 'tpl_bot_discordjs',
-    name: 'Discord.js v14 Ready Bot',
-    description: 'Optimized Discord bot template preinstalled with discord.js v14 and Slash Commands framework.',
+    id: 'tpl_bot_nodejs',
+    name: 'Node.js Application / Bot',
+    description: 'High-speed V8 JavaScript runtime supporting ES Modules, TypeScript, and PM2 process watchdog.',
     category: 'bot',
-    icon: 'MessageSquare',
+    icon: 'Bot',
     runtime: 'nodejs',
-    versions: ['Node 20', 'Node 18'],
-    defaultVersion: 'Node 20',
-    startupCommand: 'npm start',
-    environmentVars: { DISCORD_TOKEN: '', CLIENT_ID: '', NODE_ENV: 'production' },
+    versions: ['Node 22 (LTS)', 'Node 20 (LTS)', 'Node 23 (Current)', 'Node 18 (LTS)', 'Node 16 (Legacy)'],
+    defaultVersion: 'Node 22 (LTS)',
+    startupCommand: 'node index.js',
+    environmentVars: { NODE_ENV: 'production', PORT: '{PORT}', RUNTIME_VERSION: 'Node 22 (LTS)' },
     defaultPort: 8080,
     recommendedRamMB: 1024,
     recommendedCpuCores: 1,
@@ -270,6 +271,48 @@ const defaultTemplates: ServerTemplate[] = [
     status: 'active',
     isPopular: true,
     sortOrder: 8,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'tpl_bot_bun',
+    name: 'Bun Ultra-Fast Bot',
+    description: 'Ultra-fast all-in-one JavaScript & TypeScript runtime, bundler and native package manager.',
+    category: 'bot',
+    icon: 'Zap',
+    runtime: 'bun',
+    versions: ['Bun 1.2 (Latest)', 'Bun 1.1', 'Bun 1.0'],
+    defaultVersion: 'Bun 1.2 (Latest)',
+    startupCommand: 'bun run index.ts',
+    environmentVars: { NODE_ENV: 'production', PORT: '{PORT}', RUNTIME_VERSION: 'Bun 1.2 (Latest)' },
+    defaultPort: 8080,
+    recommendedRamMB: 1024,
+    recommendedCpuCores: 1,
+    recommendedDiskGB: 5,
+    status: 'active',
+    isPopular: true,
+    sortOrder: 9,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'tpl_bot_discordjs',
+    name: 'Discord.js v14 Ready Bot',
+    description: 'Optimized Discord bot template preinstalled with discord.js v14 and Slash Commands framework.',
+    category: 'bot',
+    icon: 'MessageSquare',
+    runtime: 'nodejs',
+    versions: ['Node 22 (LTS)', 'Node 20 (LTS)', 'Node 18 (LTS)'],
+    defaultVersion: 'Node 22 (LTS)',
+    startupCommand: 'npm start',
+    environmentVars: { DISCORD_TOKEN: '', CLIENT_ID: '', NODE_ENV: 'production', RUNTIME_VERSION: 'Node 22 (LTS)' },
+    defaultPort: 8080,
+    recommendedRamMB: 1024,
+    recommendedCpuCores: 1,
+    recommendedDiskGB: 5,
+    status: 'active',
+    isPopular: true,
+    sortOrder: 10,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }
@@ -885,6 +928,23 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         }
         if (!dbCache.templates || dbCache.templates.length === 0) {
           dbCache.templates = defaultTemplates;
+        } else {
+          // Update any legacy template versions and add missing modern templates
+          for (const def of defaultTemplates) {
+            const existing = dbCache.templates.find(t => t.id === def.id);
+            if (!existing) {
+              dbCache.templates.push(def);
+            } else {
+              existing.versions = def.versions;
+              if (existing.defaultVersion === '26.2') {
+                existing.defaultVersion = def.defaultVersion;
+              }
+              if (existing.environmentVars) {
+                if (existing.environmentVars.MINECRAFT_VERSION === '26.2') existing.environmentVars.MINECRAFT_VERSION = '1.21.4';
+                if (existing.environmentVars.PURPUR_VERSION === '26.2') existing.environmentVars.PURPUR_VERSION = '1.21.4';
+              }
+            }
+          }
         }
         if (!dbCache.serverTypes || dbCache.serverTypes.length === 0) {
           dbCache.serverTypes = defaultServerTypes;

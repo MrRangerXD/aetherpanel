@@ -138,7 +138,7 @@ export interface ServerTemplate {
   description: string;
   category: 'minecraft' | 'bot' | 'other';
   icon: string;
-  runtime: 'minecraft' | 'python' | 'nodejs';
+  runtime: 'minecraft' | 'python' | 'nodejs' | 'bun';
   versions: string[];
   defaultVersion: string;
   startupCommand: string;
@@ -197,6 +197,7 @@ export interface ServerStartupConfig {
   lastStartedAt?: string;
   lastStoppedAt?: string;
   pid?: number;
+  variables?: Record<string, string>;
 
   // Minecraft Runtime
   javaVersion?: string | number;
@@ -219,6 +220,8 @@ export interface ServerStartupConfig {
   pythonVersion?: string;
   pythonUnbuffered?: boolean;
   pythonExecutable?: string;
+  autoBackup?: boolean;
+  lastAutoBackupAt?: string;
 }
 
 export interface ServerEnvVar {
@@ -1279,4 +1282,62 @@ export interface ApiAuditLog {
   statusCode: number;
   ipAddress: string;
   createdAt: string;
+}
+
+export interface UiRenderErrorLog {
+  id: string;
+  errorName: string;
+  errorMessage: string;
+  componentName?: string;
+  componentStack?: string;
+  stack?: string;
+  url: string;
+  pathname?: string;
+  timestamp: string;
+  userAgent?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  userId?: string;
+  userRole?: string;
+  severity?: 'warning' | 'error' | 'fatal';
+  resolved?: boolean;
+}
+
+export interface CryptoInvoice {
+  id: string;
+  userId: string;
+  userEmail: string;
+  amountUsd: number;
+  cryptoCoin: 'LTC' | 'USDT' | 'BTC' | 'ETH' | 'SOL';
+  cryptoAmount: number;
+  payAddress: string;
+  qrCodeUrl: string;
+  status: 'pending' | 'detected' | 'confirming' | 'paid' | 'expired';
+  confirmations: number;
+  requiredConfirmations: number;
+  purpose: 'deposit' | 'server_deploy';
+  txHash?: string;
+  serverPayload?: {
+    name: string;
+    planId: string;
+    software?: string;
+    version?: string;
+    location?: string;
+    nodeId?: string;
+    templateId?: string;
+    billingCycle?: 'monthly' | 'yearly';
+    couponCode?: string;
+  };
+  createdServerId?: string;
+  createdOrder?: Order;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UiDiagnosticStats {
+  totalCount: number;
+  unresolvedCount: number;
+  lastIncidentAt: string | null;
+  affectedComponents: string[];
 }

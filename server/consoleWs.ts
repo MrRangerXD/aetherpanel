@@ -41,13 +41,17 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     const parsed = parseUrl(req.url || '', true);
     const pathname = parsed.pathname || '';
 
-    // Match /ws/console/:serverId or /api/v1/servers/:serverId/ws-console with optional trailing slash
+    // Match /ws/console?serverId=... or /ws/console/:serverId or /api/v1/servers/:serverId/ws-console
+    let serverId = '';
     const match = pathname.match(/^\/(?:api\/v1\/servers\/([a-zA-Z0-9_-]+)\/ws-console|ws\/console\/([a-zA-Z0-9_-]+))\/?$/);
-    if (!match) {
+    if (match) {
+      serverId = match[1] || match[2];
+    } else if ((pathname === '/ws/console' || pathname === '/ws/console/') && parsed.query.serverId) {
+      serverId = String(parsed.query.serverId).trim();
+    } else {
       return; // Handled by standard express / vite / other upgrade listeners
     }
 
-    const serverId = match[1] || match[2];
     let token = (parsed.query.token as string) || '';
 
     if (!token && req.headers['authorization']) {

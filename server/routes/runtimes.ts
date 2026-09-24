@@ -8,58 +8,48 @@ const RUNTIMES_DATA = {
     name: 'Node.js',
     category: 'bot',
     description: 'Modern JavaScript/TypeScript runtime with ES modules & npm/pnpm support.',
-    defaultVersion: '20.x',
-    versions: ['24.x', '22.x', '20.x', '18.x', 'Latest Stable']
+    defaultVersion: 'Node 22 (LTS)',
+    versions: ['Node 22 (LTS)', 'Node 20 (LTS)', 'Node 23 (Current)', 'Node 18 (LTS)', 'Node 16 (Legacy)']
   },
   python: {
     name: 'Python',
     category: 'bot',
     description: 'High-performance Python runtime for Discord.py, Pycord, and automation scripts.',
-    defaultVersion: '3.11.x',
-    versions: ['3.14.x', '3.13.x', '3.12.x', '3.11.x', '3.10.x', 'Latest Stable']
+    defaultVersion: 'Python 3.12 (Latest)',
+    versions: ['Python 3.12 (Latest)', 'Python 3.13 (Preview)', 'Python 3.11 (Stable)', 'Python 3.10', 'Python 3.9']
   },
   bun: {
     name: 'Bun',
     category: 'bot',
     description: 'Ultra-fast all-in-one JavaScript runtime & package manager.',
-    defaultVersion: '1.1.x',
-    versions: ['1.2.x', '1.1.x', '1.0.x', 'Latest Stable']
+    defaultVersion: 'Bun 1.2 (Latest)',
+    versions: ['Bun 1.2 (Latest)', 'Bun 1.1', 'Bun 1.0']
   }
 };
 
 export function normalizeRuntimeVersion(software: string, version: string): string {
   if (!version) {
-    if (/python/i.test(software)) return '3.11.x';
-    if (/bun/i.test(software)) return '1.1.x';
-    return '20.x';
+    if (/python/i.test(software)) return 'Python 3.12 (Latest)';
+    if (/bun/i.test(software)) return 'Bun 1.2 (Latest)';
+    return 'Node 22 (LTS)';
   }
   const clean = version.trim();
   if (/latest/i.test(clean)) return 'Latest Stable';
 
-  const sw = software.toLowerCase();
-  if (/python/i.test(sw)) {
-    const match = clean.match(/3\.(\d+)/);
-    if (match) return `3.${match[1]}.x`;
-  } else if (/bun/i.test(sw)) {
-    const match = clean.match(/1\.(\d+)/);
-    if (match) return `1.${match[1]}.x`;
-  } else {
-    const match = clean.match(/(18|20|22|24)/);
-    if (match) return `${match[1]}.x`;
-  }
   return clean;
 }
 
 export function isValidRuntimeVersion(software: string, version: string): boolean {
+  if (!version) return true;
   const sw = software.toLowerCase();
   let key = 'nodejs';
   if (/python/i.test(sw)) key = 'python';
   else if (/bun/i.test(sw)) key = 'bun';
   
   const runtime = (RUNTIMES_DATA as any)[key];
-  if (!runtime) return false;
-  const normalized = normalizeRuntimeVersion(software, version);
-  return runtime.versions.some((v: string) => v.toLowerCase() === normalized.toLowerCase()) || normalized === 'Latest Stable';
+  if (!runtime) return true;
+  const clean = version.trim().toLowerCase();
+  return runtime.versions.some((v: string) => v.toLowerCase() === clean || v.toLowerCase().includes(clean) || clean.includes(v.toLowerCase())) || clean.includes('latest') || /^(node|python|bun|\d)/i.test(clean);
 }
 
 // GET /api/v1/runtimes

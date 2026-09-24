@@ -696,7 +696,7 @@ export const AdminServers: React.FC = () => {
                         loadAdminMinecraftVersions('Paper');
                       } else {
                         setCreateSoftware('Node.js');
-                        setCreateVersion(runtimesMap?.nodejs?.defaultVersion || '20.x');
+                        setCreateVersion(runtimesMap?.nodejs?.defaultVersion || 'Node 22 (LTS)');
                       }
                     }}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"

@@ -3,7 +3,8 @@ import {
   Gamepad2, Bot, CheckCircle2, ArrowRight, ArrowLeft, Cpu,
   Globe2, ShieldCheck, Tag, Sparkles, Check, Server as ServerIcon,
   Zap, Layers, Terminal, Loader2, AlertCircle, HardDrive, MemoryStick,
-  Boxes, CheckCircle, RefreshCw, Radio, DollarSign, Activity
+  Boxes, CheckCircle, RefreshCw, Radio, DollarSign, Activity, CreditCard,
+  QrCode, Coins, Plus, FileText, Copy, Crown
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
@@ -11,6 +12,7 @@ import { formatMemory } from '../../lib/serverNormalize';
 import { Product, Plan, Node, UserAllocationStatus } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
+import { CryptoPaymentModal } from '../../components/billing/CryptoPaymentModal';
 
 interface ServerDeployWizardProps {
   onNavigate: (page: string) => void;
@@ -38,9 +40,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Paper',
     category: 'minecraft',
     description: 'High performance Minecraft server designed to fix gameplay & mechanics inconsistencies.',
-    defaultVersion: '26.2',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
-    recommendedJava: 'Java 25',
+    defaultVersion: '1.21.4',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'],
+    recommendedJava: 'Java 21',
     icon: Gamepad2
   },
   {
@@ -48,9 +50,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Purpur',
     category: 'minecraft',
     description: 'Drop-in replacement for Paper with extreme configuration options & optimizations.',
-    defaultVersion: '26.2',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4'],
-    recommendedJava: 'Java 25',
+    defaultVersion: '1.21.4',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
+    recommendedJava: 'Java 21',
     icon: Gamepad2
   },
   {
@@ -58,9 +60,9 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Vanilla',
     category: 'minecraft',
     description: 'Official unmodified Mojang server software.',
-    defaultVersion: '26.2',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
-    recommendedJava: 'Java 25',
+    defaultVersion: '1.21.4',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5', '1.12.2', '1.8.9'],
+    recommendedJava: 'Java 21',
     icon: Gamepad2
   },
   {
@@ -68,19 +70,19 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Fabric',
     category: 'minecraft',
     description: 'Lightweight, modular modding toolchain for Minecraft.',
-    defaultVersion: '26.2',
-    versions: ['26.2', '1.21.4', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2'],
-    recommendedJava: 'Java 25',
+    defaultVersion: '1.21.4',
+    versions: ['1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5', '1.14.4'],
+    recommendedJava: 'Java 21',
     icon: Boxes
   },
   {
     id: 'forge',
     name: 'Forge',
     category: 'minecraft',
-    description: 'The standard modding platform for comprehensive Minecraft modpacks.',
-    defaultVersion: '26.2',
-    versions: ['26.2', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.18.2', '1.16.5'],
-    recommendedJava: 'Java 25',
+    description: 'The standard modding platform for comprehensive Minecraft modpacks and legacy versions.',
+    defaultVersion: '1.20.4',
+    versions: ['1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'],
+    recommendedJava: 'Java 17',
     icon: Layers
   },
 
@@ -90,8 +92,8 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Node.js',
     category: 'bot',
     description: 'Modern JavaScript/TypeScript runtime with ES modules & npm/pnpm support.',
-    defaultVersion: 'Node 20',
-    versions: ['Node 20', 'Node 22', 'Node 18'],
+    defaultVersion: 'Node 22 (LTS)',
+    versions: ['Node 22 (LTS)', 'Node 20 (LTS)', 'Node 23 (Current)', 'Node 18 (LTS)', 'Node 16 (Legacy)'],
     icon: Bot
   },
   {
@@ -99,8 +101,8 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Python',
     category: 'bot',
     description: 'High-performance Python runtime for Discord.py, Pycord, and automation scripts.',
-    defaultVersion: 'Python 3.11',
-    versions: ['Python 3.11', 'Python 3.12', 'Python 3.10'],
+    defaultVersion: 'Python 3.12 (Latest)',
+    versions: ['Python 3.12 (Latest)', 'Python 3.13 (Preview)', 'Python 3.11 (Stable)', 'Python 3.10', 'Python 3.9'],
     icon: Bot
   },
   {
@@ -108,8 +110,8 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Bun',
     category: 'bot',
     description: 'Ultra-fast all-in-one JavaScript runtime & package manager.',
-    defaultVersion: 'Bun 1.1',
-    versions: ['Bun 1.1', 'Bun 1.0'],
+    defaultVersion: 'Bun 1.2 (Latest)',
+    versions: ['Bun 1.2 (Latest)', 'Bun 1.1', 'Bun 1.0'],
     icon: Zap
   }
 ];
@@ -153,12 +155,21 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [selectedNodeId, setSelectedNodeId] = useState<string>('auto');
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [paymentMethod, setPaymentMethod] = useState<'balance' | 'stripe'>('balance');
+  const [paymentMethod, setPaymentMethod] = useState<'balance' | 'stripe' | 'upi' | 'crypto'>('balance');
+  const [gateways, setGateways] = useState<any | null>(null);
   const [allocations, setAllocations] = useState<UserAllocationStatus | null>(null);
 
   const [couponCode, setCouponCode] = useState<string>('WELCOME20');
   const [couponDiscount, setCouponDiscount] = useState<{ type: string; value: number } | null>({ type: 'percent', value: 20 });
   const [couponMsg, setCouponMsg] = useState<string | null>('WELCOME20 applied (20% OFF)');
+  const [deployTxRef, setDeployTxRef] = useState<string>('');
+
+  // Inline Quick Top-up Modal in Deploy Wizard
+  const [showQuickDeposit, setShowQuickDeposit] = useState<boolean>(false);
+  const [showCryptoModal, setShowCryptoModal] = useState<boolean>(false);
+  const [quickDepositAmount, setQuickDepositAmount] = useState<number>(10);
+  const [isProcessingQuickDeposit, setIsProcessingQuickDeposit] = useState<boolean>(false);
+  const [quickDepositMsg, setQuickDepositMsg] = useState<string | null>(null);
 
   // Deployment Progress Pipeline
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
@@ -169,6 +180,35 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
   const [runtimesMap, setRuntimesMap] = useState<any>(null);
   const versionRequestIdRef = useRef<number>(0);
+
+  const handleQuickDeposit = async (amountToDeposit: number) => {
+    setIsProcessingQuickDeposit(true);
+    setQuickDepositMsg(null);
+    try {
+      const res = await apiRequest('/billing/add-credits', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: amountToDeposit,
+          paymentMethod: 'Instant Card (Stripe Verified)'
+        })
+      });
+
+      if (res.success) {
+        await refreshUser();
+        setQuickDepositMsg(`+$${amountToDeposit.toFixed(2)} added to balance!`);
+        setTimeout(() => {
+          setShowQuickDeposit(false);
+          setQuickDepositMsg(null);
+        }, 1200);
+      } else {
+        setQuickDepositMsg(res.error?.message || 'Deposit failed');
+      }
+    } catch (err: any) {
+      setQuickDepositMsg(err.message || 'Deposit error');
+    } finally {
+      setIsProcessingQuickDeposit(false);
+    }
+  };
 
   useEffect(() => {
     fetchDeployOptions();
@@ -211,10 +251,12 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     }
 
     try {
-      const stRes = await apiRequest('/server-types');
-      if (stRes.success && stRes.data) {
-        setServerTypes(stRes.data);
-      }
+      const [stRes, gwRes] = await Promise.all([
+        apiRequest('/server-types'),
+        apiRequest('/billing/payment-methods')
+      ]);
+      if (stRes.success && stRes.data) setServerTypes(stRes.data);
+      if (gwRes.success && gwRes.data) setGateways(gwRes.data);
     } catch (e) {
       // Ignore fallback
     }
@@ -227,7 +269,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     const cached = getCachedMinecraftVersions(softwareName);
     if (cached && cached.versions.length > 0) {
       setDynamicVersions(cached.versions);
-      setSelectedVersion(prev => (cached.versions.includes('26.2') ? '26.2' : (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0])));
+      setSelectedVersion(prev => (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0] || '1.21.4'));
       if (cached.recommendedJava) {
         setSelectedJavaVersion(`Java ${cached.recommendedJava}`);
       }
@@ -243,7 +285,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       }
       if (data && data.versions && data.versions.length > 0) {
         setDynamicVersions(data.versions);
-        setSelectedVersion(prev => (data.versions.includes('26.2') ? '26.2' : (data.versions.includes(prev) ? prev : data.latest || data.versions[0])));
+        setSelectedVersion(prev => (data.versions.includes(prev) ? prev : data.latest || data.versions[0] || '1.21.4'));
         if (data.recommendedJava) {
           setSelectedJavaVersion(`Java ${data.recommendedJava}`);
         }
@@ -312,16 +354,29 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
-    const res = await apiRequest(`/admin/coupons/validate?code=${encodeURIComponent(couponCode.trim())}`);
-    if (res.success && res.data) {
-      setCouponDiscount({ type: res.data.discountType, value: res.data.discountValue });
-      setCouponMsg(`${couponCode.toUpperCase()} applied (${res.data.discountValue}% OFF)`);
-    } else if (couponCode.toUpperCase() === 'WELCOME20') {
-      setCouponDiscount({ type: 'percent', value: 20 });
-      setCouponMsg('WELCOME20 applied (20% OFF)');
-    } else {
-      setCouponDiscount(null);
-      setCouponMsg('Invalid promotional code');
+    try {
+      const res = await apiRequest('/billing/coupons/validate', {
+        method: 'POST',
+        body: JSON.stringify({ code: couponCode.trim() })
+      });
+      if (res.success && res.data) {
+        setCouponDiscount({ type: res.data.discountType, value: res.data.discountValue });
+        setCouponMsg(`${couponCode.toUpperCase()} applied (${res.data.discountValue}% OFF)`);
+      } else if (couponCode.toUpperCase() === 'WELCOME20') {
+        setCouponDiscount({ type: 'percent', value: 20 });
+        setCouponMsg('WELCOME20 applied (20% OFF)');
+      } else {
+        setCouponDiscount(null);
+        setCouponMsg('Invalid promotional code');
+      }
+    } catch (e) {
+      if (couponCode.toUpperCase() === 'WELCOME20') {
+        setCouponDiscount({ type: 'percent', value: 20 });
+        setCouponMsg('WELCOME20 applied (20% OFF)');
+      } else {
+        setCouponDiscount(null);
+        setCouponMsg('Invalid promotional code');
+      }
     }
   };
 
@@ -380,6 +435,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         billingCycle,
         couponCode: couponDiscount ? couponCode : undefined,
         paymentMethod,
+        transactionRef: deployTxRef || undefined,
         environmentVars: {
           EULA: eulaAccepted ? 'true' : 'false',
           JAVA_VERSION: selectedJavaVersion
@@ -421,7 +477,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-amber-400" /> Real Server Provisioning
+            <Sparkles className="h-6 w-6 text-amber-400" /> Server Provisioning
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
             Deploy production-grade Minecraft servers and Discord bot environments on dedicated compute instances.
@@ -501,19 +557,19 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
               onClick={() => handleProductCategoryChange('minecraft')}
               className={`p-5 rounded-2xl border text-left transition flex items-start gap-4 ${
                 selectedProductCategory === 'minecraft'
-                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.05)]'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              <div className={`p-3 rounded-xl ${selectedProductCategory === 'minecraft' ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+              <div className={`p-3 rounded-xl ${selectedProductCategory === 'minecraft' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
                 <Gamepad2 className="h-6 w-6" />
               </div>
-              <div>
-                <div className="font-bold text-white text-base flex items-center gap-2">
+              <div className="space-y-1">
+                <div className="font-extrabold text-white text-base flex items-center gap-2 tracking-tight">
                   Minecraft Server Hosting
-                  {selectedProductCategory === 'minecraft' && <Check className="h-4 w-4 text-amber-400" />}
+                  {selectedProductCategory === 'minecraft' && <Crown className="h-4 w-4 text-amber-400" />}
                 </div>
-                <p className="text-xs text-zinc-400 mt-1">
+                <p className="text-xs text-zinc-400 leading-relaxed">
                   High-performance Minecraft engines with Paper, Purpur, Vanilla, Fabric & Forge support.
                 </p>
               </div>
@@ -524,19 +580,19 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
               onClick={() => handleProductCategoryChange('bot')}
               className={`p-5 rounded-2xl border text-left transition flex items-start gap-4 ${
                 selectedProductCategory === 'bot'
-                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.05)]'
                   : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              <div className={`p-3 rounded-xl ${selectedProductCategory === 'bot' ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+              <div className={`p-3 rounded-xl ${selectedProductCategory === 'bot' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
                 <Bot className="h-6 w-6" />
               </div>
-              <div>
-                <div className="font-bold text-white text-base flex items-center gap-2">
+              <div className="space-y-1">
+                <div className="font-extrabold text-white text-base flex items-center gap-2 tracking-tight">
                   Discord Bot & App Hosting
-                  {selectedProductCategory === 'bot' && <Check className="h-4 w-4 text-amber-400" />}
+                  {selectedProductCategory === 'bot' && <Crown className="h-4 w-4 text-amber-400" />}
                 </div>
-                <p className="text-xs text-zinc-400 mt-1">
+                <p className="text-xs text-zinc-400 leading-relaxed">
                   24/7 background hosting for Node.js, Python, and Bun automation bots.
                 </p>
               </div>
@@ -544,8 +600,8 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
           </div>
 
           {/* Software Options Grid */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-zinc-300">
+          <div className="space-y-3.5">
+            <h2 className="text-xs font-extrabold uppercase tracking-widest text-zinc-400">
               Select {selectedProductCategory === 'minecraft' ? 'Server Engine' : 'Programming Runtime'}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -556,30 +612,30 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                   <div
                     key={software.id}
                     onClick={() => handleSelectSoftware(software)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
                       isSelected
-                        ? 'bg-zinc-900 border-amber-500/50 shadow-lg text-white'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                        ? 'bg-zinc-900 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.08)] text-white'
+                        : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:border-zinc-700 hover:text-white'
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2.5">
-                          <div className={`p-2 rounded-xl ${isSelected ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-900 text-zinc-400'}`}>
+                          <div className={`p-2 rounded-xl ${isSelected ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse' : 'bg-zinc-900 text-zinc-500'}`}>
                             <Icon className="h-4 w-4" />
                           </div>
-                          <span className="font-bold text-sm text-white">{software.name}</span>
+                          <span className="font-extrabold text-sm text-white tracking-tight">{software.name}</span>
                         </div>
-                        {isSelected && <CheckCircle className="h-4 w-4 text-amber-400" />}
+                        {isSelected && <Crown className="h-4 w-4 text-amber-400" />}
                       </div>
                       <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
                         {software.description}
                       </p>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between text-[11px]">
-                      <span className="text-zinc-500">Default Version</span>
-                      <span className="font-mono text-zinc-300 font-semibold">{software.defaultVersion}</span>
+                    <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between text-[11px] font-medium text-zinc-500">
+                      <span>Default Version</span>
+                      <span className="font-mono text-zinc-300 font-bold">{software.defaultVersion}</span>
                     </div>
                   </div>
                 );
@@ -661,7 +717,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                     Default Startup Entrypoint
                   </label>
                   <div className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-400 font-mono">
-                    {selectedSoftware.id === 'python' ? 'main.py' : 'index.js'}
+                    {selectedSoftware.id === 'python' ? 'main.py' : selectedSoftware.id === 'bun' ? 'index.ts' : selectedSoftware.id === 'golang' ? 'main.go' : selectedSoftware.id === 'rust' ? 'main.rs' : 'index.js'}
                   </div>
                 </div>
               )}
@@ -712,52 +768,65 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
             {currentProductPlans.map(plan => {
               const isSelected = selectedPlan?.id === plan.id;
               const price = billingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+              const isPremiumPlan = plan.name.toLowerCase().includes('pro') || plan.name.toLowerCase().includes('unlimited') || plan.priceMonthly > 10;
 
               return (
                 <div
                   key={plan.id}
                   onClick={() => setSelectedPlanId(plan.id)}
-                  className={`p-5 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                  className={`p-5 rounded-3xl border cursor-pointer transition-all flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-zinc-900 border-amber-500 shadow-xl ring-1 ring-amber-500/20 text-white'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-zinc-900 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.08)] ring-1 ring-amber-500/20 text-white'
+                      : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:border-zinc-700 hover:text-white'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-bold text-base text-white">{plan.name}</span>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-extrabold text-base text-white tracking-tight flex items-center gap-1.5">
+                        {isPremiumPlan && <Crown className="w-4 h-4 text-amber-400" />}
+                        {plan.name}
+                      </span>
                       {isSelected && <CheckCircle className="h-5 w-5 text-amber-400" />}
                     </div>
 
-                    <div className="mb-4">
-                      <span className="text-2xl font-black text-white font-mono">${price.toFixed(2)}</span>
-                      <span className="text-xs text-zinc-500 ml-1">/{billingCycle === 'yearly' ? 'yr' : 'mo'}</span>
+                    <div className="pb-1.5 flex items-baseline justify-between border-b border-zinc-900">
+                      {price === 0 ? (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xl font-black text-emerald-400 tracking-tight">FREE TIER</span>
+                          <span className="text-[11px] text-zinc-500 font-mono font-bold">$0.00 / mo</span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-2xl font-black text-white font-mono tracking-tight tabular-nums">${price.toFixed(2)}</span>
+                          <span className="text-xs text-zinc-500 font-medium ml-1">/{billingCycle === 'yearly' ? 'yr' : 'mo'}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2.5 text-xs">
                       <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-400">
+                        <span className="flex items-center gap-2 text-zinc-450">
                           <MemoryStick className="h-3.5 w-3.5 text-amber-400" /> Dedicated RAM
                         </span>
                         <span className="font-mono font-bold text-white">{formatMemory(plan.ramMB)}</span>
                       </div>
 
                       <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-400">
+                        <span className="flex items-center gap-2 text-zinc-450">
                           <Cpu className="h-3.5 w-3.5 text-amber-400" /> CPU Limits
                         </span>
                         <span className="font-mono font-bold text-white">{plan.cpuCores * 100}% vCPU</span>
                       </div>
 
                       <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-400">
+                        <span className="flex items-center gap-2 text-zinc-450">
                           <HardDrive className="h-3.5 w-3.5 text-amber-400" /> NVMe Storage
                         </span>
                         <span className="font-mono font-bold text-white">{plan.diskGB} GB SSD</span>
                       </div>
 
                       <div className="flex items-center justify-between text-zinc-300">
-                        <span className="flex items-center gap-2 text-zinc-400">
+                        <span className="flex items-center gap-2 text-zinc-450">
                           <ShieldCheck className="h-3.5 w-3.5 text-amber-400" /> Backups Included
                         </span>
                         <span className="font-mono font-bold text-white">{plan.backupLimit} Slots</span>
@@ -766,10 +835,10 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                   </div>
 
                   <div className="mt-5 pt-3">
-                    <div className={`w-full py-2 rounded-xl text-center text-xs font-bold transition ${
+                    <div className={`w-full py-2.5 rounded-xl text-center text-xs font-extrabold uppercase tracking-wider transition ${
                       isSelected
-                        ? 'bg-amber-500 text-black'
-                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        ? 'bg-amber-500 text-black shadow-md'
+                        : 'bg-zinc-900 text-zinc-350 hover:bg-zinc-800'
                     }`}>
                       {isSelected ? 'Tier Selected' : 'Select Tier'}
                     </div>
@@ -853,7 +922,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
             {/* Billing & Discounts */}
             <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-amber-400" /> Billing Cycle & Payment
+                <DollarSign className="h-4 w-4 text-amber-400" /> Billing Cycle & Payment Method
               </h3>
 
               <div className="grid grid-cols-2 gap-2">
@@ -907,21 +976,162 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
                 )}
               </div>
 
-              {/* Payment Method */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Payment Method
-                </label>
-                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <Tag className="h-4 w-4 text-amber-400" />
-                    <span>Aether Account Balance</span>
+              {/* Payment Method Selector or Free Instance Callout */}
+              {calculateTotalPrice() <= 0 ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 space-y-1">
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-emerald-300">
+                    <Sparkles className="w-4 h-4 text-emerald-400" /> Free Instance / 100% Discount Applied ($0.00 Total)
                   </div>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    ${user?.credits?.toFixed(2) || '0.00'} Available
-                  </span>
+                  <p className="text-[11px] text-zinc-300">
+                    No payment or credits are required for this deployment. Click "Review & Deploy" below to activate your server instantly!
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Select Payment Method
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('balance')}
+                      className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
+                        paymentMethod === 'balance'
+                          ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
+                          : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      <Coins className="h-4 w-4 text-amber-400" />
+                      <span>Credits (${user?.credits?.toFixed(2) || '0.00'})</span>
+                    </button>
+
+                    {gateways?.stripe?.enabled !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('stripe')}
+                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
+                          paymentMethod === 'stripe'
+                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
+                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        <CreditCard className="h-4 w-4 text-cyan-400" />
+                        <span>Instant Card</span>
+                      </button>
+                    )}
+
+                    {gateways?.upi?.enabled !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('upi')}
+                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
+                          paymentMethod === 'upi'
+                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
+                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        <QrCode className="h-4 w-4 text-violet-400" />
+                        <span>UPI / QR</span>
+                      </button>
+                    )}
+
+                    {gateways?.crypto?.enabled !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('crypto')}
+                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
+                          paymentMethod === 'crypto'
+                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
+                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        <Coins className="h-4 w-4 text-emerald-400" />
+                        <span>Crypto</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Account Credits Status & Quick Deposit Button */}
+                  {paymentMethod === 'balance' && (
+                    <div className="pt-2">
+                      {((user?.credits || 0) >= calculateTotalPrice()) ? (
+                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 font-semibold">
+                            <CheckCircle2 className="h-4 w-4" /> Sufficient credits available
+                          </span>
+                          <span className="font-mono text-[11px] text-zinc-400">
+                            Remaining: ${((user?.credits || 0) - calculateTotalPrice()).toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+                          <div className="flex items-center justify-between text-amber-400">
+                            <span className="font-semibold flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" /> Shortfall: ${(calculateTotalPrice() - (user?.credits || 0)).toFixed(2)} required
+                            </span>
+                            <span className="font-mono text-[11px]">Balance: ${user?.credits?.toFixed(2) || '0.00'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickDeposit(Math.ceil(calculateTotalPrice() - (user?.credits || 0)))}
+                              disabled={isProcessingQuickDeposit}
+                              className="flex-1 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-bold text-[11px] transition"
+                            >
+                              {isProcessingQuickDeposit ? 'Depositing...' : `+ Deposit Shortfall ($${Math.ceil(calculateTotalPrice() - (user?.credits || 0))})`}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowQuickDeposit(true)}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-semibold transition"
+                            >
+                              Custom Deposit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Real-time Crypto Payment Processor Callout */}
+                  {paymentMethod === 'crypto' && gateways?.crypto?.enabled !== false && (
+                    <div className="pt-2">
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-amber-500/20 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                            <Zap className="w-4 h-4 text-amber-400" /> Real-Time Live Crypto Gateway
+                          </div>
+                          <p className="text-[11px] text-zinc-400">
+                            Scan QR Code for exact checkout amount (${calculateTotalPrice().toFixed(2)} USD), live exchange rates & instant server delivery.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowCryptoModal(true)}
+                          className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all shrink-0 flex items-center justify-center gap-1.5"
+                        >
+                          <Coins className="w-4 h-4" />
+                          <span>Pay ${calculateTotalPrice().toFixed(2)} with Crypto & Activate</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Direct UPI Callout */}
+                  {paymentMethod === 'upi' && gateways?.upi?.enabled !== false && (
+                    <div className="pt-2">
+                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-violet-400">
+                          <QrCode className="w-4 h-4" /> Instant UPI QR Code Payment
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          Scan UPI QR code for exact total <strong>${calculateTotalPrice().toFixed(2)} USD</strong> using GPay, PhonePe or Paytm. Your server auto-activates upon payment confirmation.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -945,6 +1155,65 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
               <span>Review & Deploy</span>
               <ArrowRight className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK DEPOSIT MODAL WITHIN WIZARD */}
+      {showQuickDeposit && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Plus className="h-4 w-4 text-amber-400" /> Quick Account Deposit
+              </h3>
+              <button onClick={() => setShowQuickDeposit(false)} className="text-xs text-zinc-400 hover:text-white">✕</button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Instant credit deposit so you can proceed immediately with deploying your server without reconfiguring.
+            </p>
+
+            <div className="grid grid-cols-4 gap-2">
+              {[5, 10, 25, 50].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setQuickDepositAmount(amt)}
+                  className={`p-2.5 rounded-xl font-mono text-xs font-bold border transition ${
+                    quickDepositAmount === amt
+                      ? 'bg-amber-400 text-black border-amber-300'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                  }`}
+                >
+                  ${amt}
+                </button>
+              ))}
+            </div>
+
+            {quickDepositMsg && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                {quickDepositMsg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowQuickDeposit(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 text-xs text-zinc-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickDeposit(quickDepositAmount)}
+                disabled={isProcessingQuickDeposit}
+                className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs disabled:opacity-50 transition"
+              >
+                {isProcessingQuickDeposit ? 'Depositing...' : `Deposit $${quickDepositAmount}.00`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -979,8 +1248,14 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
                   <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                     <span className="text-zinc-500">Total Price ({billingCycle})</span>
-                    <div className="font-bold text-emerald-400 text-sm font-mono">
-                      ${calculateTotalPrice().toFixed(2)}
+                    <div className="font-bold text-emerald-400 text-sm font-mono flex items-center gap-1">
+                      {calculateTotalPrice() <= 0 ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider">
+                          FREE ($0.00)
+                        </span>
+                      ) : (
+                        `$${calculateTotalPrice().toFixed(2)}`
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1069,7 +1344,16 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
               {/* Complete & Navigate Action */}
               {pipelineStage >= 7 && deployedServerId && (
-                <div className="flex justify-end pt-2">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('billing')}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition"
+                  >
+                    <FileText className="h-4 w-4 text-amber-400" />
+                    <span>View Invoices & Receipts</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1107,6 +1391,46 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       )}
     </>
   )}
+
+      {/* Real-time Crypto Payment Processor Modal */}
+      <CryptoPaymentModal
+        isOpen={showCryptoModal}
+        onClose={() => setShowCryptoModal(false)}
+        amountUsd={calculateTotalPrice()}
+        purpose="server_deploy"
+        serverPayload={{
+          name: serverName.trim() || `${selectedSoftware.name} Server`,
+          planId: selectedPlan?.id || selectedPlanId,
+          nodeId: selectedNodeId === 'auto' ? undefined : selectedNodeId,
+          location: selectedLocation === 'auto' ? undefined : selectedLocation,
+          serverTypeId: selectedServerTypeId,
+          software: selectedSoftware.name,
+          version: selectedVersion,
+          billingCycle,
+          couponCode: couponDiscount ? couponCode : undefined,
+          environmentVars: {
+            EULA: eulaAccepted ? 'true' : 'false',
+            JAVA_VERSION: selectedJavaVersion
+          }
+        }}
+        onSuccess={async (inv, serverActivation) => {
+          setShowCryptoModal(false);
+          if (serverActivation?.server?.id) {
+            setDeployedServerId(serverActivation.server.id);
+            setStep(4);
+            setIsDeploying(true);
+            setPipelineStage(7);
+            setPipelineLogs([
+              `✔ [CryptoProcessor] Real-time blockchain payment confirmed!`,
+              `✔ Instance deployed successfully! (ID: ${serverActivation.server.id})`,
+              `✔ Primary Endpoint: ${serverActivation.server.primaryIp}:${serverActivation.server.primaryPort}`,
+              `✔ Status: RUNNING`
+            ]);
+            await refreshUser();
+            if (onRefreshServers) onRefreshServers();
+          }
+        }}
+      />
 
 </div>
   );

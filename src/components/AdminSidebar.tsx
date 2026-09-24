@@ -16,7 +16,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
   const { user, logout } = useAuth();
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 border-r border-amber-500/20 bg-zinc-950/80 backdrop-blur-md flex-col h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] sticky top-16 select-none">
+    <aside id="aether-sidebar" className="hidden lg:flex w-64 flex-none border-r border-amber-500/20 bg-zinc-950/80 backdrop-blur-md flex-col h-full select-none z-20">
       {/* Admin Header (Pinned Top) */}
       <div className="p-4 border-b border-amber-500/20 bg-amber-500/5 shrink-0">
         <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs uppercase tracking-wider">

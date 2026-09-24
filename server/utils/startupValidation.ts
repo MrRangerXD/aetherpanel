@@ -79,32 +79,70 @@ export function validateRuntimeVersion(
 
   const sw = (software || '').toLowerCase();
   const v = version.trim();
+  const vLower = v.toLowerCase();
+
+  if (vLower.includes('latest') || vLower === 'stable') {
+    return { valid: true, normalized: 'Latest Stable' };
+  }
 
   if (sw.includes('node')) {
-    const validNode = ['24.x', '22.x', '20.x', '18.x', 'Latest Stable'];
-    const found = validNode.find(n => n.toLowerCase() === v.toLowerCase());
-    if (found) return { valid: true, normalized: found };
+    const match = v.match(/(?:node\s*)?(\d+)(?:\.(\d+|x))*(\s*\([^)]*\))?/i);
+    if (match) {
+      const major = match[1];
+      const validMajors = ['18', '20', '21', '22', '23', '24'];
+      if (validMajors.includes(major)) {
+        return { valid: true, normalized: v };
+      }
+    }
+    const validNode = [
+      'Node 22 (LTS)', 'Node 20 (LTS)', 'Node 23 (Current)', 'Node 18 (LTS)',
+      '24.x', '22.x', '20.x', '18.x', 'Latest Stable', 'Node 22', 'Node 20', 'Node 18'
+    ];
+    if (validNode.some(n => n.toLowerCase() === vLower)) {
+      return { valid: true, normalized: v };
+    }
     if (/^\d+(\.\d+)*(\.x)?$/.test(v)) return { valid: true, normalized: v };
-    return { valid: false, normalized: '20.x' };
+    return { valid: true, normalized: v };
   }
 
   if (sw.includes('python')) {
-    const validPy = ['3.14.x', '3.13.x', '3.12.x', '3.11.x', '3.10.x', 'Latest Stable'];
-    const found = validPy.find(p => p.toLowerCase() === v.toLowerCase());
-    if (found) return { valid: true, normalized: found };
+    const match = v.match(/(?:python\s*)?3\.(\d+)(?:\.(\d+|x))*(\s*\([^)]*\))?/i);
+    if (match) {
+      const minor = match[1];
+      const validMinors = ['9', '10', '11', '12', '13', '14'];
+      if (validMinors.includes(minor)) {
+        return { valid: true, normalized: v };
+      }
+    }
+    const validPy = [
+      'Python 3.12 (Latest)', 'Python 3.13 (Preview)', 'Python 3.11 (Stable)', 'Python 3.10',
+      'Python 3.12', 'Python 3.13', 'Python 3.11',
+      '3.14.x', '3.13.x', '3.12.x', '3.11.x', '3.10.x', 'Latest Stable'
+    ];
+    if (validPy.some(p => p.toLowerCase() === vLower)) {
+      return { valid: true, normalized: v };
+    }
     if (/^\d+(\.\d+)*(\.x)?$/.test(v)) return { valid: true, normalized: v };
-    return { valid: false, normalized: '3.12.x' };
+    return { valid: true, normalized: v };
   }
 
   if (sw.includes('bun')) {
-    const validBun = ['1.2.x', '1.1.x', '1.0.x', 'Latest Stable'];
-    const found = validBun.find(b => b.toLowerCase() === v.toLowerCase());
-    if (found) return { valid: true, normalized: found };
+    const match = v.match(/(?:bun\s*)?1\.(\d+)(?:\.(\d+|x))*(\s*\([^)]*\))?/i);
+    if (match) {
+      return { valid: true, normalized: v };
+    }
+    const validBun = [
+      'Bun 1.2 (Latest)', 'Bun 1.1', 'Bun 1.0',
+      'Bun 1.2', '1.2.x', '1.1.x', '1.0.x', 'Latest Stable'
+    ];
+    if (validBun.some(b => b.toLowerCase() === vLower)) {
+      return { valid: true, normalized: v };
+    }
     if (/^\d+(\.\d+)*(\.x)?$/.test(v)) return { valid: true, normalized: v };
-    return { valid: false, normalized: '1.x' };
+    return { valid: true, normalized: v };
   }
 
-  if (sw.includes('java') || sw.includes('minecraft') || sw.includes('paper') || sw.includes('purpur') || sw.includes('forge') || sw.includes('fabric')) {
+  if (sw.includes('java') || sw.includes('minecraft') || sw.includes('paper') || sw.includes('purpur') || sw.includes('forge') || sw.includes('fabric') || sw.includes('neoforge') || sw.includes('spigot')) {
     if (/^Java\s*\d+$/i.test(v)) return { valid: true, normalized: v.replace(/^java\s*/i, 'Java ') };
     if (/^\d+$/.test(v)) return { valid: true, normalized: `Java ${v}` };
   }

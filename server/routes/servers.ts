@@ -44,8 +44,10 @@ const router = Router();
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     try {
-      const serverId = req.params.id;
-      const relPath = (req.query.path as string) || (req.body.path as string) || '';
+      const serverId = String(req.params.id || '');
+      const queryPath = typeof req.query.path === 'string' ? req.query.path : '';
+      const bodyPath = typeof req.body?.path === 'string' ? req.body.path : '';
+      const relPath = queryPath || bodyPath || '';
       const targetDir = safePath(serverId, relPath);
 
       if (!fs.existsSync(targetDir)) {
@@ -219,6 +221,32 @@ router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: R
   });
 });
 
+// GET /api/v1/servers/:id/sftp/credentials - Standardized SFTP credentials (PRD Section 4.3 & 7.2)
+router.get('/:id/sftp/credentials', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { isOwner, isAdmin, requesterSubuser } = access;
+  if (!isOwner && !isAdmin) {
+    const hasPerm = requesterSubuser?.permissions.includes('sftp.connect') || requesterSubuser?.permissions.includes('files.view');
+    if (!hasPerm) {
+      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: "Required permission 'files.view' or 'sftp.connect' is missing." } });
+      return;
+    }
+  }
+
+  const sftpInfo = await resolveServerSftpInfo(req.params.id, req.get('host'));
+  res.json({
+    success: true,
+    data: {
+      host: sftpInfo.host,
+      port: sftpInfo.port,
+      username: sftpInfo.username,
+      authMethod: 'password'
+    }
+  });
+});
+
 // POST /api/v1/servers/:id/power - Power actions
 router.post('/:id/power', authMiddleware, requireApiKeyScope('servers:control'), async (req: AuthenticatedRequest, res: Response) => {
   const { action } = req.body; // 'start', 'stop', 'restart', 'kill', 'reinstall'
@@ -376,23 +404,36 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
     }
 
     // 6. Synchronize software version and runtime
-    if (startup.javaVersion) {
-      server.version = startup.javaVersion;
-    } else if (startup.version) {
-      const verVal = validateRuntimeVersion(server.software, startup.version);
-      if (!verVal.valid) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_VERSION', message: `Invalid version '${startup.version}'.` } });
+    if (isMinecraft) {
+      if (startup.javaVersion) {
+        startup.javaVersion = String(startup.javaVersion);
       }
-      server.version = verVal.normalized;
+      if (startup.version) {
+        server.version = String(startup.version).trim();
+      }
+    } else {
+      if (startup.version) {
+        const verVal = validateRuntimeVersion(server.software, startup.version);
+        if (!verVal.valid) {
+          return res.status(400).json({ success: false, error: { code: 'INVALID_VERSION', message: `Invalid version '${startup.version}'.` } });
+        }
+        server.version = verVal.normalized;
+      } else if (startup.nodeConfig?.version && startup.botRuntime === 'nodejs') {
+        server.version = startup.nodeConfig.version;
+      } else if (startup.pythonConfig?.version && startup.botRuntime === 'python') {
+        server.version = startup.pythonConfig.version;
+      } else if (startup.bunConfig?.version && startup.botRuntime === 'bun') {
+        server.version = startup.bunConfig.version;
+      }
     }
 
     if (startup.botRuntime) {
       if (startup.botRuntime === 'python') {
-        server.software = 'Python Bot';
+        server.software = 'Python';
       } else if (startup.botRuntime === 'bun') {
-        server.software = 'Bun JS';
+        server.software = 'Bun';
       } else if (startup.botRuntime === 'nodejs') {
-        server.software = 'Node.js Bot';
+        server.software = 'Node.js';
       }
     }
 
@@ -444,17 +485,17 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
   res.json({ success: true, message: 'Server settings saved successfully.', data: { server } });
 });
 
-// GET /api/v1/servers/:id/console - Console logs
-router.get('/:id/console', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// GET /api/v1/servers/:id/console/history & /:id/console - Console logs (PRD Section 2.3 & 7.2)
+router.get(['/:id/console/history', '/:id/console'], authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'console.view');
   if (!access) return;
 
   const logs = await getServerConsoleLogs(req.params.id);
-  res.json({ success: true, data: { logs } });
+  res.json({ success: true, data: { logs: logs.slice(-500) } });
 });
 
-// POST /api/v1/servers/:id/command - Send console command
-router.post('/:id/command', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/servers/:id/console/command & /:id/command - Send console command (PRD Section 2.3 & 7.2)
+router.post(['/:id/console/command', '/:id/command'], authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'console.send');
   if (!access) return;
 
@@ -661,7 +702,7 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
   const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
   if (!access) return;
 
-  upload.array('files', 20)(req, res, async (err: any) => {
+  upload.array('files', 20)(req as any, res as any, async (err: any) => {
     if (err) {
       return res.status(400).json({ success: false, error: { code: 'UPLOAD_ERROR', message: err.message || 'File upload failed.' } });
     }
@@ -851,7 +892,8 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
   if (!access) return;
 
   const { server } = access;
-  const success = await reinstallServer(server.id);
+  const { software, version } = req.body || {};
+  const success = await reinstallServer(server.id, software, version);
 
   if (!success) {
     return res.status(500).json({ success: false, error: { code: 'REINSTALL_FAILED', message: 'Reinstallation process failed.' } });
@@ -859,7 +901,7 @@ router.post('/:id/reinstall', authMiddleware, async (req: AuthenticatedRequest, 
 
   await recordServerActivity(
     server.id, req.user!.id, req.user!.username,
-    'SERVER_REINSTALL', `Initiated full server reinstallation`
+    'SERVER_REINSTALL', `Initiated full server reinstallation (${software || server.software} ${version || server.version})`
   );
 
   res.json({ success: true, message: 'Server reinstallation started successfully.' });
@@ -1780,7 +1822,12 @@ router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedReque
   const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
-  const { enable } = req.body;
+  let enable = req.body?.enable;
+  if (enable === undefined) {
+    const currentStatus = await getPlayitStatus(req.params.id);
+    enable = !currentStatus.isRunning;
+  }
+
   try {
     const status = await togglePlayitAgent(req.params.id, Boolean(enable));
     res.json({ success: true, message: `Playit agent ${enable ? 'started' : 'stopped'}.`, data: status });

@@ -15,7 +15,7 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { accentClasses } = useTheme();
+  const { accentClasses, activePreset } = useTheme();
   const { pageAnimationsEnabled, heroDescription } = useBranding();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -59,26 +59,23 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const animate = pageAnimationsEnabled && !prefersReducedMotion;
 
   const containerVariants = {
-    hidden: { opacity: 0 },
+    hidden: { opacity: 1 },
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.08,
-        delayChildren: 0.05
+        staggerChildren: 0.05,
+        delayChildren: 0.02
       }
     }
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 12 },
+    hidden: { opacity: 1, y: 4 },
     visible: {
       opacity: 1,
       y: 0,
       transition: {
-        type: 'spring',
-        stiffness: 120,
-        damping: 18,
-        mass: 0.8
+        duration: 0.2
       }
     }
   };
@@ -94,30 +91,38 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   } : {};
 
   return (
-    <motion.div {...motionDivProps} className="space-y-14 sm:space-y-18 py-4 sm:py-6 relative">
-      {/* Background Ambient Lighting (Layer 1-3: Smooth soft radial gradients, zero visible rectangular edges) */}
+    <motion.div {...motionDivProps} className="space-y-14 sm:space-y-18 py-4 sm:py-6 relative overflow-hidden">
+      {/* Background Ambient Lighting (Layered Multi-Depth Radiant Bloom) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-        {/* Layer 2: Subtle warm radial amber/gold glow upper center */}
+        {/* Layer 1: Primary vibrant radial glow upper center */}
         <div
-          className="absolute -top-36 left-1/2 -translate-x-1/2 w-[600px] sm:w-[850px] md:w-[1100px] h-[480px] rounded-full opacity-40 blur-[160px]"
+          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] sm:w-[950px] md:w-[1250px] h-[550px] rounded-full opacity-65 blur-[120px]"
           style={{
-            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.07) 45%, rgba(0, 0, 0, 0) 70%)'
+            background: `radial-gradient(circle, ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.38)'} 0%, rgba(245, 158, 11, 0.14) 40%, rgba(0, 0, 0, 0) 72%)`
           }}
         />
 
-        {/* Layer 3: Very subtle teal/cyan ambient glow lower left side */}
+        {/* Layer 2: Secondary lateral ambient color sphere */}
         <div
-          className="absolute top-48 -left-24 w-[350px] sm:w-[500px] h-[350px] rounded-full opacity-25 blur-[150px]"
+          className="absolute top-52 -left-20 w-[420px] sm:w-[600px] h-[450px] rounded-full opacity-40 blur-[130px]"
           style={{
-            background: 'radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, rgba(13, 148, 136, 0.04) 50%, rgba(0, 0, 0, 0) 75%)'
+            background: `radial-gradient(circle, ${activePreset?.accent || '#f59e0b'} 0%, rgba(0, 0, 0, 0) 70%)`
           }}
         />
 
-        {/* Layer 3b: Micro warm ambient glow right side for optical balance */}
+        {/* Layer 3: Spatial balance bloom right side */}
         <div
-          className="absolute top-96 -right-24 w-[350px] sm:w-[480px] h-[320px] rounded-full opacity-20 blur-[140px]"
+          className="absolute top-96 -right-24 w-[420px] sm:w-[580px] h-[400px] rounded-full opacity-35 blur-[140px]"
           style={{
-            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.10) 0%, rgba(0, 0, 0, 0) 70%)'
+            background: `radial-gradient(circle, ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.3)'} 0%, rgba(0, 0, 0, 0) 70%)`
+          }}
+        />
+
+        {/* Layer 4: Deep catalog section bloom */}
+        <div
+          className="absolute top-[1100px] left-1/2 -translate-x-1/2 w-[650px] sm:w-[900px] h-[450px] rounded-full opacity-25 blur-[150px]"
+          style={{
+            background: `radial-gradient(circle, ${activePreset?.accent || '#f59e0b'} 0%, rgba(0, 0, 0, 0) 70%)`
           }}
         />
       </div>
@@ -127,18 +132,23 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className="mx-auto max-w-[1080px]">
           <div className="text-center space-y-5 sm:space-y-6 max-w-3xl mx-auto">
             
-            {/* Announcement Badge */}
+            {/* Announcement Badge with Active Neon Glow */}
             <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-300 shadow-sm shadow-amber-500/5 backdrop-blur-sm">
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <div
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-300 shadow-sm backdrop-blur-md transition-all"
+                style={{
+                  boxShadow: `0 0 24px -4px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.35)'}`
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0 animate-pulse" />
                 <span>AetherPanel Cloud Engine Release — Up to 35% Faster TPS</span>
               </div>
             </div>
 
             {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white font-sans leading-[1.12]">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white font-sans leading-[1.12] drop-shadow-md">
               Powerful Hosting.{' '}
-              <span className={`bg-gradient-to-r ${accentClasses.gradient} bg-clip-text text-transparent`}>
+              <span className={`bg-gradient-to-r ${accentClasses.gradient} bg-clip-text text-transparent drop-shadow-sm`}>
                 Without Complexity.
               </span>
             </h1>
@@ -152,7 +162,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-1">
               <button
                 onClick={() => onNavigate('pricing')}
-                className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg ${accentClasses.shadow} hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm`}
+                className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg shadow-amber-500/25 hover:shadow-[0_0_35px_rgba(245,158,11,0.45)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm`}
               >
                 <span>View Plans & Pricing</span>
                 <ArrowRight className="h-4 w-4" />
@@ -189,11 +199,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
           </div>
 
-          {/* Premium Infrastructure Showcase Panel */}
+          {/* Premium Infrastructure Showcase Panel with Radiant Glow */}
           <div className="mt-10 sm:mt-12 max-w-5xl mx-auto">
-            <div className="relative rounded-2xl bg-zinc-950/70 border border-zinc-800/80 p-5 sm:p-6 lg:p-8 shadow-xl backdrop-blur-md overflow-hidden">
-              {/* Subtle top ambient gradient line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+            <div
+              className="relative rounded-2xl bg-zinc-950/80 border border-zinc-800/90 p-5 sm:p-6 lg:p-8 backdrop-blur-xl overflow-hidden transition-all"
+              style={{
+                boxShadow: `0 0 60px -15px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.22)'}, 0 25px 50px -12px rgba(0,0,0,0.85)`
+              }}
+            >
+              {/* Luminous top ambient highlight beam */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-6 divide-y md:divide-y-0 md:divide-x divide-zinc-800/60">
                 {/* 1. Instant Deployment */}
@@ -471,24 +486,40 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       </motion.section>
 
       {/* CTA Banner */}
-      <motion.section {...motionChildProps} className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-3xl bg-gradient-to-r from-violet-950/30 via-zinc-900/90 to-cyan-950/30 border border-zinc-800/80 p-8 sm:p-12 text-center space-y-5 shadow-2xl relative overflow-hidden">
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white">
+      <motion.section {...motionChildProps} className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 relative">
+        {/* Luminous atmospheric aura behind CTA */}
+        <div
+          className="absolute -inset-2 rounded-3xl opacity-50 blur-2xl pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse at center, ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.35)'} 0%, rgba(0,0,0,0) 70%)`
+          }}
+        />
+
+        <div
+          className="rounded-3xl bg-gradient-to-r from-zinc-950/90 via-zinc-900/95 to-zinc-950/90 border border-zinc-800/90 p-8 sm:p-12 text-center space-y-5 shadow-2xl relative overflow-hidden transition-all"
+          style={{
+            boxShadow: `0 0 60px -15px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.25)'}, 0 25px 50px -12px rgba(0,0,0,0.85)`
+          }}
+        >
+          {/* Top ambient glowing highlight beam */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
+
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-white drop-shadow-md">
             Ready to Launch Your Server?
           </h2>
           <p className="text-zinc-400 text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
             Join thousands of server owners and bot developers hosting on AetherPanel today. Free migration assistance available.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2 relative z-10">
             <button
               onClick={() => onNavigate('register')}
-              className={`w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg ${accentClasses.shadow} hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm`}
+              className={`w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg shadow-amber-500/25 hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] hover:scale-[1.01] active:scale-[0.99] transition-all text-sm`}
             >
               Create Free Account
             </button>
             <button
               onClick={() => onNavigate('pricing')}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-zinc-300 bg-zinc-900/90 border border-zinc-800/80 hover:text-white hover:bg-zinc-800 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-zinc-300 bg-zinc-900/90 border border-zinc-800/80 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm shadow-sm"
             >
               Browse All Plans
             </button>

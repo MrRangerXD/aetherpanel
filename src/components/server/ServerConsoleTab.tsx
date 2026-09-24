@@ -61,6 +61,12 @@ function parseTerminalLine(rawText: string) {
 type ConnectionState = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED' | 'ERROR';
 const MAX_BUFFER_LINES = 2000;
 
+export function getConsoleWebSocketUrl(serverId: string, token: string): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host; // includes domain + reverse proxy port
+  return `${protocol}//${host}/ws/console?serverId=${encodeURIComponent(serverId)}&token=${encodeURIComponent(token)}`;
+}
+
 export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: ServerConsoleTabProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [command, setCommand] = useState('');
@@ -216,9 +222,8 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
 
     setWsStatus(reconnectAttemptsRef.current > 0 ? 'RECONNECTING' : 'CONNECTING');
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const token = localStorage.getItem('aether_token') || '';
-    const wsUrl = `${protocol}//${window.location.host}/ws/console/${server.id}?token=${encodeURIComponent(token)}`;
+    const wsUrl = getConsoleWebSocketUrl(server.id, token);
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -271,15 +276,28 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
 
       ws.onclose = (event) => {
         if (!isMountedRef.current) return;
-        // Exponential backoff reconnect
-        if (reconnectAttemptsRef.current < 6) {
+        // Check for authentication rejection
+        if (event.code === 4001 || event.code === 4003) {
+          setWsStatus('ERROR');
+          return;
+        }
+
+        if (server.status !== 'running' && server.status !== 'starting') {
+          setWsStatus('DISCONNECTED');
+          return;
+        }
+
+        // Exponential backoff reconnect: 1s, 2s, 5s, 10s max (PRD Section 2.4)
+        const BACKOFF_DELAYS = [1000, 2000, 5000, 10000];
+        if (reconnectAttemptsRef.current < 8) {
           reconnectAttemptsRef.current += 1;
           setWsStatus('RECONNECTING');
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current - 1), 8000);
+          const delay = BACKOFF_DELAYS[Math.min(reconnectAttemptsRef.current - 1, BACKOFF_DELAYS.length - 1)];
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) connectWebSocket();
           }, delay);
         } else {
+          setWsStatus('DISCONNECTED');
           switchToPolling();
         }
       };
@@ -499,15 +517,15 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           {/* Runtime Type Badge */}
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/30 border border-zinc-850 text-xs font-mono text-zinc-400">
             {isMinecraft ? (
-              <span className="text-amber-400">Minecraft {server.software || 'Paper'}</span>
+              <span className="text-amber-400">{server.software || 'Paper'} {server.version ? `(${server.version})` : ''}</span>
             ) : isNode ? (
-              <span className="text-emerald-400">Node.js Runtime</span>
+              <span className="text-emerald-400">{server.version || 'Node.js 22 LTS'}</span>
             ) : isPython ? (
-              <span className="text-blue-400">Python Runtime</span>
+              <span className="text-blue-400">{server.version || 'Python 3.12'}</span>
             ) : isBun ? (
-              <span className="text-amber-300">Bun Runtime</span>
+              <span className="text-amber-300">{server.version || 'Bun 1.2'}</span>
             ) : (
-              <span className="text-zinc-400">Custom Container</span>
+              <span className="text-zinc-400">{server.software || 'Container'} {server.version ? `(${server.version})` : ''}</span>
             )}
           </div>
         </div>

@@ -25,7 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { accentClasses, accent, setAccent } = useTheme();
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] sticky top-16 select-none">
+    <aside id="aether-sidebar" className="hidden lg:flex w-64 flex-none border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col h-full select-none z-20">
       {/* Brand Header / Server Quick Switcher (Pinned Top) */}
       <div className="p-4 border-b border-zinc-800/80 shrink-0">
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">

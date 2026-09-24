@@ -26,26 +26,38 @@ let versionCache: VersionCache = {
 // Fallback version tables if network/upstream is temporarily unreachable
 const FALLBACK_VERSIONS: Record<string, string[]> = {
   paper: [
-    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
   ],
   purpur: [
-    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5'
   ],
   vanilla: [
-    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.15.2', '1.14.4', '1.12.2', '1.8.9'
   ],
   fabric: [
-    '26.2', '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+    '1.21.4', '1.21.3', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
     '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.14.4'
   ],
   spigot: [
-    '26.2', '1.21.4', '1.21.1', '1.20.4', '1.20.1', '1.19.4', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
+    '1.21.4', '1.21.1', '1.20.4', '1.20.1', '1.19.4', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.8'
+  ],
+  neoforge: [
+    '1.21.4', '1.21.1', '1.20.6', '1.20.4'
   ],
   forge: [
-    '26.2', '1.20.4', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'
+    '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.7.10'
+  ],
+  bedrock: [
+    '1.21.50', '1.21.40', '1.21.30', '1.21.20', '1.20.80', '1.20.70'
+  ],
+  velocity: [
+    '3.3.0', '3.2.0', '3.1.2'
+  ],
+  bungeecord: [
+    '1.21', '1.20', '1.19', '1.18', '1.16'
   ]
 };
 
@@ -311,9 +323,9 @@ export async function getMinecraftVersions(software: string = 'paper'): Promise<
   }
 
   const versionsList = result.versions.length > 0
-    ? (result.versions.includes('26.2') ? result.versions : ['26.2', ...result.versions])
-    : (FALLBACK_VERSIONS[norm] || ['26.2']);
-  const latestVersion = versionsList[0] || '26.2';
+    ? result.versions
+    : (FALLBACK_VERSIONS[norm] || ['1.21.4', '1.21.3', '1.21.1', '1.20.4', '1.19.4', '1.18.2', '1.16.5']);
+  const latestVersion = versionsList[0] || '1.21.4';
 
   // Update Cache if successful, else do not cache bad values long
   if (latestVersion !== 'UNKNOWN' && versionsList.length > 0) {
@@ -1016,6 +1028,49 @@ export async function downloadMinecraftServerJar(
       await downloadFile(downloadUrl, targetJar);
       appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: Fabric ${version} server.jar downloaded successfully.`);
       return { success: true, message: `Fabric ${version} downloaded`, jarPath: targetJar };
+
+    } else if (norm.includes('velocity')) {
+      let downloadUrl = '';
+      try {
+        const buildsData = await fetchJson<{ builds: number[] }>(
+          `https://fill.papermc.io/v3/projects/velocity/versions/${version}`
+        );
+        if (buildsData?.builds?.length) {
+          const latestBuild = Math.max(...buildsData.builds);
+          const buildDetail = await fetchJson<{ downloads?: { 'server:default'?: { url?: string } } }>(
+            `https://fill.papermc.io/v3/projects/velocity/versions/${version}/builds/${latestBuild}`
+          );
+          downloadUrl = buildDetail?.downloads?.['server:default']?.url || '';
+        }
+      } catch {}
+      if (!downloadUrl) {
+        downloadUrl = `https://api.papermc.io/v2/projects/velocity/versions/${version}/builds/latest/download`;
+      }
+      appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading Velocity ${version} proxy binary...`);
+      await downloadFile(downloadUrl, targetJar);
+      appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: Velocity ${version} downloaded successfully.`);
+      return { success: true, message: `Velocity ${version} downloaded`, jarPath: targetJar };
+
+    } else if (norm.includes('bungeecord')) {
+      const downloadUrl = `https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar`;
+      appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading BungeeCord proxy binary...`);
+      await downloadFile(downloadUrl, targetJar);
+      appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: BungeeCord downloaded successfully.`);
+      return { success: true, message: `BungeeCord downloaded`, jarPath: targetJar };
+
+    } else if (norm.includes('neoforge')) {
+      const downloadUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
+      appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading NeoForge ${version} installer...`);
+      await downloadFile(downloadUrl, targetJar);
+      appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: NeoForge ${version} downloaded.`);
+      return { success: true, message: `NeoForge ${version} downloaded`, jarPath: targetJar };
+
+    } else if (norm.includes('forge')) {
+      const downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}/forge-${version}-installer.jar`;
+      appendConsoleLog(serverId, `[AetherInstaller/INFO]: Downloading Forge ${version} installer...`);
+      await downloadFile(downloadUrl, targetJar);
+      appendConsoleLog(serverId, `[AetherInstaller/SUCCESS]: Forge ${version} downloaded.`);
+      return { success: true, message: `Forge ${version} downloaded`, jarPath: targetJar };
 
     } else {
       // Fallback for Spigot/custom

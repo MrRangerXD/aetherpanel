@@ -4,7 +4,7 @@ import {
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
   AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy,
-  Database, Plus, Trash2, Edit3, X, Disc as DiscordIcon, Twitter, Github, Share2
+  Database, Plus, Trash2, Edit3, X, Disc as DiscordIcon, Twitter, Github, Share2, Coins
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
@@ -147,27 +147,33 @@ export const AdminSettings: React.FC = () => {
   const [triggeringUpdate, setTriggeringUpdate] = useState(false);
 
   // Payment Gateway Settings
-  const [gateways, setGateways] = useState<PaymentGatewaySettings>({
+  const [gateways, setGateways] = useState<any>({
     upi: {
       enabled: true,
       upiId: 'aetherpay@upi',
       merchantName: 'AetherPanel Hosting',
       qrCodeUrl: 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?auto=format&fit=crop&w=400&q=80',
-      instructions: 'Scan the QR code or send payment to the UPI ID. Enter the 12-digit UTR or Transaction Ref ID after payment.'
+      instructions: 'Scan the QR code or send payment to the UPI ID.'
     },
     bank: {
-      enabled: true,
+      enabled: false,
       bankName: 'HDFC Bank / Global Web Bank',
       accountNumber: '918237192837',
       ifsc: 'HDFC0001234',
       accountHolder: 'Aether Cloud Infrastructure LLC',
-      instructions: 'Transfer to Bank Account and submit your NEFT/IMPS/Wire Reference Number.'
+      instructions: 'Transfer to Bank Account.'
     },
     crypto: {
-      enabled: false,
-      walletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-      network: 'USDT (TRC20 / ERC20)',
-      instructions: 'Send USDT to the wallet address and submit TX Hash.'
+      enabled: true,
+      walletAddress: 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l',
+      ltcAddress: 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l',
+      trxAddress: 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q',
+      usdtAddress: 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q',
+      btcAddress: 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1',
+      ethAddress: '0x71C56538B1D42916857723fF7463A0F1283c7490',
+      solAddress: 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ',
+      network: 'LTC, TRX, BTC, ETH, SOL',
+      instructions: 'Send exact crypto amount or scan QR code.'
     },
     stripe: {
       enabled: true,
@@ -1622,56 +1628,76 @@ export const AdminSettings: React.FC = () => {
             )}
           </div>
 
-          {/* Bank Transfer Gateway */}
+          {/* Crypto Payment Wallets Gateway */}
           <div className="p-5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Building className="h-4 w-4 text-amber-400" />
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Bank Wire / IMPS / NEFT Details</h3>
+                <Coins className="h-4 w-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Cryptocurrency Wallet Addresses (LTC, ETH, BTC, SOL, TRX)</h3>
               </div>
               <input
                 type="checkbox"
-                checked={gateways.bank.enabled}
-                onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, enabled: e.target.checked } })}
+                checked={gateways.crypto?.enabled ?? true}
+                onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, enabled: e.target.checked } })}
                 className="h-4 w-4 accent-amber-500 rounded"
               />
             </div>
 
-            {gateways.bank.enabled && (
+            {(gateways.crypto?.enabled ?? true) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-zinc-400 font-medium mb-1">Bank Name</label>
+                  <label className="block text-amber-400 font-semibold mb-1">Litecoin (LTC) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.bank.bankName}
-                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, bankName: e.target.value } })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                    value={gateways.crypto?.ltcAddress || 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l'}
+                    onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, ltcAddress: e.target.value } })}
+                    placeholder="ltc1q..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
+                  <p className="text-[10px] text-zinc-500 mt-0.5">Used for LTC QR code & payment requests.</p>
                 </div>
+
                 <div>
-                  <label className="block text-zinc-400 font-medium mb-1">Account Holder</label>
+                  <label className="block text-emerald-400 font-semibold mb-1">Tron / USDT (TRC-20 / TRX) Address</label>
                   <input
                     type="text"
-                    value={gateways.bank.accountHolder}
-                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, accountHolder: e.target.value } })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                    value={gateways.crypto?.trxAddress || gateways.crypto?.usdtAddress || 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q'}
+                    onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, trxAddress: e.target.value, usdtAddress: e.target.value } })}
+                    placeholder="T..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
+                  <p className="text-[10px] text-zinc-500 mt-0.5">TRC-20 USDT and Tron network deposits.</p>
                 </div>
+
                 <div>
-                  <label className="block text-zinc-400 font-medium mb-1">Account Number / IBAN</label>
+                  <label className="block text-cyan-400 font-semibold mb-1">Bitcoin (BTC) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.bank.accountNumber}
-                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, accountNumber: e.target.value } })}
+                    value={gateways.crypto?.btcAddress || 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1'}
+                    onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, btcAddress: e.target.value } })}
+                    placeholder="bc1q..."
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-zinc-400 font-medium mb-1">IFSC / Swift / Routing Code</label>
+                  <label className="block text-violet-400 font-semibold mb-1">Ethereum (ETH) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.bank.ifsc}
-                    onChange={(e) => setGateways({ ...gateways, bank: { ...gateways.bank, ifsc: e.target.value } })}
+                    value={gateways.crypto?.ethAddress || '0x71C56538B1D42916857723fF7463A0F1283c7490'}
+                    onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, ethAddress: e.target.value } })}
+                    placeholder="0x..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-fuchsia-400 font-semibold mb-1">Solana (SOL) Wallet Address</label>
+                  <input
+                    type="text"
+                    value={gateways.crypto?.solAddress || 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ'}
+                    onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, solAddress: e.target.value } })}
+                    placeholder="Sol..."
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                 </div>

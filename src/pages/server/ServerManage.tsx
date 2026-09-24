@@ -384,6 +384,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       const s = normalizeServer(raw);
       setServer(s);
       setServerNameEdit(s.name);
+      const isMc = s.productId === 'prod_minecraft' || /minecraft|paper|purpur|forge|fabric|spigot|vanilla|bedrock|velocity|bungeecord/i.test(s.software || '');
       if (s.startup) {
         setStartupConfig(prev => ({
           ...prev,
@@ -391,7 +392,16 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           xmxMB: s.startup.xmxMB || s.limits?.ramMB || prev.xmxMB
         }));
         setStartupFlags(s.startup.jvmFlags || s.startup.customFlags || '');
-        if (s.startup.javaVersion) setJavaVersion(String(s.startup.javaVersion));
+        if (isMc) {
+          if (s.startup.javaVersion) {
+            setJavaVersion(String(s.startup.javaVersion));
+          } else {
+            setJavaVersion(`Java ${getRecommendedJava(s.version)}`);
+          }
+        } else {
+          const botVer = s.startup.nodeConfig?.version || s.startup.pythonConfig?.version || s.startup.bunConfig?.version || s.version || 'Node 22 (LTS)';
+          setJavaVersion(botVer);
+        }
         if (s.startup.botRuntime) {
           setActiveBotRuntime(s.startup.botRuntime);
         } else {
@@ -406,6 +416,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         }
       } else {
         setStartupFlags('-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200');
+        if (isMc) {
+          setJavaVersion(`Java ${getRecommendedJava(s.version)}`);
+        } else {
+          setJavaVersion(s.version || 'Node 22 (LTS)');
+        }
       }
     }
   };
@@ -1084,7 +1099,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     const mergedStartup: ServerStartupConfig = {
       ...startupConfig,
       botRuntime: activeBotRuntime,
-      javaVersion,
+      javaVersion: isMinecraft ? javaVersion : undefined,
+      nodeConfig: activeBotRuntime === 'nodejs' ? { ...(startupConfig.nodeConfig || {}), version: !isMinecraft && activeBotRuntime === 'nodejs' ? javaVersion : startupConfig.nodeConfig?.version } : startupConfig.nodeConfig,
+      pythonConfig: activeBotRuntime === 'python' ? { ...(startupConfig.pythonConfig || {}), version: !isMinecraft && activeBotRuntime === 'python' ? javaVersion : startupConfig.pythonConfig?.version } : startupConfig.pythonConfig,
+      bunConfig: activeBotRuntime === 'bun' ? { ...(startupConfig.bunConfig || {}), version: !isMinecraft && activeBotRuntime === 'bun' ? javaVersion : startupConfig.bunConfig?.version } : startupConfig.bunConfig,
       jvmFlags: isMinecraft ? startupFlags : undefined,
       customFlags: !isMinecraft ? startupFlags : startupConfig.customFlags
     };
@@ -1093,7 +1111,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       method: 'PATCH',
       body: JSON.stringify({
         name: serverNameEdit,
-        startup: mergedStartup
+        startup: mergedStartup,
+        version: !isMinecraft ? javaVersion : undefined
       })
     });
 
@@ -1164,7 +1183,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const fullIp = `${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}`;
   const isRunning = server.status === 'running';
   const swLower = typeof server.software === 'string' ? server.software.toLowerCase() : '';
-  const isMinecraft = server.productId === 'prod_minecraft' || swLower.includes('paper') || swLower.includes('spigot') || swLower.includes('forge') || swLower.includes('minecraft') || swLower.includes('purpur');
+  const isMinecraft = server.productId === 'prod_minecraft' || /minecraft|paper|purpur|vanilla|fabric|neoforge|forge|spigot|bedrock|velocity|bungee/i.test(swLower);
   const isPython = swLower.includes('python') || Boolean(server.startup?.entryFile && server.startup.entryFile.endsWith('.py'));
   const isBun = swLower.includes('bun') || Boolean(server.startup?.entryFile && server.startup.entryFile.endsWith('.ts'));
   const isNode = !isMinecraft && !isPython && !isBun;
@@ -1186,6 +1205,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/30 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.08)]'
           : isPython
           ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-blue-950/30 border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.08)]'
+          : isBun
+          ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/20 border-amber-500/20'
           : 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/20 border-zinc-800'
       }`}>
         {/* Subtle Background Pattern Overlay */}
@@ -1220,9 +1241,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
                   : isPython
                   ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                  : isBun
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                   : 'bg-zinc-800 text-zinc-300 border-zinc-700'
               }`}>
-                {isMinecraft ? 'MINECRAFT' : isPython ? 'PYTHON BOT' : 'NODE.JS BOT'}
+                {isMinecraft ? 'MINECRAFT' : isPython ? 'PYTHON BOT' : isBun ? 'BUN BOT' : 'NODE.JS BOT'}
               </span>
             </div>
             <p className="text-xs text-zinc-400 flex flex-wrap items-center gap-2">
@@ -2557,9 +2580,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Archive className="h-5 w-5 text-amber-400" /> Real Server Filesystem Backups
+                <Archive className="h-5 w-5 text-amber-400" /> Server Filesystem Backups
               </h3>
-              <p className="text-xs text-zinc-400">Create real ZIP filesystem snapshots, restore previous states, or download compressed archives.</p>
+              <p className="text-xs text-zinc-400">Create ZIP filesystem snapshots, restore previous states, or download compressed archives.</p>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -3251,7 +3274,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Server Name
@@ -3262,6 +3285,20 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   onChange={(e) => setServerNameEdit(e.target.value)}
                   className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                  Deployed Software Engine
+                </label>
+                <div className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs font-semibold text-zinc-300 flex items-center justify-between">
+                  <span>{server?.software || (isMinecraft ? 'Paper' : 'Node.js')}</span>
+                  {server?.version && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-amber-400">
+                      v{server.version}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -3290,11 +3327,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                         ))
                       ) : (
                         <>
-                          <option value="24.x">24.x</option>
-                          <option value="22.x">22.x</option>
-                          <option value="20.x">20.x</option>
-                          <option value="18.x">18.x</option>
-                          <option value="Latest Stable">Latest Stable</option>
+                          <option value="Node 22 (LTS)">Node 22 (LTS)</option>
+                          <option value="Node 20 (LTS)">Node 20 (LTS)</option>
+                          <option value="Node 23 (Current)">Node 23 (Current)</option>
+                          <option value="Node 18 (LTS)">Node 18 (LTS)</option>
+                          <option value="Node 16 (Legacy)">Node 16 (Legacy)</option>
                         </>
                       )}
                     </>
@@ -3307,12 +3344,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                         ))
                       ) : (
                         <>
-                          <option value="3.14.x">3.14.x</option>
-                          <option value="3.13.x">3.13.x</option>
-                          <option value="3.12.x">3.12.x</option>
-                          <option value="3.11.x">3.11.x</option>
-                          <option value="3.10.x">3.10.x</option>
-                          <option value="Latest Stable">Latest Stable</option>
+                          <option value="Python 3.12 (Latest)">Python 3.12 (Latest)</option>
+                          <option value="Python 3.13 (Preview)">Python 3.13 (Preview)</option>
+                          <option value="Python 3.11 (Stable)">Python 3.11 (Stable)</option>
+                          <option value="Python 3.10">Python 3.10</option>
+                          <option value="Python 3.9">Python 3.9</option>
                         </>
                       )}
                     </>
@@ -3325,10 +3361,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                         ))
                       ) : (
                         <>
-                          <option value="1.2.x">1.2.x</option>
-                          <option value="1.1.x">1.1.x</option>
-                          <option value="1.0.x">1.0.x</option>
-                          <option value="Latest Stable">Latest Stable</option>
+                          <option value="Bun 1.2 (Latest)">Bun 1.2 (Latest)</option>
+                          <option value="Bun 1.1">Bun 1.1</option>
+                          <option value="Bun 1.0">Bun 1.0</option>
                         </>
                       )}
                     </>
@@ -3859,7 +3894,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 <Shield className="h-3.5 w-3.5 text-blue-400" /> Automation & Crash Recovery Policies
               </h4>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
                   <div>
                     <div className="text-xs font-bold text-white">Auto-Start on Panel Boot</div>
@@ -3883,6 +3918,19 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                     checked={startupConfig.autoStartOnNodeReconnect === true}
                     onChange={(e) => setStartupConfig({ ...startupConfig, autoStartOnNodeReconnect: e.target.checked })}
                     className="h-4 w-4 rounded bg-zinc-800 border-zinc-700 text-violet-500 focus:ring-violet-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
+                  <div>
+                    <div className="text-xs font-bold text-white">Scheduled Auto-Backups</div>
+                    <div className="text-[11px] text-zinc-400">Trigger scheduled server-side auto-backups every 12 hours.</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={startupConfig.autoBackup === true}
+                    onChange={(e) => setStartupConfig({ ...startupConfig, autoBackup: e.target.checked })}
+                    className="h-4 w-4 rounded bg-zinc-800 border-zinc-700 text-violet-500 focus:ring-violet-500 shrink-0 ml-3"
                   />
                 </label>
               </div>
@@ -4217,7 +4265,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                     {reinstallVersionsList.length > 0 ? (
                       reinstallVersionsList.map((ver) => (
                         <option key={ver} value={ver}>
-                          {ver} {ver === reinstallVersionsList[0] ? '(Latest Stable)' : ''}
+                          {ver}
                         </option>
                       ))
                     ) : (

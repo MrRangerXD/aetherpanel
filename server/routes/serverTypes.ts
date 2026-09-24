@@ -433,7 +433,7 @@ router.post('/admin/:id/duplicate', authMiddleware, requireRole(['admin', 'super
 
 // POST /api/v1/admin/server-types/upload-asset - Upload background/banner or logo asset
 router.post('/admin/upload-asset', authMiddleware, requireRole(['admin', 'super_admin']), (req: AuthenticatedRequest, res: Response) => {
-  upload.single('asset')(req, res, async (err: any) => {
+  upload.single('asset')(req as any, res as any, async (err: any) => {
     if (err) {
       return res.status(400).json({
         success: false,

@@ -19,38 +19,31 @@ export const GlobalBackground: React.FC = () => {
 
   return (
     <div
-      id="aether-global-background"
+      id="aether-wallpaper-layer"
       aria-hidden="true"
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none"
     >
       {/* Base Canvas Layer */}
       <div className="absolute inset-0 bg-[#09090b]" />
 
-      {/* Wallpaper Image / Animated GIF Layer */}
+      {/* Wallpaper Image / Animated GIF Element - Native img preserves GIF animation frames */}
       {wallpaperUrl && !hasError && (
-        <>
-          {/* Silent image preloader to catch 404 / network / format errors cleanly */}
-          <img
-            src={wallpaperUrl}
-            alt=""
-            aria-hidden="true"
-            className="hidden"
-            onError={() => setHasError(true)}
-          />
-          <div
-            id="aether-wallpaper-layer"
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none will-change-transform"
-            style={{
-              backgroundImage: `url(${JSON.stringify(wallpaperUrl)})`,
-              filter: isBlurred ? `blur(${blurVal})` : 'none',
-              WebkitFilter: isBlurred ? `blur(${blurVal})` : 'none',
-              transform: isBlurred ? 'scale(1.08)' : 'scale(1)',
-            }}
-          />
-        </>
+        <img
+          src={wallpaperUrl}
+          alt=""
+          aria-hidden="true"
+          onError={() => setHasError(true)}
+          className={`w-full h-full object-cover transition-transform duration-300 pointer-events-none will-change-transform ${
+            isBlurred ? 'scale-105' : 'scale-100'
+          }`}
+          style={{
+            filter: isBlurred ? `blur(${blurVal})` : 'none',
+            WebkitFilter: isBlurred ? `blur(${blurVal})` : 'none',
+          }}
+        />
       )}
 
-      {/* Background Dark Overlay Layer */}
+      {/* Overlay Mask Element */}
       <div
         id="aether-overlay-layer"
         className="absolute inset-0 transition-colors duration-300 pointer-events-none"

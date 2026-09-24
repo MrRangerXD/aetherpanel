@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
   Activity, ShieldAlert, CheckCircle2, AlertTriangle, RefreshCw, Key,
-  MessageSquare, HardDrive, Database, Server, Terminal, Lock, Cpu, Info
+  MessageSquare, HardDrive, Database, Server, Terminal, Lock, Cpu, Info,
+  Bug, Trash2, Eye, EyeOff, Check, Copy, Sparkles
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
+import { UiRenderErrorLog } from '../../types';
 
 export const AdminDiagnostics: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [clearingUiErrors, setClearingUiErrors] = useState<boolean>(false);
+  const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchDiagnostics = async () => {
     setRefreshing(true);
@@ -31,11 +36,31 @@ export const AdminDiagnostics: React.FC = () => {
     fetchDiagnostics();
   }, []);
 
+  const handleClearUiErrors = async () => {
+    if (!window.confirm('Are you sure you want to clear all tracked UI error logs?')) return;
+    setClearingUiErrors(true);
+    try {
+      await apiRequest('/diagnostics/ui-errors', { method: 'DELETE' });
+      await fetchDiagnostics();
+    } catch (err: any) {
+      alert(err.message || 'Failed to clear error logs');
+    } finally {
+      setClearingUiErrors(false);
+    }
+  };
+
+  const handleCopyLog = (errLog: UiRenderErrorLog) => {
+    navigator.clipboard.writeText(JSON.stringify(errLog, null, 2));
+    setCopiedId(errLog.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const renderBadge = (status: string) => {
     switch (status) {
       case 'CONNECTED':
       case 'CONFIGURED':
       case 'ONLINE':
+      case 'HEALTHY':
         return (
           <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shrink-0">
             <CheckCircle2 className="w-3.5 h-3.5" /> {status}
@@ -43,6 +68,7 @@ export const AdminDiagnostics: React.FC = () => {
         );
       case 'NOT_CONFIGURED':
       case 'DISCONNECTED':
+      case 'DEGRADED_COMPONENTS':
         return (
           <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1.5 shrink-0">
             <AlertTriangle className="w-3.5 h-3.5" /> {status}
@@ -77,14 +103,14 @@ export const AdminDiagnostics: React.FC = () => {
             <Activity className="h-6 w-6 text-amber-400" /> System Diagnostics & Health Monitor
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Real-time backend audit, subsystem health checks, and production blocker verification.
+            Real-time backend audit, subsystem health checks, and automated UI error log tracker.
           </p>
         </div>
 
         <button
           onClick={fetchDiagnostics}
           disabled={refreshing}
-          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 shrink-0"
+          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 shrink-0 cursor-pointer"
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           <span>{refreshing ? 'Testing...' : 'Run Diagnostics'}</span>
@@ -100,6 +126,139 @@ export const AdminDiagnostics: React.FC = () => {
 
       {data && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Automated UI Render Error Tracker */}
+          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4 shadow-xl md:col-span-2">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                  <Bug className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    Frontend UI & Invisible Component Diagnostics
+                  </h2>
+                  <p className="text-[11px] text-zinc-400">
+                    Automated error log tracker capturing React render crashes and component exceptions
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {renderBadge(data.frontendUi?.status || 'HEALTHY')}
+                {data.frontendUi?.totalRecorded > 0 && (
+                  <button
+                    onClick={handleClearUiErrors}
+                    disabled={clearingUiErrors}
+                    className="px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs border border-zinc-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Clear Logs</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Total Captured Crashes</span>
+                <span className="text-lg font-bold text-white font-mono">{data.frontendUi?.totalRecorded || 0}</span>
+                <span className="text-[10px] text-zinc-400 block">
+                  {data.frontendUi?.unresolvedCount === 0 ? 'No active unresolved crashes' : `${data.frontendUi?.unresolvedCount} unresolved incident(s)`}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Last Incident Dispatched</span>
+                <span className="text-xs font-semibold text-zinc-200 mt-1 block">
+                  {data.frontendUi?.lastIncidentAt ? new Date(data.frontendUi.lastIncidentAt).toLocaleString() : 'None registered'}
+                </span>
+                <span className="text-[10px] text-emerald-400 block">Telemetry endpoint active: /api/v1/diagnostics/ui-errors</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Affected Component Scopes</span>
+                <span className="text-xs font-semibold text-zinc-200 mt-1 block">
+                  {data.frontendUi?.affectedComponents?.length > 0
+                    ? data.frontendUi.affectedComponents.join(', ')
+                    : 'Clean / None'}
+                </span>
+                <span className="text-[10px] text-zinc-400 block">Boundary recovery available</span>
+              </div>
+            </div>
+
+            {/* Error logs table / list */}
+            {data.frontendUi?.recentErrors && data.frontendUi.recentErrors.length > 0 ? (
+              <div className="space-y-2.5 pt-2">
+                <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
+                  Recent Captured Error Incidents:
+                </span>
+                <div className="space-y-2">
+                  {data.frontendUi.recentErrors.map((errLog: UiRenderErrorLog) => {
+                    const isExpanded = expandedErrorId === errLog.id;
+                    const isCopied = copiedId === errLog.id;
+
+                    return (
+                      <div key={errLog.id} className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-mono font-bold">
+                              &lt;{errLog.componentName || 'UnknownComponent'}&gt;
+                            </span>
+                            <span className="text-xs font-medium text-white truncate max-w-md">
+                              {errLog.errorMessage}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
+                            <span className="text-[10px] text-zinc-500 font-mono">
+                              {new Date(errLog.timestamp).toLocaleTimeString()}
+                            </span>
+                            <button
+                              onClick={() => handleCopyLog(errLog)}
+                              className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                              title="Copy Error JSON"
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => setExpandedErrorId(isExpanded ? null : errLog.id)}
+                              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                              <span>{isExpanded ? 'Hide Stack' : 'View Stack'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="pt-2 border-t border-zinc-800/80 space-y-2 font-mono text-[11px]">
+                            <div className="grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
+                              <div><span className="text-zinc-500">URL:</span> {errLog.url}</div>
+                              <div><span className="text-zinc-500">Incident ID:</span> {errLog.id}</div>
+                            </div>
+                            {errLog.componentStack && (
+                              <pre className="p-2.5 bg-zinc-950 rounded-lg text-amber-300/90 overflow-x-auto border border-zinc-800 whitespace-pre-wrap max-h-32">
+                                {errLog.componentStack}
+                              </pre>
+                            )}
+                            {errLog.stack && (
+                              <pre className="p-2.5 bg-zinc-950 rounded-lg text-zinc-400 overflow-x-auto border border-zinc-800 whitespace-pre-wrap max-h-32">
+                                {errLog.stack}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Zero UI render exceptions captured. Frontend tree is rendering cleanly.</span>
+              </div>
+            )}
+          </div>
+
           {/* 1. Authentication Subsystem */}
           <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
@@ -248,7 +407,7 @@ export const AdminDiagnostics: React.FC = () => {
                     <span className="text-xs font-semibold text-amber-300 font-mono truncate block">{data.sftp.playitEndpoint}</span>
                  </div>
               </div>
-            </div>
+              </div>
 
               <div className="flex flex-wrap gap-1 mt-1">
                 {data.sftp.requiredConfig.map((item: string) => (

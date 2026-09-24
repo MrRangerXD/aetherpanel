@@ -8,16 +8,20 @@ interface PageTransitionProps {
 }
 
 export const PageTransition: React.FC<PageTransitionProps> = ({ routeKey, children }) => {
-  const { getTransitionProps } = useAnimation();
+  const { getTransitionProps, motionEnabled } = useAnimation();
   const props = getTransitionProps('page');
+
+  if (!motionEnabled) {
+    return <div className="w-full h-full flex flex-col flex-1">{children}</div>;
+  }
 
   return (
     <motion.div
       key={routeKey}
-      initial={props.initial}
-      animate={props.animate}
-      exit={props.exit}
-      transition={props.transition}
+      initial={{ opacity: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
       className="w-full h-full flex flex-col flex-1"
     >
       {children}

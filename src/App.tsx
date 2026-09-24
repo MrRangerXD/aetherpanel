@@ -248,8 +248,151 @@ function AppContent() {
     }
   }
 
+  // Authenticated Panel Viewport & Sidebar Layout (PRD Section 6 CSS contract)
+  if (user && !isPublicPage) {
+    return (
+      <div className="h-[100dvh] w-full overflow-hidden bg-[#09090b] text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
+        {/* Authoritative Global Background System */}
+        <GlobalBackground />
+
+        {/* Maintenance Mode Warning Banner */}
+        {maintenanceMode && (
+          <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            <span>PLATFORM UNDER MAINTENANCE: Server deployment, billing, and write operations are temporarily frozen.</span>
+          </div>
+        )}
+
+        {/* Custom GPU Cursor */}
+        <CustomCursor />
+
+        {/* Global Search Command Palette */}
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          onNavigate={handleNavigate}
+        />
+
+        {/* App Shell Flex Contract */}
+        <div id="aether-app-shell" className="flex h-full w-full overflow-hidden relative z-10">
+          {/* Customer Sidebar */}
+          {isCustomerPage && (
+            <Sidebar
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+              userServers={userServers}
+              currentServerId={pageParams?.serverId}
+              onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+            />
+          )}
+
+          {/* Admin Sidebar */}
+          {isAdminPage && (
+            <AdminSidebar
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {/* Main Viewport Container */}
+          <div id="aether-main-viewport" className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden relative z-10">
+            {/* Top Navbar */}
+            <header className="flex-none sticky top-0 z-30">
+              <Navbar
+                currentPage={currentPage}
+                onNavigate={handleNavigate}
+                onOpenSearch={() => setIsSearchOpen(true)}
+                userServers={userServers}
+                currentServerId={pageParams?.serverId}
+                onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+              />
+            </header>
+
+            {/* Content Viewport */}
+            <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto flex flex-col justify-between">
+              <div className="flex-1 flex flex-col">
+                <PageTransition routeKey={currentPage}>
+                  <div className="flex-1 flex flex-col">
+                    {/* Customer Control Panel Views */}
+                    {currentPage === 'dashboard' && (
+                      <div className="space-y-6">
+                        <AdBanner placement="dashboard" />
+                        <Dashboard
+                          onNavigate={handleNavigate}
+                          onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+                        />
+                      </div>
+                    )}
+                    {currentPage === 'servers' && (
+                      <div className="space-y-6">
+                        <AdBanner placement="server_list" />
+                        <ServersList onNavigate={handleNavigate} />
+                      </div>
+                    )}
+                    {currentPage === 'deploy' && (
+                      <ServerDeployWizard
+                        onNavigate={handleNavigate}
+                        onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+                        onRefreshServers={fetchServers}
+                        initialPlanId={pageParams?.planId}
+                        initialCategory={pageParams?.productCategory || pageParams?.category}
+                      />
+                    )}
+                    {currentPage === 'server-manage' && (
+                      <ServerManage
+                        serverId={pageParams.serverId || userServers[0]?.id || ''}
+                        initialTab={pageParams.initialTab}
+                        onNavigate={handleNavigate}
+                      />
+                    )}
+                    {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
+                    {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
+                    {currentPage === 'activity' && <ActivityLog />}
+                    {currentPage === 'settings' && <UserSettings />}
+                    {currentPage === 'afk-rewards' && <AfkRewards />}
+
+                    {/* Admin Views */}
+                    {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={handleNavigate} />}
+                    {currentPage === 'admin-users' && <AdminUsers />}
+                    {currentPage === 'admin-servers' && <AdminServers />}
+                    {currentPage === 'admin-products' && <AdminProducts />}
+                    {currentPage === 'admin-server-types' && <AdminServerTypesPage />}
+                    {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
+                    {currentPage === 'admin-nodes' && <AdminNodes />}
+                    {currentPage === 'admin-monitoring' && <AdminMonitoring />}
+                    {currentPage === 'admin-billing' && <AdminBilling />}
+
+                    {currentPage === 'admin-coupons' && <AdminCoupons />}
+                    {currentPage === 'admin-announcements' && <AdminAnnouncements />}
+                    {currentPage === 'admin-support' && <AdminSupport />}
+                    {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
+                    {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
+                    {currentPage === 'admin-legal' && <AdminLegal />}
+                    {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
+                    {currentPage === 'admin-settings' && <AdminSettings />}
+                    {currentPage === 'admin-ads' && <AdminAds />}
+                    {currentPage === 'admin-rewards' && <AdminRewards />}
+                    {currentPage === 'admin-discord' && <AdminDiscord />}
+                    {currentPage === 'admin-appearance' && <AdminAppearance />}
+                  </div>
+                </PageTransition>
+              </div>
+
+              {/* Subtle Panel Footer for Customer & Admin Pages */}
+              <footer className="py-3 px-6 border-t border-zinc-900/80 bg-zinc-950/60 text-[11px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl">
+                <span className="font-medium text-zinc-400">© 2025–2026 {brandName || 'AetherPanel'}</span>
+                <span className="text-[10px] text-zinc-600 hidden sm:inline">Enterprise Distributed Control Plane</span>
+              </footer>
+            </main>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Public / Unauthenticated Views Layout
   return (
-    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-[#09090b] text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
       {/* Authoritative Global Background System */}
       <GlobalBackground />
 
@@ -272,150 +415,44 @@ function AppContent() {
       />
 
       {/* Top Header Navbar */}
-      <Navbar
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        userServers={userServers}
-        currentServerId={pageParams?.serverId}
-        onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-      />
-
-      {/* Main Body Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row relative z-10">
-        
-        {/* Customer Sidebar */}
-        {isCustomerPage && user && (
-          <motion.div
-            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0 lg:self-start lg:sticky lg:top-16"
-          >
-            <Sidebar
-              currentPage={currentPage}
-              onNavigate={handleNavigate}
-              userServers={userServers}
-              currentServerId={pageParams?.serverId}
-              onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-            />
-          </motion.div>
-        )}
-
-        {/* Admin Sidebar */}
-        {isAdminPage && user && (
-          <motion.div
-            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0 lg:self-start lg:sticky lg:top-16"
-          >
-            <AdminSidebar
-              currentPage={currentPage}
-              onNavigate={handleNavigate}
-            />
-          </motion.div>
-        )}
-
-        {/* Content Viewport */}
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100dvh-4rem)] flex flex-col justify-between p-4 lg:p-6">
-          <div className="flex-1 flex flex-col">
-            <PageTransition routeKey={currentPage}>
-              <div className="flex-1 flex flex-col">
-                {/* Public Views */}
-                {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
-                {currentPage === 'minecraft' && <MinecraftHosting onNavigate={handleNavigate} />}
-                {currentPage === 'bot' && <BotHosting onNavigate={handleNavigate} />}
-                {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}
-                {currentPage === 'status' && <Status />}
-                {currentPage === 'docs' && <Docs />}
-                {currentPage === 'terms' && <LegalPage initialSlug="terms" onNavigate={handleNavigate} />}
-                {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
-                {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
-                {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
-
-                {/* Auth Views */}
-                {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
-                {currentPage === 'register' && <Register onNavigate={handleNavigate} />}
-
-                {/* Customer Control Panel Views */}
-                {currentPage === 'dashboard' && (
-                  <div className="space-y-6">
-                    <AdBanner placement="dashboard" />
-                    <Dashboard
-                      onNavigate={handleNavigate}
-                      onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-                    />
-                  </div>
-                )}
-                {currentPage === 'servers' && (
-                  <div className="space-y-6">
-                    <AdBanner placement="server_list" />
-                    <ServersList onNavigate={handleNavigate} />
-                  </div>
-                )}
-                {currentPage === 'deploy' && (
-                  <ServerDeployWizard
-                    onNavigate={handleNavigate}
-                    onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-                    onRefreshServers={fetchServers}
-                    initialPlanId={pageParams?.planId}
-                    initialCategory={pageParams?.productCategory || pageParams?.category}
-                  />
-                )}
-                {currentPage === 'server-manage' && (
-                  <ServerManage
-                    serverId={pageParams.serverId || userServers[0]?.id || ''}
-                    initialTab={pageParams.initialTab}
-                    onNavigate={handleNavigate}
-                  />
-                )}
-                {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
-                {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
-                {currentPage === 'activity' && <ActivityLog />}
-                {currentPage === 'settings' && <UserSettings />}
-                {currentPage === 'afk-rewards' && <AfkRewards />}
-
-                {/* Admin Views */}
-                {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={handleNavigate} />}
-                {currentPage === 'admin-users' && <AdminUsers />}
-                {currentPage === 'admin-servers' && <AdminServers />}
-                {currentPage === 'admin-products' && <AdminProducts />}
-                {currentPage === 'admin-server-types' && <AdminServerTypesPage />}
-                {currentPage === 'admin-backups' && <AdminBackups onNavigate={handleNavigate} />}
-                {currentPage === 'admin-nodes' && <AdminNodes />}
-                {currentPage === 'admin-monitoring' && <AdminMonitoring />}
-                {currentPage === 'admin-billing' && <AdminBilling />}
-
-                {currentPage === 'admin-coupons' && <AdminCoupons />}
-                {currentPage === 'admin-announcements' && <AdminAnnouncements />}
-                {currentPage === 'admin-support' && <AdminSupport />}
-                {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
-                {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
-                {currentPage === 'admin-legal' && <AdminLegal />}
-                {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
-                {currentPage === 'admin-settings' && <AdminSettings />}
-                {currentPage === 'admin-ads' && <AdminAds />}
-                {currentPage === 'admin-rewards' && <AdminRewards />}
-                {currentPage === 'admin-discord' && <AdminDiscord />}
-                {currentPage === 'admin-appearance' && <AdminAppearance />}
-              </div>
-            </PageTransition>
-          </div>
-
-          {/* Subtle Panel Footer for Customer & Admin Pages */}
-          {!isPublicPage && (
-            <footer className="py-3 px-6 border-t border-zinc-900/80 bg-zinc-950/60 text-[11px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8">
-              <span className="font-medium text-zinc-400">© 2025–2026 {brandName || 'AetherPanel'}</span>
-              <span className="text-[10px] text-zinc-600 hidden sm:inline">Enterprise Distributed Control Plane</span>
-            </footer>
-          )}
-        </main>
+      <div className="relative z-30">
+        <Navbar
+          currentPage={currentPage}
+          onNavigate={handleNavigate}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          userServers={userServers}
+          currentServerId={pageParams?.serverId}
+          onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+        />
       </div>
 
-      {/* Footer for Public Views */}
-      {isPublicPage && <Footer onNavigate={handleNavigate} />}
+      {/* Main Public Content */}
+      <main className="flex-1 overflow-x-hidden flex flex-col justify-between relative z-10">
+        <PageTransition routeKey={currentPage}>
+          <div className="flex-1 flex flex-col">
+            {/* Public Views */}
+            {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
+            {currentPage === 'minecraft' && <MinecraftHosting onNavigate={handleNavigate} />}
+            {currentPage === 'bot' && <BotHosting onNavigate={handleNavigate} />}
+            {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}
+            {currentPage === 'status' && <Status />}
+            {currentPage === 'docs' && <Docs />}
+            {currentPage === 'terms' && <LegalPage initialSlug="terms" onNavigate={handleNavigate} />}
+            {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
+            {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
+            {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
 
+            {/* Auth Views */}
+            {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
+            {currentPage === 'register' && <Register onNavigate={handleNavigate} />}
+          </div>
+        </PageTransition>
+      </main>
+
+      {/* Footer for Public Views */}
+      <div className="relative z-10">
+        <Footer onNavigate={handleNavigate} />
+      </div>
     </div>
   );
 }

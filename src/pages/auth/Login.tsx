@@ -11,7 +11,7 @@ interface LoginProps {
 
 export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   const { login, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
-  const { accentClasses } = useTheme();
+  const { accentClasses, activePreset } = useTheme();
   const { pageAnimationsEnabled } = useBranding();
 
   const [email, setEmail] = useState('');
@@ -95,15 +95,12 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   const animate = pageAnimationsEnabled && !prefersReducedMotion;
 
   const containerVariants = {
-    hidden: { opacity: 0, y: 12 },
+    hidden: { opacity: 1, y: 4 },
     visible: {
       opacity: 1,
       y: 0,
       transition: {
-        type: 'spring',
-        stiffness: 120,
-        damping: 18,
-        mass: 0.8
+        duration: 0.2
       }
     }
   };
@@ -115,15 +112,38 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   } : {};
 
   return (
-    <motion.div {...motionDivProps} className="min-h-[calc(100vh-8rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
+    <motion.div {...motionDivProps} className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      {/* Dynamic Ambient Glow Layers */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        {/* Primary warm luminous sphere behind login card */}
+        <div
+          className="absolute -top-16 left-1/2 -translate-x-1/2 w-[550px] sm:w-[720px] h-[440px] rounded-full opacity-70 blur-[120px] pointer-events-none"
+          style={{
+            background: `radial-gradient(circle, ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.4)'} 0%, rgba(245, 158, 11, 0.15) 45%, rgba(0, 0, 0, 0) 75%)`
+          }}
+        />
+        {/* Secondary subtle contrast bloom for spatial depth */}
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[360px] rounded-full opacity-40 blur-[140px] pointer-events-none"
+          style={{
+            background: `radial-gradient(circle, ${activePreset?.accent || '#f59e0b'} 0%, rgba(0, 0, 0, 0) 70%)`
+          }}
+        />
+      </div>
+
+      <div className="w-full max-w-md space-y-8 relative z-10">
         
-        {/* Header */}
+        {/* Header with Glowing Brand Icon */}
         <div className="text-center space-y-2">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-lg shadow-amber-500/10">
-            <Cpu className="h-6 w-6" />
+          <div
+            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-400 transition-all"
+            style={{
+              boxShadow: `0 0 35px -5px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.45)'}`
+            }}
+          >
+            <Cpu className="h-7 w-7" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white font-sans">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans drop-shadow-md">
             Sign In to AetherPanel
           </h2>
           <p className="text-xs text-zinc-400">
@@ -131,10 +151,18 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
           </p>
         </div>
 
-        {/* Login Form Container */}
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/90 backdrop-blur-xl p-8 shadow-2xl space-y-6">
+        {/* Login Form Container with Radiant Border Glow */}
+        <div
+          className="relative rounded-3xl border border-zinc-800/90 bg-zinc-900/90 backdrop-blur-2xl p-8 space-y-6 overflow-hidden transition-all"
+          style={{
+            boxShadow: `0 0 60px -15px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.25)'}, 0 25px 50px -12px rgba(0,0,0,0.85)`
+          }}
+        >
+          {/* Top ambient glowing highlight beam */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex items-start gap-2.5">
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex items-start gap-2.5 shadow-sm">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -149,7 +177,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                   id="btn_google_signin"
                   onClick={handleGoogleSignIn}
                   disabled={googleLoading || discordLoading || loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 text-xs font-semibold text-zinc-200 transition-all shadow-sm active:scale-[0.99] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 text-xs font-semibold text-zinc-200 transition-all shadow-sm hover:shadow-md active:scale-[0.99] disabled:opacity-50"
                 >
                   {googleLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
@@ -171,7 +199,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                   id="btn_discord_signin"
                   onClick={handleDiscordSignIn}
                   disabled={discordLoading || googleLoading || loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#5865F2]/10 border border-[#5865F2]/30 hover:bg-[#5865F2]/20 text-xs font-semibold text-[#8ea1e1] hover:text-white transition-all shadow-sm active:scale-[0.99] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#5865F2]/10 border border-[#5865F2]/30 hover:bg-[#5865F2]/20 hover:border-[#5865F2]/50 text-xs font-semibold text-[#8ea1e1] hover:text-white transition-all shadow-sm hover:shadow-[0_0_20px_rgba(88,101,242,0.25)] active:scale-[0.99] disabled:opacity-50"
                 >
                   {discordLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin text-[#5865F2]" />
@@ -212,7 +240,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@aetherpanel.in or username"
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
                   />
                 </div>
               </div>
@@ -229,7 +257,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-colors"
+                    className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
                   />
                 </div>
               </div>
@@ -237,7 +265,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
               <button
                 type="submit"
                 disabled={loading || googleLoading || discordLoading}
-                className={`w-full py-3 rounded-xl font-semibold text-xs text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50`}
+                className={`w-full py-3 rounded-xl font-semibold text-xs text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg shadow-amber-500/25 hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
               >
                 <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -256,7 +284,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
               Don't have an account?{' '}
               <button
                 onClick={() => onNavigate('register')}
-                className="text-amber-400 hover:underline font-semibold"
+                className="text-amber-400 hover:text-amber-300 hover:underline font-semibold transition-colors"
               >
                 Create Account
               </button>

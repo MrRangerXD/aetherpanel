@@ -117,6 +117,49 @@ export async function processScheduledTasks(): Promise<void> {
   }
 }
 
+export async function processAutoBackups(): Promise<void> {
+  const db = await getDb();
+  const now = Date.now();
+  const INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+  for (const server of db.servers) {
+    if (server.startup?.autoBackup === true) {
+      const lastRunStr = server.startup.lastAutoBackupAt;
+      const lastRun = lastRunStr ? new Date(lastRunStr).getTime() : 0;
+
+      if (now - lastRun >= INTERVAL_MS) {
+        console.log(`[AutoBackupEngine] Triggering scheduled auto-backup for server ${server.id} (${server.name})`);
+        appendConsoleLog(server.id, `[AutoBackupEngine]: Initiating scheduled 12-hour auto-backup for this instance...`);
+
+        try {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          await createRealBackupProcess(
+            server.id,
+            `AutoBackup_${timestamp}`,
+            'scheduled'
+          );
+
+          if (!server.startup) server.startup = {};
+          server.startup.lastAutoBackupAt = new Date().toISOString();
+          saveDbSync();
+
+          await recordServerActivity(
+            server.id,
+            server.userId,
+            'System',
+            'AUTO_BACKUP_EXECUTE',
+            `Successfully created scheduled auto-backup`
+          );
+
+        } catch (err: any) {
+          console.error(`[AutoBackupEngine/ERROR] Automated backup failed for server ${server.id}:`, err);
+          appendConsoleLog(server.id, `[AutoBackupEngine/ERROR]: Automated scheduled backup failed: ${err.message}`);
+        }
+      }
+    }
+  }
+}
+
 let schedulerTimer: NodeJS.Timeout | null = null;
 
 export function startSchedulerLoop(): void {
@@ -127,6 +170,7 @@ export function startSchedulerLoop(): void {
   schedulerTimer = setInterval(async () => {
     try {
       await processScheduledTasks();
+      await processAutoBackups();
       await pruneExpiredBackups();
     } catch (err) {
       console.error('Error in schedule loop:', err);

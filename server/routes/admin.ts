@@ -27,6 +27,7 @@ import {
   applyHostNetworkProtection,
   removeServerPortRule
 } from '../services/networkProtectionService';
+import { getUiDiagnosticStats, getUiErrors } from '../services/uiDiagnosticService';
 
 const router = Router();
 
@@ -2454,11 +2455,21 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
   const statusLower = playitStatus.status.toLowerCase();
 
   const timestamp = new Date().toISOString();
+  const uiStats = await getUiDiagnosticStats();
+  const recentUiErrors = await getUiErrors(10);
 
   res.json({
     success: true,
     data: {
       lastCheck: timestamp,
+      frontendUi: {
+        status: uiStats.unresolvedCount === 0 ? 'HEALTHY' : (uiStats.unresolvedCount > 5 ? 'CRITICAL_RENDER_FAILURES' : 'DEGRADED_COMPONENTS'),
+        totalRecorded: uiStats.totalCount,
+        unresolvedCount: uiStats.unresolvedCount,
+        lastIncidentAt: uiStats.lastIncidentAt,
+        affectedComponents: uiStats.affectedComponents,
+        recentErrors: recentUiErrors
+      },
       authentication: {
         emailPassword: {
           status: 'CONNECTED',

@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 
 import { authMiddleware, AuthenticatedRequest } from './server/auth';
-import { getDb } from './server/db';
+import { getDb, saveDb } from './server/db';
 
 import authRoutes from './server/routes/auth';
 import publicRoutes from './server/routes/public';
@@ -25,6 +25,7 @@ import apiKeysRoutes from './server/routes/apiKeys';
 import minecraftRoutes from './server/routes/minecraft';
 import serverTypesRoutes from './server/routes/serverTypes';
 import runtimesRoutes from './server/routes/runtimes';
+import diagnosticsRoutes from './server/routes/diagnostics';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
@@ -127,6 +128,126 @@ async function startServer() {
     res.json({ success: true, data: socialLinks });
   });
 
+  // GET /api/v1/system/branding - System wallpaper & brand settings (PRD Section 5 & 7.2)
+  app.get('/api/v1/system/branding', async (req, res) => {
+    const db = await getDb();
+    const themeSettings = db.settings.themeSettings || ({} as any);
+    const assets = themeSettings.assets || {};
+    res.json({
+      success: true,
+      data: {
+        brandName: db.settings.brandName || 'AetherPanel',
+        brandTagline: db.settings.brandTagline || 'Premium Minecraft & Discord Bot Hosting',
+        backgroundWallpaperUrl: assets.backgroundWallpaperUrl || assets.bgPatternUrl || '',
+        backgroundBlur: themeSettings.backgroundBlur || 'none',
+        backgroundOverlayOpacity: themeSettings.backgroundOverlayOpacity !== undefined ? themeSettings.backgroundOverlayOpacity : 75,
+        brightness: (themeSettings as any).brightness !== undefined ? (themeSettings as any).brightness : 100,
+        activeThemeId: themeSettings.activeThemeId || 'golden',
+        logoUrl: assets.logoUrl || '',
+        faviconUrl: assets.faviconUrl || ''
+      }
+    });
+  });
+
+  // PUT /api/v1/system/branding - Updates global wallpaper & branding (Admin only, PRD Section 5 & 7.2)
+  app.put('/api/v1/system/branding', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'super_admin') {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required to modify system branding.' } });
+    }
+
+    const db = await getDb();
+    const {
+      brandName,
+      brandTagline,
+      backgroundWallpaperUrl,
+      backgroundBlur,
+      backgroundOverlayOpacity,
+      brightness,
+      activeThemeId,
+      logoUrl,
+      faviconUrl
+    } = req.body;
+
+    if (typeof brandName === 'string' && brandName.trim()) {
+      db.settings.brandName = brandName.trim();
+    }
+    if (typeof brandTagline === 'string') {
+      db.settings.brandTagline = brandTagline.trim();
+    }
+
+    if (!db.settings.themeSettings) {
+      db.settings.themeSettings = {
+        activeThemeId: 'golden',
+        activeFontId: 'Plus Jakarta Sans',
+        cardStyle: 'rounded-2xl',
+        glowIntensity: 'vibrant',
+        allowUserCustomization: true,
+        backgroundBlur: 'none',
+        backgroundOverlayOpacity: 75,
+        assets: {
+          logoUrl: '',
+          faviconUrl: '',
+          bgPatternUrl: '',
+          backgroundWallpaperUrl: '',
+          bannerUrl: '',
+          loginBgUrl: ''
+        }
+      };
+    }
+
+    if (!db.settings.themeSettings.assets) {
+      db.settings.themeSettings.assets = {
+        logoUrl: '',
+        faviconUrl: '',
+        bgPatternUrl: '',
+        backgroundWallpaperUrl: '',
+        bannerUrl: '',
+        loginBgUrl: ''
+      };
+    }
+
+    if (backgroundWallpaperUrl !== undefined) {
+      db.settings.themeSettings.assets.backgroundWallpaperUrl = backgroundWallpaperUrl;
+      db.settings.themeSettings.assets.bgPatternUrl = backgroundWallpaperUrl;
+    }
+    if (logoUrl !== undefined) {
+      db.settings.themeSettings.assets.logoUrl = logoUrl;
+    }
+    if (faviconUrl !== undefined) {
+      db.settings.themeSettings.assets.faviconUrl = faviconUrl;
+    }
+    if (backgroundBlur !== undefined) {
+      db.settings.themeSettings.backgroundBlur = backgroundBlur;
+    }
+    if (backgroundOverlayOpacity !== undefined) {
+      db.settings.themeSettings.backgroundOverlayOpacity = Number(backgroundOverlayOpacity);
+    }
+    if (brightness !== undefined) {
+      (db.settings.themeSettings as any).brightness = Number(brightness);
+    }
+    if (activeThemeId !== undefined) {
+      db.settings.themeSettings.activeThemeId = activeThemeId;
+    }
+
+    await saveDb();
+
+    res.json({
+      success: true,
+      message: 'System branding updated successfully.',
+      data: {
+        brandName: db.settings.brandName,
+        brandTagline: db.settings.brandTagline,
+        backgroundWallpaperUrl: db.settings.themeSettings.assets.backgroundWallpaperUrl,
+        backgroundBlur: db.settings.themeSettings.backgroundBlur,
+        backgroundOverlayOpacity: db.settings.themeSettings.backgroundOverlayOpacity,
+        brightness: (db.settings.themeSettings as any).brightness,
+        activeThemeId: db.settings.themeSettings.activeThemeId,
+        logoUrl: db.settings.themeSettings.assets.logoUrl,
+        faviconUrl: db.settings.themeSettings.assets.faviconUrl
+      }
+    });
+  });
+
   app.use('/api/v1/auth', sensitiveAuthRateLimiter, authRoutes);
   app.use('/api/v1/account', authRoutes);
   app.use('/api/v1/public', publicRoutes);
@@ -147,6 +268,8 @@ async function startServer() {
   app.use('/api/v1/minecraft', minecraftRoutes);
   app.use('/api/v1/server-types', serverTypesRoutes);
   app.use('/api/v1/runtimes', runtimesRoutes);
+  app.use('/api/v1/diagnostics', diagnosticsRoutes);
+  app.use('/api/v1/public/diagnostics', diagnosticsRoutes);
 
   // Catch-all for missing API routes - must return JSON, not HTML
   app.all('/api/*', (req, res) => {

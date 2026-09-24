@@ -478,6 +478,40 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                   }
                   sftp.status(reqid, 0);
                 });
+
+                sftp.on('READLINK', (reqid: number, linkPath: string) => {
+                  if (!checkPerm('sftp.connect') && !checkPerm('files.view')) {
+                    return sftp.status(reqid, 3);
+                  }
+                  const target = safePath(linkPath);
+                  if (!target) return sftp.status(reqid, 3);
+                  fs.readlink(target, (err, linkString) => {
+                    if (err) return sftp.status(reqid, 4);
+                    sftp.name(reqid, [{ filename: linkString, longname: linkString, attrs: {} as any }]);
+                  });
+                });
+
+                sftp.on('SYMLINK', (reqid: number, linkPath: string, targetPath: string) => {
+                  if (!checkPerm('files.create') && !checkPerm('files.upload')) {
+                    return sftp.status(reqid, 3);
+                  }
+                  const resolvedLink = safePath(linkPath);
+                  if (!resolvedLink) return sftp.status(reqid, 3);
+
+                  // Validate target does not point outside baseDir
+                  const resolvedTarget = path.isAbsolute(targetPath)
+                    ? safePath(targetPath)
+                    : path.resolve(path.dirname(resolvedLink), targetPath);
+
+                  if (!resolvedTarget || (resolvedTarget !== baseDir && !resolvedTarget.startsWith(baseDir + path.sep))) {
+                    return sftp.status(reqid, 3); // Block symlinks pointing outside jail
+                  }
+
+                  fs.symlink(targetPath, resolvedLink, (err) => {
+                    if (err) return sftp.status(reqid, 4);
+                    sftp.status(reqid, 0);
+                  });
+                });
               });
             });
           });

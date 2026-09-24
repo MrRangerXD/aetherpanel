@@ -1,22 +1,41 @@
 @import "tailwindcss";
 
 @layer base {
+  * {
+    border-color: rgba(63, 63, 70, 0.4);
+  }
+
   .custom-cursor-active, .custom-cursor-active * {
     cursor: none !important;
   }
 
   html, body {
+    background-color: #09090b;
+    color: #f4f4f5;
     overflow-x: hidden;
     max-width: 100vw;
     width: 100%;
     -webkit-tap-highlight-color: transparent;
     text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Ensure text elements have high readability and contrast */
+  h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+  }
+
+  p, span, label, div {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Support for modern dynamic viewport height */
   :root {
     --app-height: 100dvh;
+    color-scheme: dark;
   }
 
   /* Smooth momentum scrolling for iOS/touch */
