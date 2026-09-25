@@ -36,8 +36,15 @@ const defaultAuthConfig: AuthConfig = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('aether_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState<boolean>(() => !localStorage.getItem('aether_token'));
   const [authConfig, setAuthConfig] = useState<AuthConfig>(defaultAuthConfig);
 
   const fetchAuthConfig = useCallback(async () => {
@@ -55,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const token = localStorage.getItem('aether_token');
     if (!token) {
       setUser(null);
+      localStorage.removeItem('aether_user');
       setLoading(false);
       return;
     }
@@ -63,17 +71,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await apiRequest('/auth/me');
       if (res.success && res.data?.user) {
         setUser(res.data.user);
+        localStorage.setItem('aether_user', JSON.stringify(res.data.user));
       } else {
         localStorage.removeItem('aether_token');
+        localStorage.removeItem('aether_user');
         setUser(null);
       }
     } catch {
-      localStorage.removeItem('aether_token');
-      setUser(null);
+      // If offline or network error, keep user from localStorage if present
+      if (!user) {
+        localStorage.removeItem('aether_token');
+        localStorage.removeItem('aether_user');
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchAuthConfig();
@@ -88,7 +102,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (res.success && res.data?.token) {
       localStorage.setItem('aether_token', res.data.token);
-      setUser(res.data.user);
+      if (res.data.user) {
+        localStorage.setItem('aether_user', JSON.stringify(res.data.user));
+        setUser(res.data.user);
+      }
       return { success: true };
     }
 
@@ -106,7 +123,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (res.success && res.data?.token) {
       localStorage.setItem('aether_token', res.data.token);
-      setUser(res.data.user);
+      if (res.data.user) {
+        localStorage.setItem('aether_user', JSON.stringify(res.data.user));
+        setUser(res.data.user);
+      }
       return { success: true };
     }
 
@@ -134,7 +154,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (res.success && res.data?.token) {
         localStorage.setItem('aether_token', res.data.token);
-        setUser(res.data.user);
+        if (res.data.user) {
+          localStorage.setItem('aether_user', JSON.stringify(res.data.user));
+          setUser(res.data.user);
+        }
         return { success: true };
       }
 
@@ -187,7 +210,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if ((type === 'AETHERPANEL_DISCORD_OAUTH_SUCCESS' || type === 'DISCORD_AUTH_SUCCESS') && event.data?.token) {
             window.removeEventListener('message', handleMessage);
             localStorage.setItem('aether_token', event.data.token);
-            setUser(event.data.user);
+            if (event.data.user) {
+              localStorage.setItem('aether_user', JSON.stringify(event.data.user));
+              setUser(event.data.user);
+            }
             resolve({ success: true });
           } else if (type === 'AETHERPANEL_DISCORD_OAUTH_ERROR' || type === 'DISCORD_AUTH_ERROR') {
             window.removeEventListener('message', handleMessage);
@@ -224,6 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     await apiRequest('/auth/logout', { method: 'POST' });
     localStorage.removeItem('aether_token');
+    localStorage.removeItem('aether_user');
     setUser(null);
   };
 
@@ -232,7 +259,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUser = (updated: Partial<User>) => {
-    setUser(prev => prev ? { ...prev, ...updated } : null);
+    setUser(prev => {
+      if (!prev) return null;
+      const next = { ...prev, ...updated };
+      localStorage.setItem('aether_user', JSON.stringify(next));
+      return next;
+    });
   };
 
   return (

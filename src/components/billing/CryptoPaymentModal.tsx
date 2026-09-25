@@ -32,6 +32,8 @@ export const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [activationResult, setActivationResult] = useState<any | null>(null);
+  const [availableCoins, setAvailableCoins] = useState<string[]>([]);
+  const [isLoadingCoins, setIsLoadingCoins] = useState(true);
 
   // Time remaining countdown in seconds (15 min)
   const [timeLeft, setTimeLeft] = useState<number>(900);
@@ -66,13 +68,45 @@ export const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
   };
 
   useEffect(() => {
+    const loadCoinsAndInvoice = async () => {
+      if (!isOpen) return;
+      setIsLoadingCoins(true);
+      setStatusMessage(null);
+      try {
+        const res = await apiRequest('/billing/crypto/available-coins');
+        if (res.success && Array.isArray(res.data)) {
+          setAvailableCoins(res.data);
+          
+          if (res.data.length > 0) {
+            let initialCoin: 'LTC' | 'USDT' | 'BTC' | 'ETH' | 'SOL' = 'LTC';
+            if (res.data.includes(selectedCoin)) {
+              initialCoin = selectedCoin;
+            } else {
+              initialCoin = res.data[0] as any;
+              setSelectedCoin(initialCoin);
+            }
+            createCryptoInvoice(initialCoin);
+          } else {
+            setStatusMessage('No cryptocurrency payment options are configured right now. Please notify the administrator.');
+          }
+        } else {
+          setStatusMessage('Failed to load active cryptocurrency payment options.');
+        }
+      } catch (err) {
+        setStatusMessage('Error loading active cryptocurrency payment options.');
+      } finally {
+        setIsLoadingCoins(false);
+      }
+    };
+
     if (isOpen) {
-      createCryptoInvoice(selectedCoin);
+      loadCoinsAndInvoice();
     } else {
       setInvoice(null);
       setActivationResult(null);
       setStatusMessage(null);
       setUserTxHash('');
+      setAvailableCoins([]);
     }
   }, [isOpen]);
 
@@ -235,25 +269,36 @@ export const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
             <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 block mb-2.5">
               Select Payment Currency Network
             </label>
-            <div className="grid grid-cols-5 gap-2">
-              {coinBadges.map(item => (
-                <button
-                  key={item.coin}
-                  onClick={() => {
-                    setSelectedCoin(item.coin as any);
-                    createCryptoInvoice(item.coin as any);
-                  }}
-                  className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center ${
-                    selectedCoin === item.coin
-                      ? 'border-amber-500/80 bg-amber-500/10 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.1)]'
-                      : 'border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
-                  }`}
-                >
-                  <span className="text-sm font-extrabold">{item.coin}</span>
-                  <span className="text-[9px] font-medium tracking-wide opacity-80 mt-1 truncate max-w-full">{item.name}</span>
-                </button>
-              ))}
-            </div>
+            {isLoadingCoins ? (
+              <div className="flex items-center gap-2 justify-center py-4 bg-zinc-950/40 rounded-2xl border border-zinc-900">
+                <RefreshCw className="w-4 h-4 text-amber-500 animate-spin" />
+                <span className="text-xs text-zinc-500 font-medium font-mono">Querying decentralized ledger nodes...</span>
+              </div>
+            ) : availableCoins.length === 0 ? (
+              <div className="p-4 text-center rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                No active cryptocurrency payment methods are configured.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {coinBadges.filter(badge => availableCoins.includes(badge.coin)).map(item => (
+                  <button
+                    key={item.coin}
+                    onClick={() => {
+                      setSelectedCoin(item.coin as any);
+                      createCryptoInvoice(item.coin as any);
+                    }}
+                    className={`flex-1 min-w-[90px] p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center ${
+                      selectedCoin === item.coin
+                        ? 'border-amber-500/80 bg-amber-500/10 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.1)]'
+                        : 'border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span className="text-sm font-extrabold">{item.coin}</span>
+                    <span className="text-[9px] font-medium tracking-wide opacity-80 mt-1 truncate max-w-full">{item.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Generated Invoice State */}

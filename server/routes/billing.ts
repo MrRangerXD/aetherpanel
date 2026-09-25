@@ -671,6 +671,43 @@ router.post('/verify-tx', authMiddleware, async (req: AuthenticatedRequest, res:
 
 // --- REAL-TIME CRYPTOCURRENCY PAYMENT PROCESSOR & AUTO-ACTIVATION ROUTES ---
 
+// GET /api/v1/billing/crypto/available-coins - Get list of enabled coins with non-empty addresses
+router.get('/crypto/available-coins', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const adminCrypto: any = db.settings.paymentGateways?.crypto || {};
+  
+  if (adminCrypto.enabled === false) {
+    return res.json({ success: true, data: [] });
+  }
+
+  const getAddress = (coinKey: string, defaultAddr: string) => {
+    const val = adminCrypto[coinKey];
+    if (val !== undefined) return val;
+    if (coinKey === 'ltcAddress' && adminCrypto.walletAddress !== undefined) return adminCrypto.walletAddress;
+    if (coinKey === 'trxAddress' && adminCrypto.usdtAddress !== undefined) return adminCrypto.usdtAddress;
+    return defaultAddr;
+  };
+
+  const available: string[] = [];
+  
+  const ltc = getAddress('ltcAddress', 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l');
+  if (ltc && ltc.trim()) available.push('LTC');
+
+  const trx = getAddress('trxAddress', 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q');
+  if (trx && trx.trim()) available.push('USDT');
+
+  const btc = getAddress('btcAddress', 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1');
+  if (btc && btc.trim()) available.push('BTC');
+
+  const eth = getAddress('ethAddress', '0x71C56538B1D42916857723fF7463A0F1283c7490');
+  if (eth && eth.trim()) available.push('ETH');
+
+  const sol = getAddress('solAddress', 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ');
+  if (sol && sol.trim()) available.push('SOL');
+
+  res.json({ success: true, data: available });
+});
+
 // POST /api/v1/billing/crypto/create-invoice - Create dynamic live crypto payment request
 router.post('/crypto/create-invoice', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const { amount, cryptoCoin, purpose, serverPayload } = req.body;
@@ -707,16 +744,31 @@ router.post('/crypto/create-invoice', authMiddleware, async (req: AuthenticatedR
   const rate = coinRates[coin] || 70.0;
   const cryptoAmount = parseFloat((numAmount / rate).toFixed(6));
 
-  // Wallet address lookup from Admin configured platform settings
-  const cryptoGateways: Record<string, string> = {
-    'LTC': adminCrypto.ltcAddress || adminCrypto.walletAddress || 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l',
-    'USDT': adminCrypto.trxAddress || adminCrypto.usdtAddress || 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q',
-    'BTC': adminCrypto.btcAddress || 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1',
-    'ETH': adminCrypto.ethAddress || '0x71C56538B1D42916857723fF7463A0F1283c7490',
-    'SOL': adminCrypto.solAddress || 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ'
+  // Wallet address lookup from Admin configured platform settings with strict empty/deleted check
+  const getAddress = (coinKey: string, defaultAddr: string) => {
+    const val = adminCrypto[coinKey];
+    if (val !== undefined) return val;
+    if (coinKey === 'ltcAddress' && adminCrypto.walletAddress !== undefined) return adminCrypto.walletAddress;
+    if (coinKey === 'trxAddress' && adminCrypto.usdtAddress !== undefined) return adminCrypto.usdtAddress;
+    return defaultAddr;
   };
 
-  const payAddress = cryptoGateways[coin] || cryptoGateways['LTC'];
+  const cryptoGateways: Record<string, string> = {
+    'LTC': getAddress('ltcAddress', 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l'),
+    'USDT': getAddress('trxAddress', 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q'),
+    'BTC': getAddress('btcAddress', 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1'),
+    'ETH': getAddress('ethAddress', '0x71C56538B1D42916857723fF7463A0F1283c7490'),
+    'SOL': getAddress('solAddress', 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ')
+  };
+
+  const payAddress = cryptoGateways[coin];
+  if (!payAddress || !payAddress.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'COIN_DISABLED', message: `${coin} payments are currently not configured or disabled.` }
+    });
+  }
+
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payAddress + '?amount=' + cryptoAmount)}`;
 
   const invoice: CryptoInvoice = {

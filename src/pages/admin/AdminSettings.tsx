@@ -1649,9 +1649,9 @@ export const AdminSettings: React.FC = () => {
                   <label className="block text-amber-400 font-semibold mb-1">Litecoin (LTC) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.crypto?.ltcAddress || 'ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l'}
+                    value={gateways.crypto?.ltcAddress ?? ''}
                     onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, ltcAddress: e.target.value } })}
-                    placeholder="ltc1q..."
+                    placeholder="ltc1q3w4e5r6t7y8u9i0o1p2a3s4d5f6g7h8j9k0l"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                   <p className="text-[10px] text-zinc-500 mt-0.5">Used for LTC QR code & payment requests.</p>
@@ -1661,9 +1661,9 @@ export const AdminSettings: React.FC = () => {
                   <label className="block text-emerald-400 font-semibold mb-1">Tron / USDT (TRC-20 / TRX) Address</label>
                   <input
                     type="text"
-                    value={gateways.crypto?.trxAddress || gateways.crypto?.usdtAddress || 'TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q'}
+                    value={gateways.crypto?.trxAddress ?? gateways.crypto?.usdtAddress ?? ''}
                     onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, trxAddress: e.target.value, usdtAddress: e.target.value } })}
-                    placeholder="T..."
+                    placeholder="TX9d8h7g6f5e4d3c2b1a0z9y8x7w6v5u4t3s2r1q"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                   <p className="text-[10px] text-zinc-500 mt-0.5">TRC-20 USDT and Tron network deposits.</p>
@@ -1673,9 +1673,9 @@ export const AdminSettings: React.FC = () => {
                   <label className="block text-cyan-400 font-semibold mb-1">Bitcoin (BTC) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.crypto?.btcAddress || 'bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1'}
+                    value={gateways.crypto?.btcAddress ?? ''}
                     onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, btcAddress: e.target.value } })}
-                    placeholder="bc1q..."
+                    placeholder="bc1q9v8t7w6x5y4z3a2b1c0d9e8f7g6h5j4k3m2n1"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                 </div>
@@ -1684,9 +1684,9 @@ export const AdminSettings: React.FC = () => {
                   <label className="block text-violet-400 font-semibold mb-1">Ethereum (ETH) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.crypto?.ethAddress || '0x71C56538B1D42916857723fF7463A0F1283c7490'}
+                    value={gateways.crypto?.ethAddress ?? ''}
                     onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, ethAddress: e.target.value } })}
-                    placeholder="0x..."
+                    placeholder="0x71C56538B1D42916857723fF7463A0F1283c7490"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                 </div>
@@ -1695,9 +1695,9 @@ export const AdminSettings: React.FC = () => {
                   <label className="block text-fuchsia-400 font-semibold mb-1">Solana (SOL) Wallet Address</label>
                   <input
                     type="text"
-                    value={gateways.crypto?.solAddress || 'SoL99AetherPanelCryptoDepositNodeWallet88XyZ'}
+                    value={gateways.crypto?.solAddress ?? ''}
                     onChange={(e) => setGateways({ ...gateways, crypto: { ...gateways.crypto, solAddress: e.target.value } })}
-                    placeholder="Sol..."
+                    placeholder="SoL99AetherPanelCryptoDepositNodeWallet88XyZ"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
                   />
                 </div>

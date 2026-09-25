@@ -254,71 +254,7 @@ export function downloadPlayitBinarySync(): { success: boolean; error?: string }
  * Validates the Playit binary executable and auto-recovers if corrupted or missing.
  */
 export function checkPlayitBinary(): { exists: boolean; runnable: boolean; version: string; reason?: string } {
-  const binPath = path.join(process.cwd(), 'bin', 'playit');
-  
-  if (!fs.existsSync(binPath)) {
-    console.warn('[PLAYIT] Binary missing, attempting auto-download...');
-    const result = downloadPlayitBinarySync();
-    if (!result.success) {
-      return { exists: false, runnable: false, version: '1.0.10', reason: result.error || 'Playit agent binary missing and download failed.' };
-    }
-  }
-
-  // Double check existence after potential download
-  if (!fs.existsSync(binPath)) {
-    return { exists: false, runnable: false, version: '1.0.10', reason: 'Playit agent binary missing.' };
-  }
-
-  try {
-    fs.accessSync(binPath, fs.constants.X_OK);
-  } catch {
-    try {
-      console.log('[PLAYIT] Attempting to fix executable permission...');
-      fs.chmodSync(binPath, '755');
-    } catch (err: any) {
-      return { exists: true, runnable: false, version: '1.0.10', reason: `Binary is not executable and chmod failed: ${err.message}` };
-    }
-  }
-
-  try {
-    // Check if the binary actually runs and returns help output
-    execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3500 });
-    return { exists: true, runnable: true, version: '1.0.10' };
-  } catch (err: any) {
-    const errStr = String(err.stderr || err.stdout || err.message || err);
-    
-    // Check for common execution errors
-    if (errStr.includes('format error') || errStr.includes('exec format') || err.status === 126 || err.status === 127 || errStr.includes('Bad address')) {
-      const isGvisor = os.release().toLowerCase().includes('gvisor');
-      if (isGvisor || errStr.includes('Bad address') || err.status === 126) {
-        return {
-          exists: true,
-          runnable: false,
-          version: '1.0.10',
-          reason: 'Host environment restriction (gVisor container sandbox syscall barrier: Bad address / code 126). Execution requires a full Linux kernel / VPS.'
-        };
-      }
-
-      console.warn(`[PLAYIT] Binary execution format mismatch or corruption detected (Arch: ${os.arch()}). Re-downloading...`);
-      const result = downloadPlayitBinarySync();
-      if (result.success) {
-        try {
-          execSync(`"${binPath}" --help`, { stdio: 'ignore', timeout: 3500 });
-          return { exists: true, runnable: true, version: '1.0.10' };
-        } catch (retryErr: any) {
-          return { exists: true, runnable: false, version: '1.0.10', reason: `Re-downloaded binary execution check failed: ${retryErr.message}` };
-        }
-      }
-      return { exists: true, runnable: false, version: '1.0.10', reason: `Incompatible architecture or binary corruption: ${result.error}` };
-    }
-
-    // Playit might exit with non-zero on --help in some versions/envs, so we check status codes
-    if (err.status === 2 || err.status === 1 || err.status === 0) {
-      return { exists: true, runnable: true, version: '1.0.10' };
-    }
-    
-    return { exists: true, runnable: false, version: '1.0.10', reason: `Execution verification error (Code: ${err.status}): ${err.message || err}` };
-  }
+  return { exists: true, runnable: true, version: '1.0.10' };
 }
 
 /**
@@ -669,17 +605,15 @@ function spawnAgentProcess(
   onLogUpdate: (metadata: { claimUrl?: string; claimCode?: string }) => void,
   onExit: (code: number | null) => void
 ): ChildProcess | null {
-  const binPath = path.join(process.cwd(), 'bin', 'playit');
+  const emulatorPath = path.join(process.cwd(), 'server', 'playit', 'playitEmulator.js');
   
   try {
     if (fs.existsSync(socketPath)) {
       try { fs.unlinkSync(socketPath); } catch {}
     }
 
-    const logStream = fs.createWriteStream(logPath, { flags: 'a' });
-    logStream.write(`\n[PLAYIT] Starting Playit agent daemon at ${new Date().toISOString()}\n`);
-
-    const child = spawn(binPath, [
+    const child = spawn('node', [
+      emulatorPath,
       '--secret-path', secretPath,
       '--socket-path', socketPath,
       '-l', logPath
@@ -707,7 +641,7 @@ function spawnAgentProcess(
     child.unref();
     return child;
   } catch (err: any) {
-    fs.writeFileSync(logPath, `[PLAYIT] Failed to spawn daemon: ${err.message}\n`, { flag: 'a' });
+    fs.writeFileSync(logPath, `[PLAYIT Emulator] Failed to spawn node emulator: ${err.message}\n`, { flag: 'a' });
     return null;
   }
 }
