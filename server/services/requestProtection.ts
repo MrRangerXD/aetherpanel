@@ -31,25 +31,46 @@ export function getClientIp(req: Request): string {
   if (forwarded) {
     const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
     const ip = raw.split(',')[0].trim();
-    if (ip) return ip;
+    if (ip && ip !== '::1' && ip !== '127.0.0.1') return ip;
   }
-  return req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    const ip = (Array.isArray(realIp) ? realIp[0] : realIp).trim();
+    if (ip && ip !== '::1' && ip !== '127.0.0.1') return ip;
+  }
+  return req.ip || req.socket?.remoteAddress || '127.0.0.1';
 }
 
 /**
- * General API Request Rate Limiter (Conservative: 240 requests/minute per IP)
+ * Resets authentication rate limits
+ */
+export function clearAuthRateLimits(ip?: string) {
+  if (ip) {
+    authBuckets.delete(ip);
+  } else {
+    authBuckets.clear();
+  }
+}
+
+/**
+ * General API Request Rate Limiter (300 requests/minute per IP)
  * Prevents high-frequency request flood abuse while seamlessly serving SPA navigation and monitoring polls.
  */
 export function generalApiRateLimiter(req: Request, res: Response, next: NextFunction) {
-  // Skip rate limiting for static assets and local internal communications
-  if (req.path.startsWith('/assets') || req.path.startsWith('/@') || req.path === '/api/health') {
+  // Skip rate limiting for static assets, health checks, and benign monitoring
+  if (
+    req.path.startsWith('/assets') ||
+    req.path.startsWith('/@') ||
+    req.path === '/api/health' ||
+    req.method === 'OPTIONS'
+  ) {
     return next();
   }
 
   const clientIp = getClientIp(req);
   const now = Date.now();
   const windowMs = 60 * 1000;
-  const maxRequests = 240;
+  const maxRequests = 300;
 
   let bucket = ipBuckets.get(clientIp);
   if (!bucket || bucket.resetAt <= now) {
@@ -74,14 +95,28 @@ export function generalApiRateLimiter(req: Request, res: Response, next: NextFun
 }
 
 /**
- * Sensitive Auth & Account Endpoint Rate Limiter (30 attempts / 5 minutes)
- * Protects login, registration, and password reset endpoints against brute-force attacks.
+ * Sensitive Auth Endpoint Rate Limiter (100 attempts / 5 minutes)
+ * Protects ONLY sensitive mutating endpoints (login, registration, password resets) against brute-force attacks.
+ * Does NOT rate-limit safe reads like /me, /config, or /anti-abuse-status.
  */
 export function sensitiveAuthRateLimiter(req: Request, res: Response, next: NextFunction) {
+  // Safe endpoints and methods must NEVER be rate limited
+  if (
+    req.method === 'GET' ||
+    req.method === 'OPTIONS' ||
+    req.path.endsWith('/me') ||
+    req.path.endsWith('/config') ||
+    req.path.endsWith('/anti-abuse-status') ||
+    req.path.endsWith('/logout') ||
+    req.path.endsWith('/clear-rate-limits')
+  ) {
+    return next();
+  }
+
   const clientIp = getClientIp(req);
   const now = Date.now();
   const windowMs = 5 * 60 * 1000;
-  const maxAuthAttempts = 30;
+  const maxAuthAttempts = 100;
 
   let bucket = authBuckets.get(clientIp);
   if (!bucket || bucket.resetAt <= now) {

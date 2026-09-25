@@ -229,13 +229,18 @@ export const UserSettings: React.FC = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await apiRequest('/auth/update-profile', {
-      method: 'PATCH',
+    const res = await apiRequest('/auth/profile', {
+      method: 'PUT',
       body: JSON.stringify({ displayName, email })
     });
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
-    await refreshUser();
+    if (res.success) {
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+      await refreshUser();
+      toast.success('Profile updated successfully.');
+    } else {
+      toast.error(res.error?.message || 'Failed to update profile.');
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {

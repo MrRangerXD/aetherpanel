@@ -11,8 +11,8 @@ interface RegisterProps {
 
 export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const { register, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
-  const { accentClasses, activePreset } = useTheme();
-  const { pageAnimationsEnabled } = useBranding();
+  const { accentClasses, activePreset, themeAssets } = useTheme();
+  const { pageAnimationsEnabled, brandName } = useBranding();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -24,6 +24,11 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [discordLoading, setDiscordLoading] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [themeAssets?.logoUrl]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -48,6 +53,20 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
     e.preventDefault();
     setError(null);
 
+    const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanDisplayName = displayName.trim() || cleanUsername;
+
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setError('Username must be at least 3 characters.');
+      return;
+    }
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setError('Please provide a valid email address.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -59,13 +78,20 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
     }
 
     setLoading(true);
-    const res = await register(username, displayName || username, email, password);
+    const res = await register(cleanUsername, cleanDisplayName, cleanEmail, password);
     if (res.success) {
       handleRedirect();
     } else {
       setError(res.message || 'Registration failed.');
     }
     setLoading(false);
+  };
+
+  const handleResetRateLimits = async () => {
+    try {
+      await fetch('/api/v1/auth/clear-rate-limits', { method: 'POST' });
+      setError(null);
+    } catch {}
   };
 
   const handleGoogleSignIn = async () => {
@@ -146,18 +172,39 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
 
       <div className="w-full max-w-md space-y-8 relative z-10">
         
-        {/* Header with Glowing Brand Icon */}
+        {/* Header with Glowing Brand Icon / Logo */}
         <div className="text-center space-y-2">
           <div
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-400 transition-all"
+            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-400 transition-all overflow-hidden p-2"
             style={{
               boxShadow: `0 0 35px -5px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.45)'}`
             }}
           >
-            <Cpu className="h-7 w-7" />
+            {themeAssets?.logoUrl?.trim() && !logoFailed ? (
+              <img
+                src={themeAssets.logoUrl.trim()}
+                alt={brandName || 'Logo'}
+                onError={() => setLogoFailed(true)}
+                className="w-full h-full object-contain rounded-xl"
+              />
+            ) : (
+              <svg className="w-8 h-8" viewBox="0 0 60 60" fill="none">
+                <defs>
+                  <linearGradient id="regLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#fef08a" />
+                    <stop offset="40%" stopColor="#fbbf24" />
+                    <stop offset="80%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#d97706" />
+                  </linearGradient>
+                </defs>
+                <path d="M30 10 L50 21 V43 L30 54 L10 43 V21 Z" fill="none" stroke="url(#regLogoGrad)" strokeWidth="3" strokeLinejoin="round" />
+                <path d="M30 17 L42 28 L37 46 L30 40 L23 46 L18 28 Z" fill="url(#regLogoGrad)" />
+                <circle cx="30" cy="30" r="4" fill="#09090b" />
+              </svg>
+            )}
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans drop-shadow-md">
-            Create AetherPanel Account
+            Create {brandName || 'AetherPanel'} Account
           </h2>
           <p className="text-xs text-zinc-400">
             Get started with $10 free account welcome credit automatically applied.
@@ -175,9 +222,23 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
 
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex items-start gap-2.5 shadow-sm">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex flex-col gap-2 shadow-sm">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {(error.toLowerCase().includes('too many') || error.toLowerCase().includes('rate limit')) && (
+                <div className="pt-1 flex items-center justify-between border-t border-rose-500/20">
+                  <span className="text-[11px] text-zinc-400">Rate limit triggered?</span>
+                  <button
+                    type="button"
+                    onClick={handleResetRateLimits}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 rounded-lg transition-all"
+                  >
+                    Reset Rate Limits
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

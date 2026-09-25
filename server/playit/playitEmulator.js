@@ -19,9 +19,8 @@ console.log(`[Playit Real Emulator] Starting with secretPath: ${secretPath}, soc
 const id = path.basename(path.dirname(socketPath)) || 'agent';
 const isNode = socketPath.includes('nodes');
 
-// Generate a unique random claim code for the real playit.gg backend
-const randomHex = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
-const claimCode = (isNode ? 'node-' : 'agent-') + randomHex;
+// Generate a clean 6-character alphanumeric claim code for official playit.gg registration
+const claimCode = (Math.random().toString(36).substring(2, 8) || 'a7b3c9').toLowerCase();
 const claimUrl = `https://playit.gg/claim/${claimCode}`;
 
 function writeLog(line) {

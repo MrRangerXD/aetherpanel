@@ -1195,9 +1195,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         }
 
         // Ensure primary admin account exists with admin@aetherpanel.in
-        let admin = dbCache.users.find(u => u.role === 'super_admin' || u.role === 'admin' || u.email === 'admin@aetherpanel.com' || u.email === adminEmail);
+        let admin = dbCache.users.find(u => u.role === 'super_admin' || u.role === 'admin' || u.email === 'admin@aetherpanel.in' || u.email === 'admin@aether.panel' || u.username === 'admin');
+        const adminHash = bcrypt.hashSync(adminPassword, 10);
         if (!admin) {
-          const adminHash = bcrypt.hashSync(adminPassword, 10);
           admin = {
             id: 'usr_admin',
             username: 'admin',
@@ -1218,12 +1218,12 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           dbCache.users.unshift(admin);
           dbCache.passwords[admin.id] = adminHash;
         } else {
+          admin.email = adminEmail;
+          admin.username = 'admin';
           if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
           if (admin.serverLimit === undefined) admin.serverLimit = 50;
-          // Only initialize password if no password hash exists in database
-          if (!dbCache.passwords[admin.id]) {
-            dbCache.passwords[admin.id] = bcrypt.hashSync(adminPassword, 10);
-          }
+          // Ensure valid known password hash is always active
+          dbCache.passwords[admin.id] = adminHash;
         }
         delete dbCache.passwords['usr_demo'];
 

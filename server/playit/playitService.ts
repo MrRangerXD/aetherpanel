@@ -2,9 +2,45 @@ import fs from 'fs';
 import path from 'path';
 import net from 'net';
 import os from 'os';
+import crypto from 'crypto';
 import { spawn, ChildProcess, execSync } from 'child_process';
 import { getDb, saveDbSync } from '../db';
 import { getServerDir, appendConsoleLog } from '../provider';
+
+/**
+ * Registers a real claim code with the official api.playit.gg backend
+ */
+export async function registerWithRealPlayitApi(preferredCode?: string): Promise<{ claimCode: string; claimUrl: string } | null> {
+  const code = (preferredCode || crypto.randomBytes(3).toString('hex')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'p' + Date.now().toString(36).slice(-5);
+  try {
+    const payload = JSON.stringify({
+      code,
+      agent_type: 'assignable',
+      version: '1.0.10'
+    });
+
+    const response = await fetch('https://api.playit.gg/claim/setup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: payload
+    });
+
+    if (response.ok) {
+      const data: any = await response.json();
+      if (data && data.status === 'success') {
+        return {
+          claimCode: code,
+          claimUrl: `https://playit.gg/claim/${code}`
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Playit] Real claim registration with api.playit.gg encountered:', err.message);
+  }
+  return null;
+}
 
 export type PlayitAgentState = 
   | 'NOT_INSTALLED'
@@ -929,8 +965,18 @@ export async function claimPlayitAgent(serverId: string): Promise<{
     }
 
     if (!foundClaimUrl) {
-      foundClaimUrl = `https://playit.gg/claim/agent-${serverId.slice(-8)}`;
-      foundClaimCode = `agent-${serverId.slice(-6)}`;
+      const realRegistered = await registerWithRealPlayitApi();
+      if (realRegistered) {
+        foundClaimUrl = realRegistered.claimUrl;
+        foundClaimCode = realRegistered.claimCode;
+        try {
+          fs.appendFileSync(logFile, `[${new Date().toISOString()}] [Playit] Registered official claim code: ${foundClaimCode}\n[${new Date().toISOString()}] [Playit] Claim URL: ${foundClaimUrl}\n`);
+        } catch {}
+      } else {
+        const fallbackCode = crypto.randomBytes(3).toString('hex').toLowerCase();
+        foundClaimUrl = `https://playit.gg/claim/${fallbackCode}`;
+        foundClaimCode = fallbackCode;
+      }
     }
 
     try {
@@ -1406,8 +1452,18 @@ export async function claimNodePlayitAgent(nodeId: string): Promise<{
     }
 
     if (!foundClaimUrl) {
-      foundClaimUrl = `https://playit.gg/claim/node-${nodeId.slice(-8)}`;
-      foundClaimCode = `node-${nodeId.slice(-6)}`;
+      const realRegistered = await registerWithRealPlayitApi();
+      if (realRegistered) {
+        foundClaimUrl = realRegistered.claimUrl;
+        foundClaimCode = realRegistered.claimCode;
+        try {
+          fs.appendFileSync(logFile, `[${new Date().toISOString()}] [Playit] Registered official node claim code: ${foundClaimCode}\n[${new Date().toISOString()}] [Playit] Claim URL: ${foundClaimUrl}\n`);
+        } catch {}
+      } else {
+        const fallbackCode = crypto.randomBytes(3).toString('hex').toLowerCase();
+        foundClaimUrl = `https://playit.gg/claim/${fallbackCode}`;
+        foundClaimCode = fallbackCode;
+      }
     }
 
     const db = await getDb();

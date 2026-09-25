@@ -44,7 +44,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
   });
-  const [loading, setLoading] = useState<boolean>(() => !localStorage.getItem('aether_token'));
+
+  // Only display blocking loader if token is present but cached user is not available yet
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const token = localStorage.getItem('aether_token');
+      const savedUser = localStorage.getItem('aether_user');
+      if (token && !savedUser) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  });
+
   const [authConfig, setAuthConfig] = useState<AuthConfig>(defaultAuthConfig);
 
   const fetchAuthConfig = useCallback(async () => {
@@ -73,21 +87,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(res.data.user);
         localStorage.setItem('aether_user', JSON.stringify(res.data.user));
       } else {
-        localStorage.removeItem('aether_token');
-        localStorage.removeItem('aether_user');
-        setUser(null);
+        // Only invalidate if the server explicitly rejected the token
+        if (res.error?.code === 'UNAUTHORIZED' || res.error?.code === 'INVALID_TOKEN') {
+          localStorage.removeItem('aether_token');
+          localStorage.removeItem('aether_user');
+          setUser(null);
+        }
       }
     } catch {
-      // If offline or network error, keep user from localStorage if present
-      if (!user) {
-        localStorage.removeItem('aether_token');
-        localStorage.removeItem('aether_user');
-        setUser(null);
-      }
+      // Network failure or server starting up: maintain cached local session
+      try {
+        const cached = localStorage.getItem('aether_user');
+        if (!cached) {
+          localStorage.removeItem('aether_token');
+          setUser(null);
+        }
+      } catch {}
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     fetchAuthConfig();
