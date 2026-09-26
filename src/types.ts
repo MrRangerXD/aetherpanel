@@ -352,6 +352,21 @@ export interface Node {
   playitClaimUrl?: string;
 }
 
+export interface SftpActiveSessionDTO {
+  id: string;
+  serverId: string;
+  userId: string;
+  username: string;
+  clientIp: string;
+  clientVersion: string;
+  connectedAt: string;
+  lastActive: string;
+  bytesRead: number;
+  bytesWritten: number;
+  filesRead: number;
+  filesWritten: number;
+}
+
 export interface SftpConnectionInfo {
   host: string;
   port: number;
@@ -361,6 +376,12 @@ export interface SftpConnectionInfo {
   isProtected: boolean;
   tunnelType: 'direct' | 'fqdn' | 'playit';
   nodeName?: string;
+  activeSessions?: SftpActiveSessionDTO[];
+  clientConfigs?: {
+    filezillaXmlUrl: string;
+    cyberduckDuckUrl: string;
+    winscpCommand: string;
+  };
 }
 
 export type PlayitAgentState = 

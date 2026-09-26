@@ -1,0 +1,30 @@
+services:
+  aetherpanel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aetherpanel:latest
+    container_name: aetherpanel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"     # Web Panel UI & API
+      - "2022:2022"     # SFTP Subsystem
+      - "8080:8080"     # Node Daemon Link
+      - "25565:25565"   # Default Minecraft Port
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SFTP_PORT=2022
+      - AETHER_ADMIN_EMAIL=${AETHER_ADMIN_EMAIL:-admin@aetherpanel.in}
+      - AETHER_ADMIN_PASSWORD=${AETHER_ADMIN_PASSWORD:-adminopp}
+    volumes:
+      - aether_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  aether_data:
+    driver: local

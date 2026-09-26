@@ -3,7 +3,7 @@ import {
   Globe, Key, Copy, Check, RefreshCw, Shield, AlertTriangle,
   ExternalLink, Play, Square, Wifi, Terminal, CheckCircle2,
   Lock, Download, ChevronDown, ChevronUp, RotateCw, Server as ServerIcon,
-  HelpCircle, AlertCircle
+  HelpCircle, AlertCircle, Users, Radio, HardDrive, FileCode
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server as ServerType, SftpConnectionInfo, PlayitStatus } from '../../types';
@@ -36,6 +36,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const [loadingSftp, setLoadingSftp] = useState<boolean>(!((server as any).sftp));
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [resettingPassword, setResettingPassword] = useState<boolean>(false);
+  const [terminatingSessionId, setTerminatingSessionId] = useState<string | null>(null);
 
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimSuccessMsg, setClaimSuccessMsg] = useState<string | null>(null);
@@ -54,6 +55,19 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
       // fallback
     } finally {
       setLoadingSftp(false);
+    }
+  };
+
+  const handleTerminateSession = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to disconnect this active SFTP connection?')) return;
+    setTerminatingSessionId(sessionId);
+    try {
+      const res = await apiRequest(`/servers/${server.id}/sftp/sessions/${sessionId}`, { method: 'DELETE' });
+      if (res.success) {
+        await fetchSftpInfo();
+      }
+    } finally {
+      setTerminatingSessionId(null);
     }
   };
 
@@ -310,32 +324,49 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
         </div>
       </div>
 
-      {/* SFTP Credentials */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4 shadow-xl">
+      {/* Enhanced SFTP Subsystem Card */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-5 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Key className="h-5 w-5 text-violet-400" /> SFTP (Secure File Transfer Protocol)
               </h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-300 text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5">
+                <Radio className="h-2.5 w-2.5 text-emerald-400 animate-pulse" /> Daemon Port 2022 Active
+              </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Connect desktop FTP clients (FileZilla, WinSCP, Cyberduck) with high-speed encrypted transfers.
+              Connect external desktop clients (FileZilla, WinSCP, Cyberduck, Termius) with high-speed encrypted transfers.
             </p>
           </div>
-          <button
-            onClick={handleResetSftpPassword}
-            disabled={resettingPassword}
-            className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition-colors flex items-center gap-1.5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${resettingPassword ? 'animate-spin' : ''}`} />
-            <span>Reset SFTP Password</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchSftpInfo()}
+              disabled={loadingSftp}
+              className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              title="Refresh SFTP Info & Active Sessions"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingSftp ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={handleResetSftpPassword}
+              disabled={resettingPassword}
+              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${resettingPassword ? 'animate-spin' : ''}`} />
+              <span>Reset SFTP Password</span>
+            </button>
+          </div>
         </div>
 
+        {/* Credentials Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">SFTP Host</span>
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center justify-between">
+              <span>SFTP Host</span>
+              <span className="text-[10px] text-zinc-600 font-mono">SSH-2.0</span>
+            </span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
               <span className="truncate">{sftpHost}</span>
               <button onClick={() => handleCopy(sftpHost, 'sftp_host')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
@@ -344,8 +375,11 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">SFTP Port</span>
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center justify-between">
+              <span>SFTP Port</span>
+              <span className="text-[10px] text-emerald-500 font-mono">TCP</span>
+            </span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
               <span>{sftpPort}</span>
               <button onClick={() => handleCopy(String(sftpPort), 'sftp_port')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
@@ -354,8 +388,11 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Username</span>
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center justify-between">
+              <span>Username</span>
+              <span className="text-[10px] text-zinc-600 font-mono">Dedicated</span>
+            </span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
               <span className="truncate">{sftpUser}</span>
               <button onClick={() => handleCopy(sftpUser, 'sftp_user')} className="text-zinc-400 hover:text-white shrink-0 ml-1">
@@ -364,8 +401,11 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Password</span>
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+            <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center justify-between">
+              <span>Password</span>
+              <span className="text-[10px] text-zinc-600 font-mono">Encrypted</span>
+            </span>
             <div className="flex items-center justify-between font-mono text-xs text-white">
               <span className="truncate">{showPassword ? sftpPass : '••••••••••••••••'}</span>
               <div className="flex items-center gap-1.5 shrink-0 ml-1">
@@ -383,26 +423,119 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-violet-950/20 border border-violet-500/20 text-xs text-violet-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <Shield className="h-4 w-4 text-violet-400 shrink-0" />
-            <span className="truncate">Direct Launch URI: <code className="font-mono text-white bg-zinc-950 px-2 py-0.5 rounded text-[11px]">{sftpUri}</code></span>
+        {/* 1-Click Launch & Client Configs Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="p-3.5 rounded-xl bg-violet-950/20 border border-violet-500/20 text-xs text-violet-300 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Shield className="h-4 w-4 text-violet-400 shrink-0" />
+              <span className="truncate">Direct URI: <code className="font-mono text-white bg-zinc-950 px-2 py-0.5 rounded text-[11px]">{sftpUri}</code></span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => handleCopy(sftpUri, 'sftp_uri')}
+                className="px-2.5 py-1 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 text-white font-medium text-xs transition-colors"
+              >
+                {copiedKey === 'sftp_uri' ? 'Copied' : 'Copy'}
+              </button>
+              <a
+                href={sftpUri}
+                className="px-2.5 py-1 rounded-lg bg-violet-600 text-white font-semibold text-xs hover:bg-violet-500 transition-colors inline-flex items-center gap-1"
+              >
+                <span>Launch</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => handleCopy(sftpUri, 'sftp_uri')}
-              className="px-3 py-1 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 text-white font-medium text-xs transition-colors"
-            >
-              {copiedKey === 'sftp_uri' ? 'Copied' : 'Copy SFTP Link'}
-            </button>
-            <a
-              href={sftpUri}
-              className="px-3 py-1 rounded-lg bg-violet-600 text-white font-semibold text-xs hover:bg-violet-500 transition-colors inline-flex items-center gap-1"
-            >
-              <span>Connect Client</span>
-              <ExternalLink className="h-3 w-3" />
-            </a>
+
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-2 text-xs">
+            <span className="text-zinc-400 font-medium flex items-center gap-1.5">
+              <Download className="h-3.5 w-3.5 text-amber-400" /> Client Site Profiles
+            </span>
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`/api/v1/servers/${server.id}/sftp/config/filezilla`}
+                download={`aetherpanel-${server.id.substring(0, 8)}-filezilla.xml`}
+                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-medium text-[11px] transition-colors inline-flex items-center gap-1"
+                title="Download FileZilla Site Manager Profile"
+              >
+                <span>FileZilla (.xml)</span>
+              </a>
+              <a
+                href={`/api/v1/servers/${server.id}/sftp/config/cyberduck`}
+                download={`aetherpanel-${server.id.substring(0, 8)}.duck`}
+                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-medium text-[11px] transition-colors inline-flex items-center gap-1"
+                title="Download Cyberduck Bookmark"
+              >
+                <span>Cyberduck (.duck)</span>
+              </a>
+              <button
+                onClick={() => {
+                  const cmd = `winscp.com /command "open sftp://${sftpUser}:${sftpPass}@${sftpHost}:${sftpPort}/"`;
+                  handleCopy(cmd, 'winscp_cmd');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-medium text-[11px] transition-colors inline-flex items-center gap-1"
+                title="Copy WinSCP command line string"
+              >
+                <span>{copiedKey === 'winscp_cmd' ? 'Copied' : 'WinSCP'}</span>
+              </button>
+            </div>
           </div>
+        </div>
+
+        {/* Live Active SFTP Connections Table */}
+        <div className="pt-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5 text-violet-400" /> Active SFTP Connections
+            </span>
+            <span className="text-[11px] text-zinc-500 font-mono">
+              {(sftpInfo?.activeSessions?.length || 0)} live client(s)
+            </span>
+          </div>
+
+          {sftpInfo?.activeSessions && sftpInfo.activeSessions.length > 0 ? (
+            <div className="rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-zinc-900/80 text-zinc-400 border-b border-zinc-800 font-medium">
+                  <tr>
+                    <th className="py-2.5 px-3">User / Client</th>
+                    <th className="py-2.5 px-3">Remote Address</th>
+                    <th className="py-2.5 px-3">Connected Time</th>
+                    <th className="py-2.5 px-3">Transferred</th>
+                    <th className="py-2.5 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {sftpInfo.activeSessions.map((session) => (
+                    <tr key={session.id} className="hover:bg-zinc-900/40 transition-colors">
+                      <td className="py-2.5 px-3 font-medium text-white flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                        <span className="truncate max-w-[140px]" title={session.clientVersion}>{session.username} ({session.clientVersion.replace(/^SSH-2\.0-/, '').substring(0, 16)})</span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-zinc-400">{session.clientIp}</td>
+                      <td className="py-2.5 px-3 text-zinc-400">{new Date(session.connectedAt).toLocaleTimeString()}</td>
+                      <td className="py-2.5 px-3 font-mono text-zinc-300">
+                        {((session.bytesRead + session.bytesWritten) / (1024 * 1024)).toFixed(2)} MB
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          onClick={() => handleTerminateSession(session.id)}
+                          disabled={terminatingSessionId === session.id}
+                          className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-semibold text-[11px] transition-colors disabled:opacity-50"
+                        >
+                          {terminatingSessionId === session.id ? 'Disconnecting...' : 'Disconnect'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80 text-center text-xs text-zinc-500">
+              No active SFTP client sessions connected right now. All connections are closed and idle.
+            </div>
+          )}
         </div>
       </div>
 

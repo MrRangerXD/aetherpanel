@@ -33,6 +33,7 @@ import {
 import { ServerBackup, ServerDatabase, ServerSchedule, ServerActivity } from '../../src/types';
 import { dispatchWebhookEvent } from '../webhookService';
 import { resolveServerSftpInfo } from '../sftpResolver';
+import { getActiveSftpSessions, terminateSftpSession, terminateServerSftpSessions } from '../sftpServer';
 import { removeServerPortRule } from '../services/networkProtectionService';
 import { resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getNodePlayitStatus } from '../playit/playitService';
@@ -200,12 +201,12 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
   });
 });
 
-// GET /api/v1/servers/:id/sftp - Resolved public SFTP Connection details
+// GET /api/v1/servers/:id/sftp - Resolved public SFTP Connection details with active sessions & configs
 router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const { isOwner, isAdmin, requesterSubuser } = access;
+  const { server, isOwner, isAdmin, requesterSubuser } = access;
   if (!isOwner && !isAdmin) {
     const hasPerm = requesterSubuser?.permissions.includes('sftp.connect') || requesterSubuser?.permissions.includes('files.view');
     if (!hasPerm) {
@@ -215,10 +216,121 @@ router.get('/:id/sftp', authMiddleware, async (req: AuthenticatedRequest, res: R
   }
 
   const sftpInfo = await resolveServerSftpInfo(req.params.id, req.get('host'));
+  const activeSessions = getActiveSftpSessions(server.id);
+
+  const cleanHost = sftpInfo.host;
+  const winscpCommand = `winscp.com /command "open sftp://${sftpInfo.username}:${sftpInfo.password || ''}@${cleanHost}:${sftpInfo.port}/"`;
+
   res.json({
     success: true,
-    data: sftpInfo
+    data: {
+      ...sftpInfo,
+      activeSessions,
+      clientConfigs: {
+        filezillaXmlUrl: `/api/v1/servers/${server.id}/sftp/config/filezilla`,
+        cyberduckDuckUrl: `/api/v1/servers/${server.id}/sftp/config/cyberduck`,
+        winscpCommand
+      }
+    }
   });
+});
+
+// GET /api/v1/servers/:id/sftp/sessions - List active live SFTP sessions
+router.get('/:id/sftp/sessions', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server } = access;
+  const sessions = getActiveSftpSessions(server.id);
+  res.json({ success: true, data: sessions });
+});
+
+// DELETE /api/v1/servers/:id/sftp/sessions/:sessionId - Terminate active SFTP session
+router.delete('/:id/sftp/sessions/:sessionId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'sftp.connect');
+  if (!access) return;
+
+  const { sessionId } = req.params;
+  const terminated = terminateSftpSession(sessionId);
+  
+  if (terminated) {
+    await recordServerActivity(
+      req.params.id,
+      req.user!.id,
+      req.user!.username || 'user',
+      'SFTP_SESSION_TERMINATED',
+      `Terminated active SFTP session: ${sessionId}`
+    );
+    res.json({ success: true, message: 'SFTP session disconnected successfully.' });
+  } else {
+    res.status(404).json({ success: false, error: { code: 'SESSION_NOT_FOUND', message: 'SFTP session is no longer active.' } });
+  }
+});
+
+// GET /api/v1/servers/:id/sftp/config/filezilla - Export FileZilla XML site profile
+router.get('/:id/sftp/config/filezilla', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server } = access;
+  const sftpInfo = await resolveServerSftpInfo(server.id, req.get('host'));
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<FileZilla3 version="3.0.0" platform="all">
+  <Servers>
+    <Server>
+      <Host>${sftpInfo.host}</Host>
+      <Port>${sftpInfo.port}</Port>
+      <Protocol>1</Protocol>
+      <Type>0</Type>
+      <User>${sftpInfo.username}</User>
+      <Pass encoding="base64">${Buffer.from(sftpInfo.password || '').toString('base64')}</Pass>
+      <Logontype>1</Logontype>
+      <Name>AetherPanel - ${server.name.replace(/[<>&]/g, '')}</Name>
+      <RemoteDir>/</RemoteDir>
+      <EncodingType>Auto</EncodingType>
+      <BypassProxy>0</BypassProxy>
+    </Server>
+  </Servers>
+</FileZilla3>`;
+
+  res.setHeader('Content-Type', 'application/xml');
+  res.setHeader('Content-Disposition', `attachment; filename="aetherpanel-${server.id.substring(0, 10)}-filezilla.xml"`);
+  res.send(xml);
+});
+
+// GET /api/v1/servers/:id/sftp/config/cyberduck - Export Cyberduck Bookmark
+router.get('/:id/sftp/config/cyberduck', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const { server } = access;
+  const sftpInfo = await resolveServerSftpInfo(server.id, req.get('host'));
+
+  const duck = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Protocol</key>
+  <string>sftp</string>
+  <key>Vendor</key>
+  <string>sftp</string>
+  <key>Hostname</key>
+  <string>${sftpInfo.host}</string>
+  <key>Port</key>
+  <string>${sftpInfo.port}</string>
+  <key>Username</key>
+  <string>${sftpInfo.username}</string>
+  <key>Nickname</key>
+  <string>AetherPanel: ${server.name.replace(/[<>&]/g, '')}</string>
+  <key>Path</key>
+  <string>/</string>
+</dict>
+</plist>`;
+
+  res.setHeader('Content-Type', 'application/xml');
+  res.setHeader('Content-Disposition', `attachment; filename="aetherpanel-${server.id.substring(0, 10)}.duck"`);
+  res.send(duck);
 });
 
 // GET /api/v1/servers/:id/sftp/credentials - Standardized SFTP credentials (PRD Section 4.3 & 7.2)
@@ -1962,9 +2074,18 @@ router.post('/:id/sftp/reset-password', authMiddleware, async (req: Authenticate
 
   const newPassword = `aeth_${crypto.randomBytes(8).toString('hex')}`;
   (server as any).sftpPassword = newPassword;
+  terminateServerSftpSessions(server.id);
   saveDbSync();
 
-  res.json({ success: true, message: 'SFTP password regenerated.', data: { sftpPassword: newPassword } });
+  await recordServerActivity(
+    server.id,
+    req.user!.id,
+    req.user!.username || 'user',
+    'SFTP_PASSWORD_RESET',
+    'Regenerated server SFTP password and terminated active connections.'
+  );
+
+  res.json({ success: true, message: 'SFTP password regenerated and active sessions disconnected.', data: { sftpPassword: newPassword } });
 });
 
 // DELETE /api/v1/servers/:id - Delete server

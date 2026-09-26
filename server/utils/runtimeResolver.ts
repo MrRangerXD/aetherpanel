@@ -19,19 +19,48 @@ export interface ExecutableInfo {
 }
 
 /**
- * Ensures standard binary search directories are included in environment PATH
+ * Ensures standard binary search directories are included in environment PATH across all OS distributions (Debian, Alpine, RHEL/CentOS, Arch, IDX, Nix, Sandboxes)
  */
 export function getAugmentedEnv(): Record<string, string> {
   const currentPath = process.env.PATH || '';
-  const homeBun = path.join(os.homedir(), '.bun', 'bin');
+  const home = os.homedir();
+  const homeBun = path.join(home, '.bun', 'bin');
+  const homeLocalBin = path.join(home, '.local', 'bin');
+  const homeBin = path.join(home, 'bin');
   const binDir = path.join(process.cwd(), 'bin');
   const runtimesBin = path.join(process.cwd(), 'data', 'runtimes', 'bun');
+  const runtimesNode = path.join(process.cwd(), 'runtimes', 'node', 'bin');
+  const nixDefault = '/nix/var/nix/profiles/default/bin';
+  const nixCurrent = '/run/current-system/sw/bin';
+  const homeNix = path.join(home, '.nix-profile', 'bin');
+  const homeVolta = path.join(home, '.volta', 'bin');
+  const homeFnm = path.join(home, '.fnm', 'current', 'bin');
+  const linuxBrew = '/home/linuxbrew/.linuxbrew/bin';
 
-  const extraPaths = ['/usr/local/bin', '/usr/bin', '/bin', homeBun, binDir, runtimesBin];
+  const extraPaths = [
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/local/sbin',
+    '/usr/sbin',
+    '/sbin',
+    homeBun,
+    homeLocalBin,
+    homeBin,
+    binDir,
+    runtimesBin,
+    runtimesNode,
+    nixDefault,
+    nixCurrent,
+    homeNix,
+    homeVolta,
+    homeFnm,
+    linuxBrew
+  ];
   const pathParts = currentPath.split(path.delimiter);
 
   for (const p of extraPaths) {
-    if (p && !pathParts.includes(p)) {
+    if (p && !pathParts.includes(p) && (p.startsWith('/') || fs.existsSync(p))) {
       pathParts.unshift(p);
     }
   }
@@ -39,7 +68,7 @@ export function getAugmentedEnv(): Record<string, string> {
   const env = {
     ...process.env,
     PATH: pathParts.join(path.delimiter),
-    HOME: process.env.HOME || os.homedir(),
+    HOME: process.env.HOME || home,
     USER: process.env.USER || (os.userInfo ? os.userInfo().username : 'aether')
   };
 

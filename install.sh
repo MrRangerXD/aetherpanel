@@ -1235,8 +1235,8 @@ CTL_EOF
     ln -sf "${install_dir}/bin/aetherpanel-ctl" "${HOME}/.local/bin/aetherpanel" 2>/dev/null || true
   fi
 
-  # 3. If systemd is available and running, register systemd unit
-  if [ "$INIT_SYSTEM" = "systemd" ] && [ "$IS_ROOT" = true ]; then
+  # 3. Register service with system init manager
+  if [ "$INIT_SYSTEM" = "systemd" ] && [ "$IS_ROOT" = true ] && command -v systemctl &>/dev/null; then
     cat <<SYSTEMD_EOF > /etc/systemd/system/aetherpanel.service
 [Unit]
 Description=AetherPanel Control Plane Hosting Application
@@ -1252,6 +1252,8 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=${port}
+Environment=SFTP_PORT=2022
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:${install_dir}/bin:${install_dir}/runtimes/node/bin:${HOME}/.local/bin:${HOME}/.bun/bin
 StandardOutput=append:/var/log/aetherpanel/panel.log
 StandardError=append:/var/log/aetherpanel/panel.log
 
@@ -1263,11 +1265,45 @@ SYSTEMD_EOF
     systemctl enable aetherpanel >> "$LOG_FILE" 2>&1 || true
     systemctl restart aetherpanel >> "$LOG_FILE" 2>&1 || true
     echo -e "${GREEN}[✓] Systemd service registered and started: aetherpanel.service${NC}"
+  elif ( [ "$DISTRO" = "alpine" ] || command -v rc-service &>/dev/null || [ -d /etc/init.d ] ) && [ "$IS_ROOT" = true ]; then
+    # Alpine Linux OpenRC Init Script
+    echo -e "${CYAN}    Registering Alpine OpenRC service (/etc/init.d/aetherpanel)...${NC}"
+    cat <<'OPENRC_EOF' > /etc/init.d/aetherpanel
+#!/sbin/openrc-run
+name="aetherpanel"
+description="AetherPanel Universal Control Plane"
+
+command="/usr/bin/npm"
+command_args="start"
+command_background="yes"
+directory="/opt/aetherpanel"
+pidfile="/run/aetherpanel.pid"
+output_log="/var/log/aetherpanel/panel.log"
+error_log="/var/log/aetherpanel/panel.log"
+
+export NODE_ENV="production"
+export PORT="3000"
+export SFTP_PORT="2022"
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:/opt/aetherpanel/bin:${PATH}"
+
+depend() {
+  need net
+  after firewall
+}
+OPENRC_EOF
+    chmod +x /etc/init.d/aetherpanel 2>/dev/null || true
+    if command -v rc-update &>/dev/null; then
+      rc-update add aetherpanel default >> "$LOG_FILE" 2>&1 || true
+      rc-service aetherpanel restart >> "$LOG_FILE" 2>&1 || "${install_dir}/bin/aetherpanel-ctl" restart >> "$LOG_FILE" 2>&1 || true
+    else
+      "${install_dir}/bin/aetherpanel-ctl" restart >> "$LOG_FILE" 2>&1 || true
+    fi
+    echo -e "${GREEN}[✓] OpenRC service registered: /etc/init.d/aetherpanel${NC}"
   else
-    # Start using background process supervisor
-    echo -e "${BLUE}[INFO] systemd unavailable in this environment. Initializing background supervisor...${NC}"
+    # Universal fallback: background process supervisor
+    echo -e "${BLUE}[INFO] Running in container or non-systemd environment. Initializing background supervisor...${NC}"
     "${install_dir}/bin/aetherpanel-ctl" restart >> "$LOG_FILE" 2>&1 || true
-    echo -e "${GREEN}[✓] Background process supervisor initialized.${NC}"
+    echo -e "${GREEN}[✓] Universal background process supervisor initialized.${NC}"
   fi
 }
 

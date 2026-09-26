@@ -4,17 +4,114 @@ import crypto from 'crypto';
 import ssh2 from 'ssh2';
 import { getDb } from './db';
 import bcrypt from 'bcryptjs';
-import { getServerDir } from './provider';
+import { getServerDir, recordServerActivity } from './provider';
+import { SftpActiveSessionDTO } from '../src/types';
 
 const SshServer = (ssh2 as any).Server || (ssh2 as any).default?.Server || ssh2;
 
 const SFTP_PORT = parseInt(process.env.SFTP_PORT || '2022', 10);
 const HOST_KEY_PATH = path.join(process.cwd(), 'data', 'ssh_host_rsa_key');
 
+// In-memory active live SFTP sessions registry
+export interface SftpSessionInstance {
+  id: string;
+  serverId: string;
+  userId: string;
+  username: string;
+  clientIp: string;
+  clientVersion: string;
+  connectedAt: string;
+  lastActive: string;
+  bytesRead: number;
+  bytesWritten: number;
+  filesRead: number;
+  filesWritten: number;
+  kill: () => void;
+}
+
+const activeSftpSessions = new Map<string, SftpSessionInstance>();
+
+// In-memory brute force protection on port 2022
+const sftpFailedAuth = new Map<string, { count: number; lockedUntil: number }>();
+const MAX_FAILED_SFTP_ATTEMPTS = 10;
+const SFTP_LOCKOUT_MS = 60 * 1000; // 1 minute lockout
+
+function checkSftpRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = sftpFailedAuth.get(ip);
+  if (!record) return true;
+  if (now > record.lockedUntil) {
+    sftpFailedAuth.delete(ip);
+    return true;
+  }
+  return record.count < MAX_FAILED_SFTP_ATTEMPTS;
+}
+
+function recordSftpFailure(ip: string) {
+  const now = Date.now();
+  const record = sftpFailedAuth.get(ip) || { count: 0, lockedUntil: now + SFTP_LOCKOUT_MS };
+  record.count++;
+  record.lockedUntil = now + SFTP_LOCKOUT_MS;
+  sftpFailedAuth.set(ip, record);
+}
+
+function clearSftpFailure(ip: string) {
+  sftpFailedAuth.delete(ip);
+}
+
+export function getActiveSftpSessions(serverId?: string): SftpActiveSessionDTO[] {
+  const list: SftpActiveSessionDTO[] = [];
+  for (const session of activeSftpSessions.values()) {
+    if (!serverId || session.serverId === serverId) {
+      list.push({
+        id: session.id,
+        serverId: session.serverId,
+        userId: session.userId,
+        username: session.username,
+        clientIp: session.clientIp,
+        clientVersion: session.clientVersion,
+        connectedAt: session.connectedAt,
+        lastActive: session.lastActive,
+        bytesRead: session.bytesRead,
+        bytesWritten: session.bytesWritten,
+        filesRead: session.filesRead,
+        filesWritten: session.filesWritten
+      });
+    }
+  }
+  return list;
+}
+
+export function terminateSftpSession(sessionId: string): boolean {
+  const session = activeSftpSessions.get(sessionId);
+  if (session) {
+    try {
+      session.kill();
+    } catch {}
+    activeSftpSessions.delete(sessionId);
+    return true;
+  }
+  return false;
+}
+
+export function terminateServerSftpSessions(serverId: string): number {
+  let count = 0;
+  for (const [id, session] of activeSftpSessions.entries()) {
+    if (session.serverId === serverId) {
+      try {
+        session.kill();
+      } catch {}
+      activeSftpSessions.delete(id);
+      count++;
+    }
+  }
+  return count;
+}
+
 function ensureHostKey(): string {
   if (fs.existsSync(HOST_KEY_PATH)) {
     const existing = fs.readFileSync(HOST_KEY_PATH, 'utf8');
-    if (existing.includes('BEGIN RSA PRIVATE KEY')) {
+    if (existing.includes('BEGIN RSA PRIVATE KEY') || existing.includes('BEGIN PRIVATE KEY')) {
       return existing;
     }
   }
@@ -26,7 +123,15 @@ function ensureHostKey(): string {
     privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
   });
 
-  fs.writeFileSync(HOST_KEY_PATH, privateKey, { mode: 0o600 });
+  try {
+    const parentDir = path.dirname(HOST_KEY_PATH);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.writeFileSync(HOST_KEY_PATH, privateKey, { mode: 0o600 });
+  } catch (err: any) {
+    console.error('[SFTP] Failed to save generated host key to disk:', err.message);
+  }
   return privateKey;
 }
 
@@ -44,20 +149,30 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
         let usedServerPassword = false;
         let userServer: any = null;
         let db: any = null;
+        const clientIp = client._sock?.remoteAddress || '127.0.0.1';
+        const clientBanner = (client as any)._banner || client._ident || 'SSH-2.0-GenericClient';
+        const sessionId = `sftp_sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-        client.on('error', (err: any) => {
-          // Ignore socket hangup/reset from clients
+        client.on('error', () => {
+          // Ignore non-fatal socket reset from clients
+        });
+
+        client.on('close', () => {
+          activeSftpSessions.delete(sessionId);
+        });
+
+        client.on('end', () => {
+          activeSftpSessions.delete(sessionId);
         });
 
         client
           .on('authentication', async (ctx: any) => {
-            if (ctx.method !== 'password') {
-              return ctx.reject(['password']);
+            if (!checkSftpRateLimit(clientIp)) {
+              console.warn(`[SFTP/SECURITY] IP ${clientIp} temporarily locked out due to too many failed attempts.`);
+              return ctx.reject(['password', 'publickey']);
             }
 
             const rawUsername = (ctx.username || '').trim();
-            const password = ctx.password;
-
             let username = rawUsername;
             let serverId = '';
 
@@ -72,87 +187,120 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
             db = await getDb();
             let user = db.users.find(
-              (u) => u.username.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase()
+              (u: any) => u.username.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === username.toLowerCase()
             );
 
             // If username wasn't matched directly, check if server was specified
             userServer = null;
             if (serverId) {
               userServer = db.servers.find(
-                (s) => s.id === serverId || s.id.startsWith(serverId) || s.id.substring(0, 10) === serverId
+                (s: any) => s.id === serverId || s.id.startsWith(serverId) || s.id.substring(0, 10) === serverId
               );
             }
 
             // If user logged in as srv_<id>, resolve user from server owner if not found
             if (!user && userServer) {
-              user = db.users.find((u) => u.id === userServer.userId);
+              user = db.users.find((u: any) => u.id === userServer.userId);
             }
 
             if (!user && !userServer) {
               // Try finding first server for rawUsername
-              const srv = db.servers.find((s) => s.id === rawUsername || s.id.startsWith(rawUsername));
+              const srv = db.servers.find((s: any) => s.id === rawUsername || s.id.startsWith(rawUsername));
               if (srv) {
-                user = db.users.find((u) => u.id === srv.userId);
+                user = db.users.find((u: any) => u.id === srv.userId);
                 userServer = srv;
               }
             }
 
             if (!user && !userServer) {
-              return ctx.reject();
+              recordSftpFailure(clientIp);
+              return ctx.reject(['password', 'publickey']);
             }
 
-            // Check authentication: prioritize server's sftpPassword for srv_ connection, then user password hash
             let isAuthenticated = false;
 
-            if (userServer && (userServer as any).sftpPassword) {
-              if (password === (userServer as any).sftpPassword) {
-                isAuthenticated = true;
-                usedServerPassword = true;
-                if (!user) {
-                  user = db.users.find((u) => u.id === userServer.userId) || db.users[0];
+            // Method 1: Password Authentication
+            if (ctx.method === 'password') {
+              const password = ctx.password;
+
+              if (userServer && (userServer as any).sftpPassword) {
+                if (password === (userServer as any).sftpPassword) {
+                  isAuthenticated = true;
+                  usedServerPassword = true;
+                  if (!user) {
+                    user = db.users.find((u: any) => u.id === userServer.userId) || db.users[0];
+                  }
                 }
               }
-            }
 
-            if (!isAuthenticated && user) {
-              const passwordHash = db.passwords[user.id];
-              if (passwordHash) {
-                try {
-                  isAuthenticated = await bcrypt.compare(password, passwordHash);
-                } catch {}
-              } else if (
-                (user.role === 'super_admin' || user.role === 'admin' || user.username === 'admin') &&
-                password === (process.env.AETHER_ADMIN_PASSWORD || 'adminopp')
-              ) {
-                isAuthenticated = true;
+              if (!isAuthenticated && user) {
+                const passwordHash = db.passwords[user.id];
+                if (passwordHash) {
+                  try {
+                    isAuthenticated = await bcrypt.compare(password, passwordHash);
+                  } catch {}
+                } else if (
+                  (user.role === 'super_admin' || user.role === 'admin' || user.username === 'admin') &&
+                  password === (process.env.AETHER_ADMIN_PASSWORD || 'adminopp')
+                ) {
+                  isAuthenticated = true;
+                }
               }
+            } 
+            // Method 2: Public Key Authentication
+            else if (ctx.method === 'publickey') {
+              if (user) {
+                const userKeys: any[] = user.sshKeys || [];
+                const incomingBuffer = ctx.key.data;
+                const incomingBase64 = incomingBuffer ? incomingBuffer.toString('base64') : '';
+
+                const matchedKey = userKeys.find((k: any) => {
+                  const pubKeyStr = typeof k === 'string' ? k : (k.publicKey || k.key || '');
+                  return pubKeyStr && incomingBase64 && pubKeyStr.includes(incomingBase64);
+                });
+
+                if (matchedKey) {
+                  if (ctx.signature) {
+                    // Signature present - complete handshake
+                    isAuthenticated = true;
+                  } else {
+                    // Pre-auth key query
+                    return ctx.accept();
+                  }
+                }
+              }
+            } else {
+              return ctx.reject(['password', 'publickey']);
             }
 
             if (!isAuthenticated) {
-              return ctx.reject();
+              recordSftpFailure(clientIp);
+              return ctx.reject(['password', 'publickey']);
             }
+
+            clearSftpFailure(clientIp);
 
             // Determine target server with subuser permissions
             if (!userServer) {
               if (serverId) {
-                userServer = db.servers.find((s) => {
+                userServer = db.servers.find((s: any) => {
                   const isMatch = s.id === serverId || s.id.startsWith(serverId) || s.id.substring(0, 10) === serverId;
                   if (!isMatch) return false;
 
                   const isOwner = s.userId === user.id;
                   const isAdmin = ['admin', 'super_admin'].includes(user.role);
-                  const subuser = db.subusers?.find((sub) => sub.serverId === s.id && sub.userId === user.id);
+                  const subuser = db.subusers?.find((sub: any) => sub.serverId === s.id && sub.userId === user.id);
                   const hasSubuserAccess = subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
 
                   return isOwner || isAdmin || hasSubuserAccess;
                 });
               } else {
                 // Find first server user owns
-                userServer = db.servers.find((s) => s.userId === user.id);
+                userServer = db.servers.find((s: any) => s.userId === user.id);
                 // If not found, find first server user is a subuser of with permission
                 if (!userServer) {
-                  userServer = db.servers.find((s) => {
-                    const subuser = db.subusers?.find((sub) => sub.serverId === s.id && sub.userId === user.id);
+                  userServer = db.servers.find((s: any) => {
+                    const subuser = db.subusers?.find((sub: any) => sub.serverId === s.id && sub.userId === user.id);
                     return subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
                   });
                 }
@@ -160,15 +308,15 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
             }
 
             if (!userServer && user.role !== 'super_admin') {
-              return ctx.reject();
+              return ctx.reject(['password', 'publickey']);
             }
 
             // Verify explicit subuser access/permission block
             if (userServer && userServer.userId !== user.id && !['admin', 'super_admin'].includes(user.role) && !usedServerPassword) {
-              const subuser = db.subusers?.find((sub) => sub.serverId === userServer.id && sub.userId === user.id);
+              const subuser = db.subusers?.find((sub: any) => sub.serverId === userServer.id && sub.userId === user.id);
               const hasSubuserAccess = subuser && (subuser.permissions.includes('sftp.connect') || subuser.permissions.includes('files.view'));
               if (!hasSubuserAccess) {
-                return ctx.reject();
+                return ctx.reject(['password', 'publickey']);
               }
             }
 
@@ -192,7 +340,31 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                 const isOwner = userServer ? userServer.userId === authenticatedUser.id : false;
                 const isAdmin = ['admin', 'super_admin'].includes(authenticatedUser.role);
-                const subuser = db.subusers?.find((sub) => sub.serverId === targetServerId && sub.userId === authenticatedUser.id);
+                const subuser = db.subusers?.find((sub: any) => sub.serverId === targetServerId && sub.userId === authenticatedUser.id);
+
+                // Register live SFTP active session instance
+                const liveSession: SftpSessionInstance = {
+                  id: sessionId,
+                  serverId: targetServerId,
+                  userId: authenticatedUser.id,
+                  username: authenticatedUser.username || authenticatedUser.displayName || 'user',
+                  clientIp,
+                  clientVersion: String(clientBanner),
+                  connectedAt: new Date().toISOString(),
+                  lastActive: new Date().toISOString(),
+                  bytesRead: 0,
+                  bytesWritten: 0,
+                  filesRead: 0,
+                  filesWritten: 0,
+                  kill: () => {
+                    try {
+                      session.end();
+                      client.end();
+                    } catch {}
+                  }
+                };
+
+                activeSftpSessions.set(sessionId, liveSession);
 
                 function checkPerm(perm: string): boolean {
                   if (isAdmin) return true;
@@ -204,7 +376,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                 function safePath(reqPath: string): string | null {
                   if (!reqPath) return baseDir;
-                  // Strip out null bytes and normalize
+                  // Strip null bytes and normalize
                   const sanitized = reqPath.replace(/\0/g, '');
                   const cleaned = path.normalize(sanitized).replace(/^(\.\.[\/\\])+/, '');
                   const resolved = path.resolve(baseDir, '.' + (cleaned.startsWith('/') ? cleaned : '/' + cleaned));
@@ -232,7 +404,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                     return sftp.status(reqid, 3); // SSH_FX_PERMISSION_DENIED
                   }
                   const resolved = safePath(reqPath || '/');
-                  if (!resolved) return sftp.status(reqid, 3); // SSH_FX_PERMISSION_DENIED
+                  if (!resolved) return sftp.status(reqid, 3);
                   const rel = '/' + path.relative(baseDir, resolved).replace(/\\/g, '/');
                   sftp.name(reqid, [{ filename: rel === '//' ? '/' : rel, longname: rel, attrs: {} as any }]);
                 });
@@ -302,6 +474,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                     const hId = nextHandle++;
                     handle.writeUInt32BE(hId, 0);
                     openHandles.set(hId, { fd });
+                    liveSession.lastActive = new Date().toISOString();
                     sftp.handle(reqid, handle);
                   });
                 });
@@ -318,6 +491,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                   fs.read(entry.fd, buf, 0, length, offset, (err, bytesRead) => {
                     if (err) return sftp.status(reqid, 4);
                     if (bytesRead === 0) return sftp.status(reqid, 1); // SSH_FX_EOF
+                    liveSession.bytesRead += bytesRead;
+                    liveSession.filesRead++;
+                    liveSession.lastActive = new Date().toISOString();
                     sftp.data(reqid, buf.subarray(0, bytesRead));
                   });
                 });
@@ -332,6 +508,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                   fs.write(entry.fd, data, 0, data.length, offset, (err) => {
                     if (err) return sftp.status(reqid, 4);
+                    liveSession.bytesWritten += data.length;
+                    liveSession.filesWritten++;
+                    liveSession.lastActive = new Date().toISOString();
                     sftp.status(reqid, 0); // SSH_FX_OK
                   });
                 });
@@ -349,6 +528,7 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
                     const hId = nextHandle++;
                     handle.writeUInt32BE(hId, 0);
                     openHandles.set(hId, { dirEntries: files, dirPath: target });
+                    liveSession.lastActive = new Date().toISOString();
                     sftp.handle(reqid, handle);
                   });
                 });
@@ -404,6 +584,8 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                   fs.mkdir(target, { recursive: true }, (err) => {
                     if (err) return sftp.status(reqid, 4);
+                    const rel = path.relative(baseDir, target);
+                    recordServerActivity(targetServerId!, authenticatedUser.id, authenticatedUser.username, 'SFTP_MKDIR', `Created directory: ${rel || '/'}`);
                     sftp.status(reqid, 0);
                   });
                 });
@@ -417,6 +599,8 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                   fs.rm(target, { recursive: true, force: true }, (err) => {
                     if (err) return sftp.status(reqid, 4);
+                    const rel = path.relative(baseDir, target);
+                    recordServerActivity(targetServerId!, authenticatedUser.id, authenticatedUser.username, 'SFTP_DELETE', `Deleted directory: ${rel || '/'}`);
                     sftp.status(reqid, 0);
                   });
                 });
@@ -430,6 +614,8 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                   fs.unlink(target, (err) => {
                     if (err) return sftp.status(reqid, 4);
+                    const rel = path.relative(baseDir, target);
+                    recordServerActivity(targetServerId!, authenticatedUser.id, authenticatedUser.username, 'SFTP_DELETE', `Deleted file: ${rel}`);
                     sftp.status(reqid, 0);
                   });
                 });
@@ -449,6 +635,9 @@ export function startSftpDaemon(port: number = SFTP_PORT) {
 
                   fs.rename(oldTarget, newTarget, (err) => {
                     if (err) return sftp.status(reqid, 4);
+                    const relOld = path.relative(baseDir, oldTarget);
+                    const relNew = path.relative(baseDir, newTarget);
+                    recordServerActivity(targetServerId!, authenticatedUser.id, authenticatedUser.username, 'SFTP_RENAME', `Renamed file: ${relOld} -> ${relNew}`);
                     sftp.status(reqid, 0);
                   });
                 });
@@ -549,4 +738,5 @@ export function stopSftpServer(): void {
     } catch {}
     activeSftpServer = null;
   }
+  activeSftpSessions.clear();
 }
