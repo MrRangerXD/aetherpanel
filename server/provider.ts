@@ -754,7 +754,8 @@ export async function startServer(serverId: string): Promise<boolean> {
       fs.writeFileSync(propPath, propContent, 'utf8');
     }
 
-    const xmxMB = Math.min(Number(server.startup?.xmxMB) || server.limits.ramMB, server.limits.ramMB);
+    const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
+    const xmxMB = Math.min(Number(server.startup?.xmxMB) || maxAllowedRam, maxAllowedRam);
     const xmsMB = Math.min(Number(server.startup?.xmsMB) || 128, xmxMB);
 
     appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);

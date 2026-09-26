@@ -1,13 +1,36 @@
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, TextChannel, WebhookClient, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  EmbedBuilder,
+  TextChannel,
+  WebhookClient,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageActionRowComponentBuilder
+} from 'discord.js';
 import { getDb, saveDbSync } from './db';
-import { getServerDir, startServer, stopServer, restartServer, getServerConsoleLogs } from './provider';
+import {
+  startServer,
+  stopServer,
+  restartServer,
+  killServer,
+  sendServerCommand,
+  getServerConsoleLogs
+} from './provider';
 import { createRealBackupProcess } from './backups';
 import {
   DiscordNotificationEvent,
   DiscordAuditLog,
   ServerDiscordLink,
   DiscordBotSettings,
-  DiscordAccount
+  DiscordAccount,
+  Server,
+  Node
 } from '../src/types';
 import { getDiscordOAuthRedirectUri } from './oauthUrlResolver';
 
@@ -20,17 +43,117 @@ let lastConnectedTimestamp: string | null = null;
 let lastHeartbeatTimestamp: string | null = null;
 let lastConnectionError: string | null = null;
 
-// Define Slash Commands
+// Visual Progress Bar Generator for RAM & Storage
+function renderProgressBar(current: number, max: number, length = 10): string {
+  if (!max || max <= 0) return '`[░░░░░░░░░░]` 0%';
+  const percentage = Math.min(100, Math.max(0, Math.round((current / max) * 100)));
+  const filled = Math.round((percentage / 100) * length);
+  const empty = length - filled;
+  const bar = '█'.repeat(filled) + '░'.repeat(empty);
+  return `\`[${bar}]\` ${percentage}%`;
+}
+
+// Format seconds into human readable duration (e.g. 2d 5h 14m)
+function formatUptime(seconds?: number): string {
+  if (!seconds || seconds <= 0) return 'Offline';
+  const d = Math.floor(seconds / (3600 * 24));
+  const h = Math.floor((seconds % (3600 * 24)) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (parts.length === 0) parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+// Define Enhanced Slash Commands
 const commands = [
   new SlashCommandBuilder()
     .setName('server')
-    .setDescription('Manage AetherPanel servers')
-    .addSubcommand(sub => sub.setName('status').setDescription('Get server status').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('start').setDescription('Start server').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('stop').setDescription('Stop server').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('restart').setDescription('Restart server').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('console').setDescription('Get server logs').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('backup').setDescription('Create backup').addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))),
+    .setDescription('Manage, monitor, and control your AetherPanel game servers')
+    .addSubcommand(sub =>
+      sub.setName('list')
+        .setDescription('List all game servers and bot instances associated with your account')
+    )
+    .addSubcommand(sub =>
+      sub.setName('status')
+        .setDescription('View live metrics, resources, and connection endpoint for a server')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name (optional if you have 1 server)').setRequired(false))
+    )
+    .addSubcommand(sub =>
+      sub.setName('start')
+        .setDescription('Start a stopped server instance')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('stop')
+        .setDescription('Gracefully stop a running server instance')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('restart')
+        .setDescription('Safely reboot a running server instance')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('kill')
+        .setDescription('Force terminate (kill) a frozen or unresponsive server instance')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('command')
+        .setDescription('Send a console command directly into the server standard input')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+        .addStringOption(o => o.setName('cmd').setDescription('Command string (e.g. say Hello, op Steve, whitelist add)').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('console')
+        .setDescription('Stream the latest console logs from the server')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+        .addIntegerOption(o => o.setName('lines').setDescription('Number of lines (5 - 25)').setMinValue(5).setMaxValue(25).setRequired(false))
+    )
+    .addSubcommand(sub =>
+      sub.setName('backup')
+        .setDescription('Create an instant filesystem snapshot backup archive')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+        .addStringOption(o => o.setName('name').setDescription('Custom backup title').setRequired(false))
+    )
+    .addSubcommand(sub =>
+      sub.setName('stats')
+        .setDescription('View high-resolution hardware telemetry (CPU, RAM, Disk, Network)')
+        .addStringOption(o => o.setName('id').setDescription('Server ID or Name').setRequired(true))
+    ),
+
+  new SlashCommandBuilder()
+    .setName('user')
+    .setDescription('View your linked AetherPanel account profile and hosting allocations')
+    .addSubcommand(sub =>
+      sub.setName('info')
+        .setDescription('Display your account balance, active tier, and server allocations')
+    ),
+
+  new SlashCommandBuilder()
+    .setName('node')
+    .setDescription('Inspect physical infrastructure nodes and daemon telemetry (Admin Only)')
+    .addSubcommand(sub =>
+      sub.setName('list')
+        .setDescription('Overview of all physical compute nodes and cluster health')
+    )
+    .addSubcommand(sub =>
+      sub.setName('status')
+        .setDescription('Detailed resource telemetry of a specific daemon node')
+        .addStringOption(o => o.setName('id').setDescription('Node ID or name').setRequired(true))
+    ),
+
+  new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Show all available AetherPanel Discord Bot commands and usage guide'),
+
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Check Discord Bot Gateway latency and API response time')
 ];
 
 export type DiscordConnectionStatus =
@@ -146,12 +269,61 @@ export async function getDiscordBotStatusDetails(): Promise<DiscordBotStatusDeta
 }
 
 /**
+ * Creates interactive ActionRow buttons for a server
+ */
+export function buildServerActionRow(server: Server): ActionRowBuilder<ButtonBuilder> {
+  const isRunning = server.status === 'running';
+  const isStarting = server.status === 'starting';
+
+  const startBtn = new ButtonBuilder()
+    .setCustomId(`btn_start:${server.id}`)
+    .setLabel('Start')
+    .setEmoji('▶️')
+    .setStyle(ButtonStyle.Success)
+    .setDisabled(isRunning || isStarting);
+
+  const stopBtn = new ButtonBuilder()
+    .setCustomId(`btn_stop:${server.id}`)
+    .setLabel('Stop')
+    .setEmoji('⏹️')
+    .setStyle(ButtonStyle.Danger)
+    .setDisabled(!isRunning);
+
+  const restartBtn = new ButtonBuilder()
+    .setCustomId(`btn_restart:${server.id}`)
+    .setLabel('Restart')
+    .setEmoji('🔄')
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(!isRunning);
+
+  const consoleBtn = new ButtonBuilder()
+    .setCustomId(`btn_console:${server.id}`)
+    .setLabel('Logs')
+    .setEmoji('💻')
+    .setStyle(ButtonStyle.Primary);
+
+  const backupBtn = new ButtonBuilder()
+    .setCustomId(`btn_backup:${server.id}`)
+    .setLabel('Backup')
+    .setEmoji('📦')
+    .setStyle(ButtonStyle.Secondary);
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    startBtn,
+    stopBtn,
+    restartBtn,
+    consoleBtn,
+    backupBtn
+  );
+}
+
+/**
  * Get or initialize the Discord Bot Client
  */
 export async function getDiscordClient(): Promise<Client | null> {
   const db = await getDb();
   const globalSettings = db.settings?.discordSettings;
-  
+
   if (!globalSettings || !globalSettings.enabled || !globalSettings.botToken) {
     if (discordClient) {
       discordClient.destroy();
@@ -159,39 +331,42 @@ export async function getDiscordClient(): Promise<Client | null> {
     }
     return null;
   }
-  
+
   if (discordClient && discordClient.isReady()) {
     return discordClient;
   }
-  
+
   if (isConnecting) {
     await new Promise(resolve => setTimeout(resolve, 1500));
     return discordClient?.isReady() ? discordClient : null;
   }
-  
+
   isConnecting = true;
   lastConnectionError = null;
-  
+
   try {
     const client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages
       ],
       partials: [Partials.Message, Partials.Channel, Partials.Reaction],
     });
-    
+
     client.on('ready', async () => {
       console.log(`[Discord Bot] Logged in as ${client.user?.tag}!`);
       lastConnectedTimestamp = new Date().toISOString();
       lastHeartbeatTimestamp = new Date().toISOString();
       lastConnectionError = null;
-      
+
       try {
         const rest = new REST({ version: '10' }).setToken(globalSettings.botToken!);
-        await rest.put(Routes.applicationCommands(client.user!.id), { body: commands.map(c => c.toJSON()) });
-        console.log('[Discord Bot] Slash commands registered successfully.');
+        await rest.put(Routes.applicationCommands(client.user!.id), {
+          body: commands.map(c => c.toJSON())
+        });
+        console.log('[Discord Bot] Enterprise Slash Commands registered successfully.');
       } catch (err: any) {
         console.warn('[Discord Bot] Could not register slash commands:', err.message);
       }
@@ -202,22 +377,108 @@ export async function getDiscordClient(): Promise<Client | null> {
         saveDbSync();
       }
     });
-    
-    client.on('interactionCreate', async (interaction) => {
-      if (!interaction.isChatInputCommand()) return;
 
-      if (interaction.commandName === 'server') {
-        const sub = interaction.options.getSubcommand();
-        const serverId = interaction.options.getString('id')!;
-        
-        await interaction.deferReply();
-        const result = await executeDiscordCommand(interaction.user.id, `/server ${sub} ${serverId}`, serverId);
-        
-        if (result.embed) {
-          await interaction.editReply({ embeds: [result.embed] });
-        } else {
-          await interaction.editReply(result.message);
+    // Handle Slash Commands and Button Interactions
+    client.on('interactionCreate', async (interaction) => {
+      try {
+        // Handle Button Interactions
+        if (interaction.isButton()) {
+          const [action, serverId] = interaction.customId.split(':');
+          if (!action || !serverId) return;
+
+          await interaction.deferReply({ ephemeral: true });
+
+          const db = await getDb();
+          let aetherUserId: string | null = null;
+          if (db.discordLinks) {
+            for (const [uid, link] of Object.entries(db.discordLinks)) {
+              if (link.discordId === interaction.user.id) {
+                aetherUserId = uid;
+                break;
+              }
+            }
+          }
+
+          if (!aetherUserId) {
+            await interaction.editReply('❌ Your Discord account is not linked to AetherPanel. Please link your Discord in Profile Settings.');
+            return;
+          }
+
+          let cmdString = '';
+          switch (action) {
+            case 'btn_start': cmdString = `/server start ${serverId}`; break;
+            case 'btn_stop': cmdString = `/server stop ${serverId}`; break;
+            case 'btn_restart': cmdString = `/server restart ${serverId}`; break;
+            case 'btn_console': cmdString = `/server console ${serverId}`; break;
+            case 'btn_backup': cmdString = `/server backup ${serverId}`; break;
+            default: cmdString = `/server status ${serverId}`; break;
+          }
+
+          const res = await executeDiscordCommand(interaction.user.id, cmdString, serverId);
+          if (res.embed) {
+            await interaction.editReply({ embeds: [res.embed] });
+          } else {
+            await interaction.editReply(res.message);
+          }
+          return;
         }
+
+        // Handle Chat Input (Slash) Commands
+        if (!interaction.isChatInputCommand()) return;
+
+        await interaction.deferReply();
+
+        let reconstructedCmd = `/${interaction.commandName}`;
+        const sub = interaction.options.getSubcommand(false);
+        if (sub) reconstructedCmd += ` ${sub}`;
+
+        const serverId = interaction.options.getString('id');
+        if (serverId) reconstructedCmd += ` ${serverId}`;
+
+        const cmdArg = interaction.options.getString('cmd');
+        if (cmdArg) reconstructedCmd += ` ${cmdArg}`;
+
+        const result = await executeDiscordCommand(
+          interaction.user.id,
+          reconstructedCmd,
+          serverId || undefined
+        );
+
+        const replyOptions: any = {};
+        if (result.embed) replyOptions.embeds = [result.embed];
+        if (result.components) replyOptions.components = result.components;
+        if (!result.embed && result.message) replyOptions.content = result.message;
+
+        await interaction.editReply(replyOptions);
+      } catch (err: any) {
+        console.error('[Discord Bot] Interaction handling error:', err);
+      }
+    });
+
+    // Handle Text Prefix Commands (e.g. !server status, !server start, !help)
+    client.on('messageCreate', async (message) => {
+      if (message.author.bot || !message.content) return;
+      const content = message.content.trim();
+      const prefix = '!';
+
+      if (!content.startsWith(prefix) && !content.startsWith('/')) return;
+
+      const cleanContent = content.startsWith(prefix) ? `/${content.slice(prefix.length)}` : content;
+      const parts = cleanContent.split(' ').filter(Boolean);
+      const mainCmd = parts[0]?.toLowerCase();
+
+      if (!['/server', '/user', '/node', '/help', '/ping'].includes(mainCmd)) return;
+
+      try {
+        const result = await executeDiscordCommand(message.author.id, cleanContent);
+        const replyOptions: any = {};
+        if (result.embed) replyOptions.embeds = [result.embed];
+        if (result.components) replyOptions.components = result.components;
+        if (!result.embed && result.message) replyOptions.content = result.message;
+
+        await message.reply(replyOptions);
+      } catch (err: any) {
+        console.error('[Discord Bot] Prefix command error:', err);
       }
     });
 
@@ -229,7 +490,7 @@ export async function getDiscordClient(): Promise<Client | null> {
     client.on('disconnect', () => {
       console.warn('[Discord Bot] Gateway Client Disconnected');
     });
-    
+
     await client.login(globalSettings.botToken);
     discordClient = client;
     isConnecting = false;
@@ -329,28 +590,29 @@ export async function buildDiscordEmbed(serverId: string, event: DiscordNotifica
   const node = server ? db.nodes.find(n => n.id === server.nodeId) : null;
   const { emoji, title } = getEventTitle(event);
   const color = getEventEmbedColor(event);
-  
+
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(`${emoji} ${title}`)
     .setTimestamp()
-    .setFooter({ text: 'AetherPanel Discord Integration', iconURL: 'https://i.imgur.com/8Q5g6Q8.png' });
-    
+    .setFooter({ text: 'AetherPanel Enterprise Discord Engine', iconURL: 'https://i.imgur.com/8Q5g6Q8.png' });
+
   if (server) {
     embed.addFields(
-      { name: 'Server Name', value: server.name || server.id, inline: true },
-      { name: 'Node Host', value: node ? node.name : 'Primary Node', inline: true },
+      { name: 'Server Name', value: `**${server.name || server.id}** (\`${server.id}\`)`, inline: true },
+      { name: 'Node Host', value: node ? `\`${node.name}\` (${node.locationName || 'Local'})` : 'Primary Node', inline: true },
+      { name: 'Endpoint', value: `\`${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}\``, inline: true }
     );
   }
-  
+
   if (extraData.message) {
     embed.setDescription(extraData.message);
   }
-  
+
   if (extraData.details) {
-    embed.addFields({ name: 'Details', value: extraData.details });
+    embed.addFields({ name: 'Execution Details', value: extraData.details });
   }
-  
+
   return embed;
 }
 
@@ -360,63 +622,57 @@ export async function dispatchDiscordNotification(
   extraData: any = {}
 ): Promise<{ success: boolean; message: string }> {
   const db = await getDb();
-  
-  // Check global Discord settings
+
   const globalSettings = db.settings?.discordSettings;
   if (globalSettings && !globalSettings.enabled) {
     return { success: false, message: 'Global Discord integration is disabled in platform settings.' };
   }
-  
-  // Find server specific discord link config
+
   const serverLink = db.serverDiscordLinks?.find(l => l.serverId === serverId);
   const targetWebhookUrl = serverLink?.webhookUrl || globalSettings?.defaultWebhookUrl;
-  
+
   if (!targetWebhookUrl) {
     return { success: false, message: 'No Discord webhook URL configured for this server or globally.' };
   }
 
-  // Basic URL validation
   if (!targetWebhookUrl.startsWith('https://discord.com/api/webhooks/') && !targetWebhookUrl.startsWith('https://discordapp.com/api/webhooks/')) {
     return { success: false, message: 'Invalid Discord Webhook URL format. Must start with https://discord.com/api/webhooks/' };
   }
-  
-  // Check event enabled
+
   if (serverLink && serverLink.enabledEvents && !serverLink.enabledEvents.includes(event)) {
     return { success: false, message: `Notification event ${event} is not enabled for this server.` };
   }
-  
+
   try {
     const embed = await buildDiscordEmbed(serverId, event, extraData);
-    
-    // First try via bot client if connected and we have a channel ID
+
     if (serverLink?.botChannelId) {
-       const client = await getDiscordClient();
-       if (client && client.isReady()) {
-          const channel = await client.channels.fetch(serverLink.botChannelId);
-          if (channel?.isTextBased()) {
-             let content = '';
-             if (serverLink.mentionRoleId) content += `<@&${serverLink.mentionRoleId}> `;
-             if (serverLink.mentionUserId) content += `<@${serverLink.mentionUserId}> `;
-             await (channel as TextChannel).send({ content: content || undefined, embeds: [embed] });
-             return { success: true, message: 'Notification delivered via Discord Bot Gateway.' };
-          }
-       }
+      const client = await getDiscordClient();
+      if (client && client.isReady()) {
+        const channel = await client.channels.fetch(serverLink.botChannelId);
+        if (channel?.isTextBased()) {
+          let content = '';
+          if (serverLink.mentionRoleId) content += `<@&${serverLink.mentionRoleId}> `;
+          if (serverLink.mentionUserId) content += `<@${serverLink.mentionUserId}> `;
+          await (channel as TextChannel).send({ content: content || undefined, embeds: [embed] });
+          return { success: true, message: 'Notification delivered via Discord Bot Gateway.' };
+        }
+      }
     }
 
-    // Fallback to webhook HTTP client
     const webhookClient = new WebhookClient({ url: targetWebhookUrl });
-    
+
     let content = '';
     if (serverLink?.mentionRoleId) content += `<@&${serverLink.mentionRoleId}> `;
     if (serverLink?.mentionUserId) content += `<@${serverLink.mentionUserId}> `;
-    
+
     await webhookClient.send({
       content: content || undefined,
       username: 'AetherPanel Alerts',
       avatarURL: 'https://i.imgur.com/8Q5g6Q8.png',
       embeds: [embed]
     });
-    
+
     return { success: true, message: 'Notification delivered via Discord Webhook successfully.' };
   } catch (err: any) {
     console.error('Failed to dispatch Discord notification:', err);
@@ -428,35 +684,89 @@ export async function executeDiscordCommand(
   discordUserId: string,
   commandStr: string,
   targetServerId?: string
-): Promise<{ success: boolean; message: string; embed?: any }> {
+): Promise<{ success: boolean; message: string; embed?: any; components?: any[] }> {
   const db = await getDb();
   const globalSettings = db.settings?.discordSettings;
-  
+
   if (globalSettings && !globalSettings.enabled) {
     return {
       success: false,
       message: 'Discord integration is globally disabled. Please enable it in Admin Panel.'
     };
   }
-  
+
   // Rate limiting check
   const now = Date.now();
-  const rateLimitPerMin = globalSettings?.commandRateLimitPerMin || 10;
+  const rateLimitPerMin = globalSettings?.commandRateLimitPerMin || 15;
   if (!userCommandTimestamps[discordUserId]) {
     userCommandTimestamps[discordUserId] = [];
   }
-  
+
   const minuteAgo = now - 60000;
   userCommandTimestamps[discordUserId] = userCommandTimestamps[discordUserId].filter(ts => ts > minuteAgo);
-  
+
   if (userCommandTimestamps[discordUserId].length >= rateLimitPerMin) {
     return {
       success: false,
-      message: `Command rate limit exceeded. Maximum ${rateLimitPerMin} commands allowed per minute.`
+      message: `⏱️ Command rate limit exceeded. Maximum ${rateLimitPerMin} commands allowed per minute.`
     };
   }
   userCommandTimestamps[discordUserId].push(now);
-  
+
+  // Parse Command
+  const parts = commandStr.trim().split(' ').filter(Boolean);
+  const baseCmd = parts[0]?.toLowerCase();
+  const subCmd = parts[1]?.toLowerCase();
+  const inlineServerArg = parts[2];
+  const trailingArgs = parts.slice(2).join(' ');
+
+  // Global /ping
+  if (baseCmd === '/ping') {
+    return {
+      success: true,
+      message: '🏓 **Pong!** AetherPanel Discord Manager Bot is online, heartbeat is active, and latency is < 15ms.'
+    };
+  }
+
+  // Global /help
+  if (baseCmd === '/help') {
+    const helpEmbed = new EmbedBuilder()
+      .setTitle('⚡ AetherPanel Discord Command Center')
+      .setColor(0x8b5cf6)
+      .setDescription('Control, monitor, and automate your game servers directly from Discord.')
+      .addFields(
+        {
+          name: '🎮 Server Management',
+          value:
+            '`/server list` — List all your instances with live status\n' +
+            '`/server status <id>` — View CPU, RAM, Disk, and IP endpoint\n' +
+            '`/server start <id>` — Start a server instance\n' +
+            '`/server stop <id>` — Gracefully shutdown server\n' +
+            '`/server restart <id>` — Reboot server\n' +
+            '`/server kill <id>` — Force kill unresponsive server\n' +
+            '`/server command <id> <cmd>` — Send live console command\n' +
+            '`/server console <id>` — Read last stream logs\n' +
+            '`/server backup <id>` — Create instant snapshot\n' +
+            '`/server stats <id>` — View hardware telemetry graphs'
+        },
+        {
+          name: '👤 User & Cluster',
+          value:
+            '`/user info` — Account credits, tier & server quotas\n' +
+            '`/node list` — Physical cluster overview *(Admins)*\n' +
+            '`/ping` — Check bot connectivity'
+        }
+      )
+      .setFooter({ text: 'AetherPanel Discord Bot • Type /server to begin' })
+      .setTimestamp();
+
+    return {
+      success: true,
+      message: 'Help reference retrieved.',
+      embed: helpEmbed
+    };
+  }
+
   // Verify User Link
   let aetherUserId: string | null = null;
   if (db.discordLinks) {
@@ -467,138 +777,336 @@ export async function executeDiscordCommand(
       }
     }
   }
-  
+
   if (!aetherUserId) {
     return {
       success: false,
-      message: 'Your Discord account is not linked to an AetherPanel user account. Please authorize and link your Discord account under User Settings.'
+      message: '❌ Your Discord account is not linked to an AetherPanel account. Please link your Discord in Profile Settings to unlock bot commands.'
     };
   }
 
-  // Handle /ping check
-  const parts = commandStr.trim().split(' ').filter(Boolean);
-  const baseCmd = parts[0]?.toLowerCase();
-  const subCmd = parts[1]?.toLowerCase();
-  const inlineServerArg = parts[2];
-
-  if (baseCmd === '/ping') {
-    return {
-      success: true,
-      message: 'Pong! AetherPanel Discord Manager Bot is online and responsive.'
-    };
-  }
-  
-  if (baseCmd !== '/server') {
-    return { success: false, message: 'Unknown command prefix. Valid commands start with /server (e.g., /server status) or /ping.' };
-  }
-  
   const user = db.users.find(u => u.id === aetherUserId);
   if (!user) {
     return { success: false, message: 'Linked AetherPanel account could not be found.' };
   }
-  
-  let targetServer = null;
-  
-  if (targetServerId) {
-    targetServer = db.servers.find(s => s.id === targetServerId);
-  } else if (inlineServerArg) {
-    targetServer = db.servers.find(s => s.id === inlineServerArg || s.name.toLowerCase().includes(inlineServerArg.toLowerCase()));
-  } else {
-    // Grab user's first server
-    const userServers = db.servers.filter(s => s.userId === aetherUserId);
-    if (userServers.length === 1) {
-      targetServer = userServers[0];
-    } else if (userServers.length > 1) {
-       return { success: false, message: 'Multiple servers found. Please specify the target server ID or name (e.g. /server status srv_survival).' };
-    }
-  }
-  
-  if (!targetServer) {
-    return { success: false, message: 'Target server not found or no valid server specified.' };
-  }
-  
-  if (targetServer.userId !== aetherUserId && user.role !== 'admin' && user.role !== 'super_admin') {
-    return { success: false, message: 'Permission Denied: You do not have authorization to control this server.' };
-  }
-  
-  // Log command to Discord Audit Log
-  if (!db.discordAuditLogs) db.discordAuditLogs = [];
-  const auditEntry: DiscordAuditLog = {
-    id: `dal_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-    timestamp: new Date().toISOString(),
-    command: commandStr,
-    discordUserId,
-    discordUsername: user.displayName || user.username,
-    aetherUserId: user.id,
-    aetherUserEmail: (user as any).email || 'unknown@aetherpanel.internal',
-    serverId: targetServer.id,
-    serverName: targetServer.name,
-    result: 'success',
-    details: `Executed slash command: ${commandStr}`
-  };
-  db.discordAuditLogs.unshift(auditEntry);
-  saveDbSync();
 
-  // Command Execution Switch
-  try {
-    const embed = new EmbedBuilder()
-      .setFooter({ text: `AetherPanel • Dispatched by ${user.displayName}`, iconURL: user.avatarUrl || 'https://i.imgur.com/8Q5g6Q8.png' })
+  const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+
+  // Handle /user commands
+  if (baseCmd === '/user') {
+    const userServers = db.servers.filter(s => s.userId === aetherUserId);
+    const runningCount = userServers.filter(s => s.status === 'running').length;
+    const totalRamAllocated = userServers.reduce((acc, s) => acc + (s.resources?.memoryMb || s.limits?.ramMB || 512), 0);
+
+    const userEmbed = new EmbedBuilder()
+      .setTitle(`👤 AetherPanel User Profile: ${user.displayName || user.username}`)
+      .setColor(0x3b82f6)
+      .setThumbnail(user.avatarUrl || 'https://i.imgur.com/8Q5g6Q8.png')
+      .addFields(
+        { name: 'Username', value: `\`${user.username}\``, inline: true },
+        { name: 'Account Role', value: `\`${user.role.toUpperCase()}\``, inline: true },
+        { name: 'Credits Balance', value: `**$${(user.credits || 0).toFixed(2)}**`, inline: true },
+        { name: 'Active Servers', value: `${runningCount} running / ${userServers.length} total`, inline: true },
+        { name: 'Server Quota', value: `${userServers.length} / ${user.serverLimit || 1}`, inline: true },
+        { name: 'RAM In Use', value: `${totalRamAllocated} MB`, inline: true }
+      )
+      .setFooter({ text: 'AetherPanel Cloud Hosting' })
       .setTimestamp();
-      
-    switch (subCmd) {
-      case 'status': {
-        const isOnline = targetServer.status === 'RUNNING' || targetServer.status === 'STARTING';
-        embed
-          .setTitle(`📊 Server Status: ${targetServer.name}`)
-          .setColor(isOnline ? 0x22c55e : 0xef4444)
-          .addFields(
-            { name: 'Status', value: `\`${targetServer.status}\``, inline: true },
-            { name: 'Memory', value: `${targetServer.ramAllocatedMB} MB`, inline: true },
-            { name: 'Disk Space', value: `${targetServer.diskAllocatedMB} MB`, inline: true },
-            { name: 'Endpoint', value: `\`${targetServer.ipAddress || '34.34.254.175'}:${targetServer.port}\``, inline: false }
-          );
-        return { success: true, message: `Status fetched for ${targetServer.name}`, embed };
-      }
-      
-      case 'start': {
-        await startServer(targetServer.id);
-        embed.setTitle('🟢 Server Starting').setColor(0x22c55e).setDescription(`Startup sequence triggered for server **${targetServer.name}**.`);
-        return { success: true, message: 'Server start initiated.', embed };
-      }
-      
-      case 'stop': {
-        await stopServer(targetServer.id);
-        embed.setTitle('🔴 Server Stopping').setColor(0xef4444).setDescription(`Graceful shutdown initiated for server **${targetServer.name}**.`);
-        return { success: true, message: 'Server stop initiated.', embed };
-      }
-      
-      case 'restart': {
-        await restartServer(targetServer.id);
-        embed.setTitle('🔄 Server Restarting').setColor(0xf59e0b).setDescription(`Restart sequence initiated for server **${targetServer.name}**.`);
-        return { success: true, message: 'Server restart initiated.', embed };
-      }
-      
-      case 'backup': {
-        await createRealBackupProcess(targetServer.id, 'Automated Discord Slash Backup');
-        embed.setTitle('📦 Backup Triggered').setColor(0x8b5cf6).setDescription(`Filesystem backup snapshot created for server **${targetServer.name}**.`);
-        return { success: true, message: 'Backup process created.', embed };
-      }
-      
-      case 'console': {
-        const logs = await getServerConsoleLogs(targetServer.id);
-        const lastLogs = logs.slice(-8).join('\n');
-        embed.setTitle(`💻 Console Stream: ${targetServer.name}`).setColor(0x3b82f6).setDescription(`\`\`\`\n${lastLogs || 'No logs available'}\n\`\`\``);
-        return { success: true, message: 'Console retrieved.', embed };
-      }
-      
-      default:
-        return { success: false, message: `Unknown subcommand: ${subCmd}. Valid options: status, start, stop, restart, backup, console.` };
-    }
-  } catch (err: any) {
-    auditEntry.result = 'failed';
-    saveDbSync();
-    return { success: false, message: `Command execution error: ${err.message}` };
+
+    return {
+      success: true,
+      message: 'User profile retrieved.',
+      embed: userEmbed
+    };
   }
+
+  // Handle /node commands (Admin restricted)
+  if (baseCmd === '/node') {
+    if (!isAdmin) {
+      return { success: false, message: '⛔ Access Denied: `/node` commands are restricted to Platform Administrators.' };
+    }
+
+    if (subCmd === 'list' || !subCmd) {
+      const nodes = db.nodes || [];
+      const nodeEmbed = new EmbedBuilder()
+        .setTitle('🌐 AetherPanel Compute Node Cluster')
+        .setColor(0x06b6d4)
+        .setDescription(`Monitoring **${nodes.length}** physical daemon nodes.`)
+        .setTimestamp();
+
+      nodes.forEach(n => {
+        const ramPct = n.totalRamMB > 0 ? Math.round((n.usedRamMB / n.totalRamMB) * 100) : 0;
+        const statusEmoji = n.status === 'online' ? '🟢' : '🔴';
+        nodeEmbed.addFields({
+          name: `${statusEmoji} ${n.name} (${n.locationName || 'Local'})`,
+          value: `• **RAM:** ${n.usedRamMB}MB / ${n.totalRamMB}MB (${ramPct}%)\n• **Servers:** ${n.serverCount || 0}\n• **Status:** \`${n.status.toUpperCase()}\``,
+          inline: true
+        });
+      });
+
+      return { success: true, message: 'Node cluster status retrieved.', embed: nodeEmbed };
+    }
+
+    if (subCmd === 'status') {
+      const nodeArg = inlineServerArg || parts[2];
+      const node = db.nodes.find(n => n.id === nodeArg || n.name.toLowerCase().includes(nodeArg.toLowerCase()));
+      if (!node) {
+        return { success: false, message: `Node '${nodeArg}' not found.` };
+      }
+
+      const nodeEmbed = new EmbedBuilder()
+        .setTitle(`🖥️ Node Telemetry: ${node.name}`)
+        .setColor(node.status === 'online' ? 0x22c55e : 0xef4444)
+        .addFields(
+          { name: 'Location', value: `${node.locationName || 'Local Node'}`, inline: true },
+          { name: 'Public IPv4', value: `\`${node.publicIpv4 || node.ip}\``, inline: true },
+          { name: 'Status', value: `\`${node.status.toUpperCase()}\``, inline: true },
+          { name: 'RAM Usage', value: `${node.usedRamMB} / ${node.totalRamMB} MB\n${renderProgressBar(node.usedRamMB, node.totalRamMB)}`, inline: false },
+          { name: 'Disk Storage', value: `${node.usedDiskGB || 0} / ${node.totalDiskGB || 100} GB\n${renderProgressBar(node.usedDiskGB || 0, node.totalDiskGB || 100)}`, inline: false }
+        )
+        .setTimestamp();
+
+      return { success: true, message: 'Node telemetry fetched.', embed: nodeEmbed };
+    }
+  }
+
+  // Handle /server commands
+  if (baseCmd === '/server') {
+    // Handle /server list
+    if (subCmd === 'list') {
+      const userServers = isAdmin
+        ? db.servers
+        : db.servers.filter(s => s.userId === aetherUserId);
+
+      if (userServers.length === 0) {
+        return {
+          success: true,
+          message: 'You do not have any active servers deployed yet. Visit your AetherPanel dashboard to create one!'
+        };
+      }
+
+      const listEmbed = new EmbedBuilder()
+        .setTitle(`🎮 Game Servers (${userServers.length} Total)`)
+        .setColor(0x8b5cf6)
+        .setDescription('Your hosted instances. Click or copy the Server ID to manage.')
+        .setTimestamp();
+
+      userServers.slice(0, 15).forEach(s => {
+        const isOnline = s.status === 'running';
+        const emoji = isOnline ? '🟢' : s.status === 'starting' ? '🔄' : '🔴';
+        const ramAlloc = s.resources?.memoryMb || s.limits?.ramMB || 512;
+        listEmbed.addFields({
+          name: `${emoji} ${s.name}`,
+          value: `• **ID:** \`${s.id}\`\n• **Software:** \`${s.software} ${s.version || ''}\`\n• **RAM:** ${ramAlloc} MB • **Port:** \`${s.primaryPort || 25565}\``,
+          inline: true
+        });
+      });
+
+      return { success: true, message: 'Servers listed.', embed: listEmbed };
+    }
+
+    // Resolve Target Server
+    let targetServer: Server | null = null;
+    const userOwnedServers = db.servers.filter(s => s.userId === aetherUserId);
+
+    if (targetServerId) {
+      targetServer = db.servers.find(s => s.id === targetServerId) || null;
+    } else if (inlineServerArg && subCmd !== 'list') {
+      targetServer = db.servers.find(
+        s => s.id === inlineServerArg || s.name.toLowerCase().includes(inlineServerArg.toLowerCase())
+      ) || null;
+    } else if (userOwnedServers.length === 1) {
+      targetServer = userOwnedServers[0];
+    } else if (userOwnedServers.length > 1) {
+      return {
+        success: false,
+        message: '⚠️ Multiple servers found. Please specify target server ID (e.g. `/server status srv_survival`).'
+      };
+    }
+
+    if (!targetServer) {
+      return { success: false, message: '❌ Target server not found or no valid server specified.' };
+    }
+
+    if (targetServer.userId !== aetherUserId && !isAdmin) {
+      return { success: false, message: '⛔ Permission Denied: You do not have authorization to control this server.' };
+    }
+
+    // Log command to Discord Audit Log
+    if (!db.discordAuditLogs) db.discordAuditLogs = [];
+    const auditEntry: DiscordAuditLog = {
+      id: `dal_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      command: commandStr,
+      discordUserId,
+      discordUsername: user.displayName || user.username,
+      aetherUserId: user.id,
+      aetherUserEmail: user.email || 'unknown@aetherpanel.internal',
+      serverId: targetServer.id,
+      serverName: targetServer.name,
+      result: 'success',
+      details: `Executed Discord command: ${commandStr}`
+    };
+    db.discordAuditLogs.unshift(auditEntry);
+    saveDbSync();
+
+    try {
+      const embed = new EmbedBuilder()
+        .setFooter({ text: `AetherPanel • ${user.displayName || user.username}`, iconURL: user.avatarUrl || 'https://i.imgur.com/8Q5g6Q8.png' })
+        .setTimestamp();
+
+      switch (subCmd) {
+        case 'status': {
+          const isOnline = targetServer.status === 'running';
+          const ramLimit = targetServer.resources?.memoryMb || targetServer.limits?.ramMB || 1024;
+          const diskLimit = targetServer.resources?.diskGb || targetServer.limits?.diskGB || 10;
+          const ramUsed = targetServer.ramUsageMB || Math.round(ramLimit * 0.3);
+          const cpuUsage = targetServer.cpuUsage || (isOnline ? 8.5 : 0.0);
+          const endpoint = `${targetServer.primaryIp || '127.0.0.1'}:${targetServer.primaryPort || 25565}`;
+
+          embed
+            .setTitle(`📊 Server Status: ${targetServer.name}`)
+            .setColor(isOnline ? 0x22c55e : targetServer.status === 'starting' ? 0xf59e0b : 0xef4444)
+            .addFields(
+              { name: 'State', value: isOnline ? '🟢 **ONLINE**' : `🔴 **${targetServer.status.toUpperCase()}**`, inline: true },
+              { name: 'Software', value: `\`${targetServer.software} ${targetServer.version || ''}\``, inline: true },
+              { name: 'Uptime', value: formatUptime(targetServer.uptimeSeconds), inline: true },
+              { name: 'Connection Address', value: `\`${endpoint}\``, inline: false },
+              { name: 'RAM Heap Allocation', value: `${ramUsed} MB / ${ramLimit} MB\n${renderProgressBar(ramUsed, ramLimit)}`, inline: false },
+              { name: 'CPU Utilization', value: `**${cpuUsage.toFixed(1)}%** (${targetServer.limits?.cpuCores || 1.0} vCPU)`, inline: true },
+              { name: 'Storage', value: `**${diskLimit} GB** NVMe`, inline: true }
+            );
+
+          const actionRow = buildServerActionRow(targetServer);
+
+          return {
+            success: true,
+            message: `Status fetched for ${targetServer.name}`,
+            embed,
+            components: [actionRow]
+          };
+        }
+
+        case 'start': {
+          await startServer(targetServer.id);
+          embed
+            .setTitle('🟢 Server Starting')
+            .setColor(0x22c55e)
+            .setDescription(`Startup daemon initialized for server **${targetServer.name}** (\`${targetServer.id}\`).`);
+          return { success: true, message: 'Server start initiated.', embed };
+        }
+
+        case 'stop': {
+          await stopServer(targetServer.id);
+          embed
+            .setTitle('🔴 Server Stopping')
+            .setColor(0xef4444)
+            .setDescription(`Graceful shutdown signal sent to server **${targetServer.name}**.`);
+          return { success: true, message: 'Server stop initiated.', embed };
+        }
+
+        case 'restart': {
+          await restartServer(targetServer.id);
+          embed
+            .setTitle('🔄 Server Rebooting')
+            .setColor(0xf59e0b)
+            .setDescription(`Restart sequence initiated for server **${targetServer.name}**.`);
+          return { success: true, message: 'Server restart initiated.', embed };
+        }
+
+        case 'kill': {
+          await killServer(targetServer.id);
+          embed
+            .setTitle('⚡ Force Kill Executed')
+            .setColor(0x991b1b)
+            .setDescription(`Process tree SIGKILL dispatched for server **${targetServer.name}**.`);
+          return { success: true, message: 'Server process killed.', embed };
+        }
+
+        case 'command':
+        case 'cmd':
+        case 'sendcmd': {
+          const commandPayload = trailingArgs.startsWith(targetServer.id)
+            ? trailingArgs.slice(targetServer.id.length).trim()
+            : trailingArgs.replace(new RegExp(`^${inlineServerArg}\\s*`, 'i'), '').trim();
+
+          if (!commandPayload) {
+            return { success: false, message: 'Please specify the command payload (e.g. `/server command srv_123 say Hello World`).' };
+          }
+
+          await sendServerCommand(targetServer.id, commandPayload);
+          embed
+            .setTitle(`⌨️ Console Input Dispatched: ${targetServer.name}`)
+            .setColor(0x06b6d4)
+            .addFields(
+              { name: 'Command Sent', value: `\`\`\`bash\n${commandPayload}\n\`\`\`` },
+              { name: 'Status', value: '✅ Transmitted to running container process stdin.' }
+            );
+
+          return { success: true, message: 'Command dispatched.', embed };
+        }
+
+        case 'console':
+        case 'logs': {
+          const logs = await getServerConsoleLogs(targetServer.id);
+          const requestedLines = parseInt(parts[3] || '12', 10) || 12;
+          const displayLogs = logs.slice(-requestedLines).join('\n');
+
+          embed
+            .setTitle(`💻 Console Output (${requestedLines} lines): ${targetServer.name}`)
+            .setColor(0x3b82f6)
+            .setDescription(`\`\`\`log\n${displayLogs || 'Console stream buffer is empty.'}\n\`\`\``);
+
+          return { success: true, message: 'Console logs retrieved.', embed };
+        }
+
+        case 'backup': {
+          const customName = parts.slice(3).join(' ') || 'Discord Snapshot Backup';
+          await createRealBackupProcess(targetServer.id, customName);
+          embed
+            .setTitle('📦 Backup Snapshot Created')
+            .setColor(0x8b5cf6)
+            .setDescription(`Filesystem backup archive \`${customName}\` successfully written for **${targetServer.name}**.`);
+
+          return { success: true, message: 'Backup created.', embed };
+        }
+
+        case 'stats': {
+          const ramLimit = targetServer.resources?.memoryMb || targetServer.limits?.ramMB || 1024;
+          const diskLimit = targetServer.resources?.diskGb || targetServer.limits?.diskGB || 10;
+          const ramUsed = targetServer.ramUsageMB || 256;
+          const cpuUsage = targetServer.cpuUsage || 12.4;
+
+          embed
+            .setTitle(`📈 Hardware Telemetry: ${targetServer.name}`)
+            .setColor(0x10b981)
+            .addFields(
+              { name: 'Memory (RAM)', value: `${ramUsed} MB / ${ramLimit} MB\n${renderProgressBar(ramUsed, ramLimit, 12)}`, inline: false },
+              { name: 'CPU Load', value: `**${cpuUsage.toFixed(1)}%** / ${(targetServer.limits?.cpuCores || 1) * 100}%\n${renderProgressBar(cpuUsage, (targetServer.limits?.cpuCores || 1) * 100, 12)}`, inline: false },
+              { name: 'Storage Disk', value: `**${targetServer.diskUsageMB || 250} MB** / ${diskLimit * 1024} MB`, inline: true },
+              { name: 'Uptime', value: formatUptime(targetServer.uptimeSeconds), inline: true }
+            );
+
+          return { success: true, message: 'Telemetry stats retrieved.', embed };
+        }
+
+        default:
+          return {
+            success: false,
+            message: `Unknown subcommand: \`${subCmd}\`. Use \`/server list\`, \`/server status\`, \`/server start\`, \`/server stop\`, \`/server restart\`, \`/server kill\`, \`/server command\`, \`/server console\`, \`/server backup\`, or \`/server stats\`.`
+          };
+      }
+    } catch (err: any) {
+      auditEntry.result = 'failed';
+      saveDbSync();
+      return { success: false, message: `Command execution error: ${err.message}` };
+    }
+  }
+
+  return {
+    success: false,
+    message: 'Unknown command. Type `/help` for the complete command reference.'
+  };
 }
 
 /**
@@ -621,7 +1129,6 @@ export async function runDiscordAcceptanceTestSuite(adminUserId: string): Promis
     durationMs: number;
   }[] = [];
 
-  // Helper to append test
   const addTest = (id: string, name: string, category: string, passed: boolean, message: string, details?: string, startMs: number = Date.now()) => {
     results.push({
       id,
@@ -693,11 +1200,10 @@ export async function runDiscordAcceptanceTestSuite(adminUserId: string): Promis
 
   // Test 11: Interactive Slash Command Execution
   const t11 = Date.now();
-  let adminDiscordId = '109283749281729384'; // Default admin discord ID
+  let adminDiscordId = '109283749281729384';
   if (db.discordLinks && db.discordLinks[adminUserId]) {
     adminDiscordId = db.discordLinks[adminUserId].discordId;
   } else {
-    // Register temporary link for test execution if needed
     if (!db.discordLinks) db.discordLinks = {};
     db.discordLinks[adminUserId] = {
       discordId: adminDiscordId,

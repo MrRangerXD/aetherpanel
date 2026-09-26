@@ -3,6 +3,26 @@ import path from 'path';
 import net from 'net';
 import https from 'https';
 
+// Prevent uncaught errors from ever crashing the emulator process
+process.on('uncaughtException', (err) => {
+  try {
+    if (logPath) fs.appendFileSync(logPath, `[${new Date().toISOString()}] [UncaughtException] ${err.message || err}\n`);
+  } catch {}
+});
+
+process.on('unhandledRejection', (reason) => {
+  try {
+    if (logPath) fs.appendFileSync(logPath, `[${new Date().toISOString()}] [UnhandledRejection] ${reason}\n`);
+  } catch {}
+});
+
+if (process.stdout) {
+  process.stdout.on('error', () => {});
+}
+if (process.stderr) {
+  process.stderr.on('error', () => {});
+}
+
 const args = process.argv.slice(2);
 let secretPath = '';
 let socketPath = '';
@@ -35,13 +55,18 @@ function writeLog(line) {
 if (logPath) {
   try {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.writeFileSync(logPath, '');
+    if (!fs.existsSync(logPath)) {
+      fs.writeFileSync(logPath, '');
+    }
   } catch {}
 }
 
 writeLog(`Playit Agent v1.0.10 Real Emulator booting...`);
 writeLog(`[Playit] Initializing connection with official playit.gg servers...`);
 writeLog(`[Playit] Claim URL: ${claimUrl}`);
+writeLog(`[Playit] Claim Code: ${claimCode}`);
+console.log(`[Playit] Claim URL: ${claimUrl}`);
+console.log(`[Playit] Claim Code: ${claimCode}`);
 
 let hasSecret = false;
 let secretKey = '';
@@ -55,44 +80,54 @@ function registerWithPlayitApi() {
     version: '1.0.10'
   });
 
-  const req = https.request({
-    hostname: 'api.playit.gg',
-    path: '/claim/setup',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(data)
-    }
-  }, (res) => {
-    let body = '';
-    res.on('data', chunk => body += chunk);
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(body);
-        if (parsed.status === 'success') {
-          registeredWithApi = true;
-          writeLog(`[Playit API] Registered claim code with playit.gg successfully.`);
-          
-          // Check if secret key was returned directly or if user accepted
-          if (parsed.data && typeof parsed.data === 'object' && (parsed.data.secret_key || parsed.data.UserAccepted)) {
-            const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
-            if (key) {
-              saveSecretKey(key);
+  try {
+    const req = https.request({
+      hostname: 'api.playit.gg',
+      path: '/claim/setup',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 7000
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('error', () => {});
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.status === 'success') {
+            registeredWithApi = true;
+            writeLog(`[Playit API] Registered claim code with playit.gg successfully.`);
+            
+            // Check if secret key was returned directly or if user accepted
+            if (parsed.data && typeof parsed.data === 'object' && (parsed.data.secret_key || parsed.data.UserAccepted)) {
+              const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
+              if (key) {
+                saveSecretKey(key);
+              }
             }
           }
+        } catch (e) {
+          // Ignore parse errors on raw responses
         }
-      } catch (e) {
-        // Ignore parse errors on raw responses
-      }
+      });
     });
-  });
 
-  req.on('error', (err) => {
-    writeLog(`[Playit API Error] Failed to reach api.playit.gg: ${err.message}`);
-  });
+    req.on('timeout', () => {
+      req.destroy();
+    });
 
-  req.write(data);
-  req.end();
+    req.on('error', (err) => {
+      writeLog(`[Playit API Error] Notice reaching api.playit.gg: ${err.message}`);
+    });
+
+    req.write(data);
+    req.end();
+  } catch (err) {
+    writeLog(`[Playit API Exception] ${err.message}`);
+  }
 }
 
 function saveSecretKey(key) {
@@ -152,34 +187,41 @@ function checkSecret() {
         version: '1.0.10'
       });
 
-      const req = https.request({
-        hostname: 'api.playit.gg',
-        path: '/claim/setup',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(data)
-        }
-      }, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(body);
-            if (parsed.status === 'success' && parsed.data) {
-              if (typeof parsed.data === 'object') {
-                const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
-                if (key) {
-                  saveSecretKey(key);
+      try {
+        const req = https.request({
+          hostname: 'api.playit.gg',
+          path: '/claim/setup',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data)
+          },
+          timeout: 7000
+        }, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('error', () => {});
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              if (parsed.status === 'success' && parsed.data) {
+                if (typeof parsed.data === 'object') {
+                  const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
+                  if (key) {
+                    saveSecretKey(key);
+                  }
                 }
               }
-            }
-          } catch {}
+            } catch {}
+          });
         });
-      });
-      req.on('error', () => {});
-      req.write(data);
-      req.end();
+        req.on('timeout', () => {
+          req.destroy();
+        });
+        req.on('error', () => {});
+        req.write(data);
+        req.end();
+      } catch {}
     }
   }
 }
@@ -209,7 +251,12 @@ function updateDbNodeSftp(nodeId, host, port) {
 
 // Initial registration and loop
 checkSecret();
-setInterval(checkSecret, 3000);
+const secretInterval = setInterval(checkSecret, 4000);
+
+// Perpetual agent daemon keep-alive ensuring background worker never unexpectedly terminates
+const keepAliveInterval = setInterval(() => {
+  // heartbeat loop
+}, 25000);
 
 // Unix domain socket server for IPC
 if (socketPath) {
@@ -221,6 +268,9 @@ if (socketPath) {
   } catch {}
 
   const server = net.createServer((socket) => {
+    // Critical: ignore EPIPE, ECONNRESET, and client disconnect errors so Node never crashes
+    socket.on('error', () => {});
+
     let buffer = '';
     socket.on('data', (data) => {
       buffer += data.toString();
@@ -271,7 +321,11 @@ if (socketPath) {
                 response: response
               }
             }) + '\n';
-            socket.write(payload);
+
+            // Safely write response only if socket is alive
+            if (!socket.destroyed && socket.writable) {
+              socket.write(payload, () => {});
+            }
           }
         } catch {}
       }
@@ -279,15 +333,40 @@ if (socketPath) {
     });
   });
 
+  server.on('error', (err) => {
+    writeLog(`[Playit Socket Server Notice] ${err.message || err}`);
+  });
+
+  server.on('clientError', (err, socket) => {
+    try {
+      socket.destroy();
+    } catch {}
+  });
+
   server.listen(socketPath, () => {
     console.log(`[Playit Real Emulator Socket] Listening at ${socketPath}`);
   });
 
-  process.on('SIGTERM', () => {
-    server.close();
+  const cleanup = () => {
+    clearInterval(secretInterval);
+    try {
+      server.close();
+    } catch {}
+    try {
+      if (fs.existsSync(socketPath)) {
+        fs.unlinkSync(socketPath);
+      }
+    } catch {}
     process.exit(0);
-  });
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
   process.on('exit', () => {
-    try { fs.unlinkSync(socketPath); } catch {}
+    try {
+      if (fs.existsSync(socketPath)) {
+        fs.unlinkSync(socketPath);
+      }
+    } catch {}
   });
 }

@@ -71,12 +71,12 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
     }
   };
 
-  const fetchPlayitStatus = async () => {
+  const fetchPlayitStatus = async (silent: boolean = false) => {
     if (!enablePlayit) {
       setLoadingPlayit(false);
       return;
     }
-    setLoadingPlayit(true);
+    if (!silent) setLoadingPlayit(true);
     try {
       const res = await apiRequest(`/servers/${server.id}/playit`);
       if (res.success && res.data) {
@@ -85,19 +85,19 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
     } catch {
       // ignore
     } finally {
-      setLoadingPlayit(false);
+      if (!silent) setLoadingPlayit(false);
     }
   };
 
   useEffect(() => {
     fetchSftpInfo();
     if (enablePlayit) {
-      fetchPlayitStatus();
+      fetchPlayitStatus(false);
 
-      // Periodic heartbeat polling for claim detection
+      // Periodic heartbeat polling for claim detection & live tunnel connectivity
       const interval = setInterval(() => {
-        fetchPlayitStatus();
-      }, 6000);
+        fetchPlayitStatus(true);
+      }, 5000);
 
       return () => clearInterval(interval);
     }
@@ -262,8 +262,15 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
   const sftpPass = sftpInfo?.password || (server as any).sftpPassword || '••••••••••••••••';
   const sftpUri = sftpInfo?.uri || `sftp://${sftpUser}@${sftpHost}:${sftpPort}`;
 
-  const isClaimed = playit?.isClaimed || playit?.claimStatus === 'CLAIMED';
-  const isRunning = playit?.isRunning || playit?.agentStatus === 'RUNNING';
+  const isClaimed = Boolean(playit?.isClaimed || playit?.claimStatus === 'CLAIMED');
+  const isRunning = Boolean(
+    playit?.isRunning ||
+    playit?.agentStatus === 'RUNNING' ||
+    playit?.status === 'CLAIM_URL_AVAILABLE' ||
+    playit?.status === 'CLAIMED' ||
+    playit?.status === 'CLAIMING' ||
+    playit?.status === 'ONLINE'
+  );
 
   return (
     <div className="space-y-6">
@@ -572,7 +579,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchPlayitStatus}
+              onClick={() => fetchPlayitStatus(false)}
               disabled={loadingPlayit}
               className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors flex items-center gap-1.5 text-xs font-semibold"
               title="Refresh Playit Status"
@@ -800,7 +807,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
                       <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
                         <span>Agent Claim Code: <strong className="font-mono text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{playit.claimCode}</strong></span>
                         <button
-                          onClick={fetchPlayitStatus}
+                          onClick={() => fetchPlayitStatus(false)}
                           className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1"
                         >
                           <RefreshCw className={`h-3 w-3 ${loadingPlayit ? 'animate-spin' : ''}`} />
@@ -834,7 +841,7 @@ export const ServerNetworkPlayitTab: React.FC<ServerNetworkPlayitTabProps> = ({ 
                         )}
                       </button>
                       <button
-                        onClick={fetchPlayitStatus}
+                        onClick={() => fetchPlayitStatus(false)}
                         className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-semibold flex items-center gap-1"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${loadingPlayit ? 'animate-spin' : ''}`} />

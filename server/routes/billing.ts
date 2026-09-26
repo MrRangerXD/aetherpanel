@@ -178,7 +178,7 @@ router.get('/invoices/:orderId', authMiddleware, async (req: AuthenticatedReques
   const userId = req.user!.id;
   const user = db.users.find(u => u.id === userId);
 
-  const order = db.orders.find(o => o.id === orderId && (o.userId === userId || req.user!.role === 'admin'));
+  const order = db.orders.find(o => o.id === orderId && (o.userId === userId || req.user!.role === 'admin' || req.user!.role === 'super_admin'));
   if (!order) {
     return res.status(404).json({ success: false, error: { code: 'ORDER_NOT_FOUND', message: 'Invoice / Order record not found.' } });
   }
@@ -806,7 +806,7 @@ router.get('/crypto/invoice/:invoiceId', authMiddleware, async (req: Authenticat
   const db = await getDb();
   if (!db.cryptoInvoices) db.cryptoInvoices = [];
 
-  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin'));
+  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin' || req.user!.role === 'super_admin'));
   if (!invoice) {
     return res.status(404).json({ success: false, error: { code: 'INVOICE_NOT_FOUND', message: 'Invoice not found.' } });
   }
@@ -900,7 +900,7 @@ router.post('/crypto/simulate-step', authMiddleware, async (req: AuthenticatedRe
   const db = await getDb();
   if (!db.cryptoInvoices) db.cryptoInvoices = [];
 
-  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin'));
+  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin' || req.user!.role === 'super_admin'));
   if (!invoice) {
     return res.status(404).json({ success: false, error: { code: 'INVOICE_NOT_FOUND', message: 'Invoice not found.' } });
   }
@@ -999,7 +999,7 @@ router.post('/crypto/submit-hash', authMiddleware, async (req: AuthenticatedRequ
   const db = await getDb();
   if (!db.cryptoInvoices) db.cryptoInvoices = [];
 
-  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin'));
+  const invoice = db.cryptoInvoices.find(inv => inv.id === invoiceId && (inv.userId === req.user!.id || req.user!.role === 'admin' || req.user!.role === 'super_admin'));
   if (!invoice) {
     return res.status(404).json({ success: false, error: { code: 'INVOICE_NOT_FOUND', message: 'Invoice not found.' } });
   }

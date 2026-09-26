@@ -326,10 +326,10 @@ router.get('/server/:serverId/live', async (req: Request, res: Response) => {
   if (isRunning) {
     const procStats = getRealProcessStats(server.startup?.pid);
     if (procStats) {
-      usedRamMB = procStats.usedRamMB;
+      usedRamMB = Math.min(procStats.usedRamMB, totalRamMB);
       cpuPercent = procStats.cpuPercent;
     } else {
-      usedRamMB = server.ramUsageMB || 0;
+      usedRamMB = Math.min(server.ramUsageMB || 0, totalRamMB);
       cpuPercent = server.cpuUsage || 0.0;
     }
     // Sync back to db
@@ -405,9 +405,10 @@ router.get('/alerts/rules', authMiddleware, async (req: AuthenticatedRequest, re
   }
 
   const db = await getDb();
+  if (!db.alertRules) db.alertRules = [];
   res.json({
     success: true,
-    data: db.alertRules || []
+    data: db.alertRules
   });
 });
 
@@ -424,6 +425,7 @@ router.post('/alerts/rules', authMiddleware, async (req: AuthenticatedRequest, r
   }
 
   const db = await getDb();
+  if (!db.alertRules) db.alertRules = [];
   const ruleId = `rule_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
   const newRule: AlertRule = {
@@ -466,6 +468,7 @@ router.put('/alerts/rules/:id', authMiddleware, async (req: AuthenticatedRequest
 
   const { id } = req.params;
   const db = await getDb();
+  if (!db.alertRules) db.alertRules = [];
   const rule = db.alertRules.find(r => r.id === id);
 
   if (!rule) {
@@ -498,6 +501,7 @@ router.delete('/alerts/rules/:id', authMiddleware, async (req: AuthenticatedRequ
 
   const { id } = req.params;
   const db = await getDb();
+  if (!db.alertRules) db.alertRules = [];
   const idx = db.alertRules.findIndex(r => r.id === id);
 
   if (idx === -1) {
@@ -516,9 +520,10 @@ router.get('/alerts/incidents', authMiddleware, async (req: AuthenticatedRequest
   }
 
   const db = await getDb();
+  if (!db.alertIncidents) db.alertIncidents = [];
   res.json({
     success: true,
-    data: db.alertIncidents || []
+    data: db.alertIncidents
   });
 });
 
@@ -530,6 +535,7 @@ router.post('/alerts/incidents/:id/resolve', authMiddleware, async (req: Authent
 
   const { id } = req.params;
   const db = await getDb();
+  if (!db.alertIncidents) db.alertIncidents = [];
   const incident = db.alertIncidents.find(i => i.id === id);
 
   if (!incident) {
@@ -551,6 +557,8 @@ router.post('/alerts/test', authMiddleware, async (req: AuthenticatedRequest, re
 
   const { ruleId, targetName, severity, message } = req.body;
   const db = await getDb();
+  if (!db.alertRules) db.alertRules = [];
+  if (!db.alertIncidents) db.alertIncidents = [];
 
   const rule = db.alertRules.find(r => r.id === ruleId) || db.alertRules[0];
   const alertId = `alt_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;

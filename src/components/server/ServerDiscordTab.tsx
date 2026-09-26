@@ -478,10 +478,16 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
           <div className="flex flex-wrap gap-1.5">
             {[
               { cmd: '/server status', label: 'Status', icon: Terminal },
+              { cmd: '/server list', label: 'List All', icon: Terminal },
               { cmd: '/server start', label: 'Start', icon: Play },
               { cmd: '/server stop', label: 'Stop', icon: Square },
               { cmd: '/server restart', label: 'Restart', icon: RotateCw },
-              { cmd: '/server backup', label: 'Backup', icon: Database }
+              { cmd: '/server console', label: 'Logs', icon: Terminal },
+              { cmd: '/server stats', label: 'Telemetry', icon: Radio },
+              { cmd: '/server backup', label: 'Backup', icon: Database },
+              { cmd: '/user info', label: 'Profile', icon: Shield },
+              { cmd: '/help', label: 'Help', icon: Zap },
+              { cmd: '/ping', label: 'Ping', icon: Radio }
             ].map(item => (
               <button
                 key={item.cmd}
@@ -535,9 +541,9 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
                   {cmdResult.embed.fields && cmdResult.embed.fields.length > 0 && (
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60 text-[11px]">
                       {cmdResult.embed.fields.map((f: any, idx: number) => (
-                        <div key={idx}>
+                        <div key={idx} className={f.inline === false ? 'col-span-2' : ''}>
                           <span className="font-bold text-zinc-400 block text-[10px]">{f.name}</span>
-                          <span className="text-zinc-200 font-mono">{f.value}</span>
+                          <span className="text-zinc-200 font-mono whitespace-pre-line">{f.value}</span>
                         </div>
                       ))}
                     </div>
@@ -555,6 +561,38 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
           )}
         </div>
 
+      </div>
+
+      {/* Discord Command Reference Card */}
+      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4 shadow-xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Zap className="h-4 w-4 text-violet-400" /> AetherPanel Discord Command Reference
+        </h3>
+        <p className="text-xs text-zinc-400">
+          Once your Discord account is linked, you can execute these commands in any channel your bot has access to, or directly via DM:
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+          {[
+            { cmd: '/server list', desc: 'Lists all your game servers with live status and ports' },
+            { cmd: '/server status [id]', desc: 'Displays CPU %, RAM usage bar, Uptime, and IP address' },
+            { cmd: '/server start <id>', desc: 'Powers on a stopped container instance' },
+            { cmd: '/server stop <id>', desc: 'Gracefully sends shutdown signal to server' },
+            { cmd: '/server restart <id>', desc: 'Reboots server with automated restart sequence' },
+            { cmd: '/server kill <id>', desc: 'Forcefully terminates unresponsive container' },
+            { cmd: '/server command <id> <text>', desc: 'Executes live console commands (say, op, whitelist)' },
+            { cmd: '/server console <id>', desc: 'Fetches recent server stdout log stream' },
+            { cmd: '/server backup <id>', desc: 'Creates an instantaneous filesystem archive backup' },
+            { cmd: '/server stats <id>', desc: 'High-resolution hardware metrics and telemetry graphs' },
+            { cmd: '/user info', desc: 'Shows credits balance, active tier, and server quotas' },
+            { cmd: '/ping', desc: 'Tests bot gateway latency and websocket heartbeat' }
+          ].map(c => (
+            <div key={c.cmd} className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1">
+              <span className="font-mono text-xs font-bold text-violet-300 block">{c.cmd}</span>
+              <p className="text-[11px] text-zinc-400">{c.desc}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
     </div>

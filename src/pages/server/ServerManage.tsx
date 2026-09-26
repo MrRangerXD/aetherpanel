@@ -1096,11 +1096,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Save Settings & Startup Config
   const handleSaveSettings = async () => {
+    const maxRamLimit = server?.resources?.memoryMb || server?.limits?.ramMB || (isMinecraft ? 1024 : 512);
+    const clampedXmx = Math.min(Math.max(128, Number(startupConfig.xmxMB) || maxRamLimit), maxRamLimit);
+    const clampedXms = Math.min(Math.max(64, Number(startupConfig.xmsMB) || 128), clampedXmx);
+
     const mergedStartup: ServerStartupConfig = {
       ...startupConfig,
+      xmxMB: clampedXmx,
+      xmsMB: clampedXms,
       botRuntime: activeBotRuntime,
       javaVersion: isMinecraft ? javaVersion : undefined,
-      nodeConfig: activeBotRuntime === 'nodejs' ? { ...(startupConfig.nodeConfig || {}), version: !isMinecraft && activeBotRuntime === 'nodejs' ? javaVersion : startupConfig.nodeConfig?.version } : startupConfig.nodeConfig,
+      nodeConfig: activeBotRuntime === 'nodejs' ? { ...(startupConfig.nodeConfig || {}), memoryLimitMB: maxRamLimit, version: !isMinecraft && activeBotRuntime === 'nodejs' ? javaVersion : startupConfig.nodeConfig?.version } : startupConfig.nodeConfig,
       pythonConfig: activeBotRuntime === 'python' ? { ...(startupConfig.pythonConfig || {}), version: !isMinecraft && activeBotRuntime === 'python' ? javaVersion : startupConfig.pythonConfig?.version } : startupConfig.pythonConfig,
       bunConfig: activeBotRuntime === 'bun' ? { ...(startupConfig.bunConfig || {}), version: !isMinecraft && activeBotRuntime === 'bun' ? javaVersion : startupConfig.bunConfig?.version } : startupConfig.bunConfig,
       jvmFlags: isMinecraft ? startupFlags : undefined,
@@ -1326,10 +1332,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <Activity className="h-3.5 w-3.5 text-cyan-400" />
           </div>
           <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {isRunning ? formatMemory(server.ramUsageMB) : '0 MB'} / {formatMemory(server.resources?.memoryMb || server.limits?.ramMB)}
+            {isRunning ? formatMemory(Math.min(server.ramUsageMB || 0, server.resources?.memoryMb || server.limits?.ramMB || 512)) : '0 MB'} / {formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)}
           </div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (server.ramUsageMB / (server.resources?.memoryMb || server.limits?.ramMB || 512)) * 100) : 0}%` }} />
+            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (Math.min(server.ramUsageMB || 0, server.resources?.memoryMb || server.limits?.ramMB || 512) / (server.resources?.memoryMb || server.limits?.ramMB || 512)) * 100) : 0}%` }} />
           </div>
         </div>
 
@@ -3471,7 +3477,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </div>
               <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 font-mono text-xs text-emerald-400 break-all select-all">
                 {isMinecraft
-                  ? `java -Xms${startupConfig.xmsMB || 128}M -Xmx${startupConfig.xmxMB || server?.limits?.ramMB || 1024}M ${startupFlags} -jar ${startupConfig.serverJar || 'server.jar'} ${startupConfig.nogui !== false ? 'nogui' : ''}`
+                  ? `java -Xms${Math.min(startupConfig.xmsMB || 128, server?.resources?.memoryMb || server?.limits?.ramMB || 1024)}M -Xmx${Math.min(startupConfig.xmxMB || (server?.resources?.memoryMb || server?.limits?.ramMB || 1024), server?.resources?.memoryMb || server?.limits?.ramMB || 1024)}M ${startupFlags} -jar ${startupConfig.serverJar || 'server.jar'} ${startupConfig.nogui !== false ? 'nogui' : ''}`
                   : buildBotStartupCommand(server || {}, { ...startupConfig, botRuntime: activeBotRuntime, customFlags: startupFlags }).compiledCommand
                 }
               </div>
@@ -3489,32 +3495,51 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Initial Heap Allocation (-Xms MB)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-medium text-zinc-300">
+                          Initial Heap Allocation (-Xms MB)
+                        </label>
+                        <span className="text-[10px] font-mono text-zinc-500">Min 64 MB</span>
+                      </div>
                       <input
                         type="number"
                         min={64}
                         step={64}
-                        value={startupConfig.xmsMB || 128}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, xmsMB: parseInt(e.target.value, 10) || 128 })}
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                        max={Math.min(startupConfig.xmxMB || (server?.resources?.memoryMb || server?.limits?.ramMB || 1024), server?.resources?.memoryMb || server?.limits?.ramMB || 1024)}
+                        value={Math.min(startupConfig.xmsMB || 128, Math.min(startupConfig.xmxMB || (server?.resources?.memoryMb || server?.limits?.ramMB || 1024), server?.resources?.memoryMb || server?.limits?.ramMB || 1024))}
+                        onChange={(e) => {
+                          const maxAllowed = Math.min(startupConfig.xmxMB || (server?.resources?.memoryMb || server?.limits?.ramMB || 1024), server?.resources?.memoryMb || server?.limits?.ramMB || 1024);
+                          const val = parseInt(e.target.value, 10) || 64;
+                          const clamped = Math.min(Math.max(64, val), maxAllowed);
+                          setStartupConfig({ ...startupConfig, xmsMB: clamped });
+                        }}
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
                       />
+                      <p className="text-[10px] text-zinc-500 mt-1">Starting RAM heap on boot (must be &le; Max Heap).</p>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
-                        Max Heap Allocation (-Xmx MB)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-medium text-zinc-300">
+                          Max Heap Allocation (-Xmx MB)
+                        </label>
+                        <span className="text-[10px] font-mono text-emerald-400 font-bold">Plan Cap: {server?.resources?.memoryMb || server?.limits?.ramMB || 1024} MB</span>
+                      </div>
                       <input
                         type="number"
-                        min={256}
+                        min={128}
                         step={128}
-                        max={server?.limits?.ramMB || 8192}
-                        value={startupConfig.xmxMB || server?.limits?.ramMB || 1024}
-                        onChange={(e) => setStartupConfig({ ...startupConfig, xmxMB: parseInt(e.target.value, 10) || 1024 })}
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                        max={server?.resources?.memoryMb || server?.limits?.ramMB || 1024}
+                        value={Math.min(startupConfig.xmxMB || (server?.resources?.memoryMb || server?.limits?.ramMB || 1024), server?.resources?.memoryMb || server?.limits?.ramMB || 1024)}
+                        onChange={(e) => {
+                          const maxPlanRam = server?.resources?.memoryMb || server?.limits?.ramMB || 1024;
+                          const val = parseInt(e.target.value, 10) || 128;
+                          const clamped = Math.min(Math.max(128, val), maxPlanRam);
+                          setStartupConfig({ ...startupConfig, xmxMB: clamped });
+                        }}
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
                       />
+                      <p className="text-[10px] text-zinc-500 mt-1">Cannot exceed container's allocated plan RAM ({formatMemory(server?.resources?.memoryMb || server?.limits?.ramMB || 1024)}).</p>
                     </div>
 
                     <div>
@@ -3526,7 +3551,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                         value={startupConfig.serverJar || 'server.jar'}
                         onChange={(e) => setStartupConfig({ ...startupConfig, serverJar: e.target.value })}
                         placeholder="server.jar"
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
                       />
                     </div>
                   </div>

@@ -111,9 +111,10 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
   const isRunning = server.status === 'running';
 
   // Real Hardware Metrics (Dual GB and MB resolution)
-  const maxRamMB = server.limits?.ramMB || 2048;
+  const maxRamMB = server.resources?.memoryMb || server.limits?.ramMB || 2048;
   const maxRamGB = +(maxRamMB / 1024).toFixed(2);
-  const liveRamMB = isRunning ? (liveData?.usedRamMB ?? latest?.usedRamMB ?? server.ramUsageMB ?? 0) : 0;
+  const rawRamMB = isRunning ? (liveData?.usedRamMB ?? latest?.usedRamMB ?? server.ramUsageMB ?? 0) : 0;
+  const liveRamMB = Math.min(rawRamMB, maxRamMB);
   const liveRamGB = +(liveRamMB / 1024).toFixed(2);
   const ramPercent = maxRamMB > 0 ? Math.min(100, Math.round((liveRamMB / maxRamMB) * 100)) : 0;
 

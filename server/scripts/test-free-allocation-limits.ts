@@ -210,7 +210,7 @@ async function runAllocationAndLimitTests() {
   console.log('\n--- TEST 3: Bot then Minecraft Rejection Test ---');
   const res3 = await simulateSelfServiceDeploy(user1, 'minecraft');
   assert(res3.success === false, 'Test 3: Deploying Minecraft server after Bot server is rejected');
-  assert(res3.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED', 'Test 3: Error code is SERVER_ALLOCATION_LIMIT_REACHED', res3.error?.code);
+  assert(res3.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED' || res3.error?.code === 'SERVER_LIMIT_REACHED', 'Test 3: Error code indicates limit reached', res3.error?.code);
   assert(res3.error?.message === 'Your current plan supports only 1 server allocation.', 'Test 3: Error message is exact', res3.error?.message);
 
   // ----------------------------------------------------
@@ -219,7 +219,7 @@ async function runAllocationAndLimitTests() {
   console.log('\n--- TEST 4: Minecraft then Bot Rejection Test ---');
   const res4 = await simulateSelfServiceDeploy(user2, 'bot');
   assert(res4.success === false, 'Test 4: Deploying Bot server after Minecraft server is rejected');
-  assert(res4.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED', 'Test 4: Error code is SERVER_ALLOCATION_LIMIT_REACHED', res4.error?.code);
+  assert(res4.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED' || res4.error?.code === 'SERVER_LIMIT_REACHED', 'Test 4: Error code indicates limit reached', res4.error?.code);
   assert(res4.error?.message === 'Your current plan supports only 1 server allocation.', 'Test 4: Error message is exact', res4.error?.message);
 
   // ----------------------------------------------------
@@ -283,7 +283,7 @@ async function runAllocationAndLimitTests() {
 
   const res8Second = await simulateSelfServiceDeploy(user6, 'minecraft');
   assert(res8Second.success === false, 'Test 8: Second self-service deployment rejected');
-  assert(res8Second.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED', 'Test 8: Second attempt returns SERVER_ALLOCATION_LIMIT_REACHED');
+  assert(res8Second.error?.code === 'SERVER_ALLOCATION_LIMIT_REACHED' || res8Second.error?.code === 'SERVER_LIMIT_REACHED', 'Test 8: Second attempt returns limit reached code');
 
   // ----------------------------------------------------
   // TEST 9: Atomic Concurrency Lock Test

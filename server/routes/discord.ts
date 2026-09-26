@@ -333,8 +333,12 @@ router.post('/command', authMiddleware, async (req: AuthenticatedRequest, res: R
   const db = await getDb();
   const userId = req.user!.id;
   const userDiscordAccount = db.discordLinks ? db.discordLinks[userId] : null;
+  const isAdmin = req.user!.role === 'admin' || req.user!.role === 'super_admin';
 
-  const discordUserId = req.body.discordUserId || userDiscordAccount?.discordId;
+  let discordUserId = userDiscordAccount?.discordId;
+  if (isAdmin && req.body.discordUserId) {
+    discordUserId = req.body.discordUserId;
+  }
   
   if (!discordUserId) {
     return res.status(400).json({ success: false, message: 'Your Discord account is not linked to AetherPanel. Link your Discord account in Profile Settings.' });

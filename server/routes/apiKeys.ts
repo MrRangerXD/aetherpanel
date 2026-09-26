@@ -528,6 +528,11 @@ router.post('/webhooks/:id/test', authMiddleware, async (req: AuthenticatedReque
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
   }
 
+  const isSuperAdmin = req.user!.role === 'super_admin' || req.user!.role === 'admin';
+  if (webhook.userId !== req.user!.id && !isSuperAdmin) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+  }
+
   const testPayload = JSON.stringify({
     event: 'test.ping',
     timestamp: new Date().toISOString(),
@@ -557,6 +562,11 @@ router.patch('/webhooks/:id/toggle', authMiddleware, async (req: AuthenticatedRe
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
   }
 
+  const isSuperAdmin = req.user!.role === 'super_admin' || req.user!.role === 'admin';
+  if (webhook.userId !== req.user!.id && !isSuperAdmin) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+  }
+
   webhook.isEnabled = !webhook.isEnabled;
   saveDbSync();
 
@@ -576,6 +586,11 @@ router.delete('/webhooks/:id', authMiddleware, async (req: AuthenticatedRequest,
   }
 
   const webhook = db.webhooks[idx];
+  const isSuperAdmin = req.user!.role === 'super_admin' || req.user!.role === 'admin';
+  if (webhook.userId !== req.user!.id && !isSuperAdmin) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+  }
+
   db.webhooks.splice(idx, 1);
   saveDbSync();
 

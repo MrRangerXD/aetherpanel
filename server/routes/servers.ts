@@ -495,10 +495,11 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
     startup.nodeConfig.memoryLimitMB = server.limits.ramMB;
 
     // 4. Force Minecraft heap to stay within allocated RAM
+    const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
     if (startup.xmxMB) {
-      startup.xmxMB = Math.min(Math.max(256, Number(startup.xmxMB) || server.limits.ramMB), server.limits.ramMB);
+      startup.xmxMB = Math.min(Math.max(128, Number(startup.xmxMB) || maxAllowedRam), maxAllowedRam);
     } else {
-      startup.xmxMB = server.limits.ramMB;
+      startup.xmxMB = maxAllowedRam;
     }
     if (startup.xmsMB) {
       startup.xmsMB = Math.min(Math.max(64, Number(startup.xmsMB) || 128), startup.xmxMB);
@@ -561,8 +562,11 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
       server.startup.compiledCommand = cmdObj.compiledCommand;
       server.startup.entryFile = cmdObj.startupFile;
     } else {
-      const xms = server.startup.xmsMB || 128;
-      const xmx = server.startup.xmxMB || server.limits.ramMB;
+      const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
+      const xmx = Math.min(Number(server.startup.xmxMB) || maxAllowedRam, maxAllowedRam);
+      const xms = Math.min(Number(server.startup.xmsMB) || 128, xmx);
+      server.startup.xmxMB = xmx;
+      server.startup.xmsMB = xms;
       const jar = server.startup.serverJar || 'server.jar';
       const flags = server.startup.jvmFlags || server.startup.customFlags || '';
       server.startup.compiledCommand = `java -Xms${xms}M -Xmx${xmx}M ${flags} -jar ${jar} nogui`.replace(/\s+/g, ' ').trim();
@@ -1798,6 +1802,13 @@ router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res
 
   if (startup && typeof startup === 'object') {
     if ('pythonExecutable' in startup) delete startup.pythonExecutable;
+    const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
+    if (startup.xmxMB) {
+      startup.xmxMB = Math.min(Math.max(128, Number(startup.xmxMB) || maxAllowedRam), maxAllowedRam);
+    }
+    if (startup.xmsMB) {
+      startup.xmsMB = Math.min(Math.max(64, Number(startup.xmsMB) || 128), startup.xmxMB || maxAllowedRam);
+    }
     server.startup = { ...(server.startup || {}), ...startup };
   }
 
@@ -1810,8 +1821,11 @@ router.put('/:id/startup', authMiddleware, async (req: AuthenticatedRequest, res
     server.startup.entryFile = cmdObj.startupFile;
   } else {
     server.startup = server.startup || {};
-    const xms = server.startup.xmsMB || 128;
-    const xmx = server.startup.xmxMB || server.limits.ramMB;
+    const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
+    const xmx = Math.min(Number(server.startup.xmxMB) || maxAllowedRam, maxAllowedRam);
+    const xms = Math.min(Number(server.startup.xmsMB) || 128, xmx);
+    server.startup.xmxMB = xmx;
+    server.startup.xmsMB = xms;
     const jar = server.startup.serverJar || 'server.jar';
     const flags = server.startup.jvmFlags || server.startup.customFlags || '';
     server.startup.compiledCommand = `java -Xms${xms}M -Xmx${xmx}M ${flags} -jar ${jar} nogui`.replace(/\s+/g, ' ').trim();

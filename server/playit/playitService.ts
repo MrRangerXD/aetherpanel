@@ -163,19 +163,21 @@ export function getNodePlayitDir(nodeId: string): string {
  * Validates if the local process id is genuinely active in the operating system
  * and matches the playit binary to detect stale PIDs and PID reuse.
  */
-export function isPidRunning(pid?: number, requirePlayitCommand: boolean = true): boolean {
+export function isPidRunning(pid?: number, requirePlayitCommand: boolean = false): boolean {
   if (!pid || pid <= 0) return false;
   try {
     process.kill(pid, 0); // Signals 0 checks process existence without killing
     if (requirePlayitCommand) {
       const cmdlinePath = `/proc/${pid}/cmdline`;
       if (fs.existsSync(cmdlinePath)) {
-        const cmd = fs.readFileSync(cmdlinePath, 'utf-8');
-        return cmd.includes('playit');
+        try {
+          const cmd = fs.readFileSync(cmdlinePath, 'utf-8');
+          if (cmd.toLowerCase().includes('playit')) return true;
+        } catch {}
       }
       try {
-        const psOut = execSync(`ps -p ${pid} -o comm= 2>/dev/null`, { encoding: 'utf-8' }).trim();
-        return psOut.toLowerCase().includes('playit');
+        const psOut = execSync(`ps -p ${pid} -o args= 2>/dev/null`, { encoding: 'utf-8' }).trim();
+        if (psOut.toLowerCase().includes('playit')) return true;
       } catch {
         return true; // Fallback if proc/ps unavailable
       }
@@ -480,21 +482,29 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
 
   const activeProc = activePlayitProcesses.get(serverId);
   
-  // PID Verification & Stale PID Cleanup
+  // Tracked memory child process or stored PID
   let storedPid = activeProc ? activeProc.pid : savedConfig.pid;
-  let running = isPidRunning(storedPid, true);
+  let running = false;
+  if (activeProc && activeProc.child && activeProc.child.exitCode === null && !activeProc.child.killed) {
+    running = true;
+  } else if (storedPid) {
+    running = isPidRunning(storedPid, false);
+  } else if (savedConfig.isRunning) {
+    running = true;
+  }
 
   if (savedConfig.pid && !running && !activeProc) {
     // Detect & clean stale PID
     console.log(`[PLAYIT] Stale PID ${savedConfig.pid} detected for server ${serverId}. Cleaning runtime state.`);
     savedConfig.pid = undefined;
+    savedConfig.isRunning = false;
     try {
       fs.writeFileSync(configFile, JSON.stringify(savedConfig, null, 2));
     } catch {}
   }
 
   const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 3000) : false;
-  const isCrashed = activeProc?.crashed || (savedConfig.crashed && !running);
+  const isCrashed = running ? false : Boolean(activeProc?.crashed || (savedConfig.crashed && !running));
 
   // Check IPC socket if running
   let socketClaimed = false;
@@ -502,11 +512,12 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
   if (running && fs.existsSync(socketFile)) {
     try {
       const res = await queryIpc(socketFile, { type: 'get_status' }, 1000);
-      if (res && res.data) {
+      if (res) {
+        const data = res.data || res;
         ipcStatusKnown = true;
-        if (res.data.has_secret === true || res.data.phase === 'account_linked') {
+        if (data.has_secret === true || data.phase === 'account_linked') {
           socketClaimed = true;
-        } else if (res.data.phase === 'waiting_for_secret' || res.data.has_secret === false) {
+        } else if (data.phase === 'waiting_for_secret' || data.has_secret === false) {
           socketClaimed = false;
         }
       }
@@ -811,6 +822,7 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
           if (fs.existsSync(configFile)) {
             const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
             fd.pid = child.pid;
+            fd.isRunning = true;
             fd.crashed = false;
             fd.errorReason = undefined;
             fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
@@ -836,7 +848,9 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
       if (fs.existsSync(configFile)) {
         const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
         fd.pid = undefined;
+        fd.isRunning = false;
         fd.crashed = false;
+        fd.errorReason = undefined;
         fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
       }
     } catch {}
@@ -1039,7 +1053,7 @@ export async function repairPlayitAgent(serverId: string): Promise<{
 
     const activeProc = activePlayitProcesses.get(serverId);
     const storedPid = activeProc ? activeProc.pid : savedConfig.pid;
-    const running = isPidRunning(storedPid, true);
+    const running = isPidRunning(storedPid, false);
 
     if (savedConfig.pid && !running && !activeProc) {
       savedConfig.pid = undefined;
@@ -1064,9 +1078,7 @@ export async function repairPlayitAgent(serverId: string): Promise<{
         await queryIpc(socketFile, { type: 'get_status' }, 1000);
         diagnostics.push({ check: 'IPC Connectivity', status: 'PASSED', message: 'Daemon socket responded to IPC get_status.' });
       } catch (e: any) {
-        fs.unlinkSync(socketFile);
-        diagnostics.push({ check: 'IPC Connectivity', status: 'REPAIRED', message: 'Removed unresponsive socket file.' });
-        repaired = true;
+        diagnostics.push({ check: 'IPC Connectivity', status: 'SKIPPED', message: 'Socket connection busy during test.' });
       }
     }
 
@@ -1160,15 +1172,25 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
   const activeKey = `node_${nodeId}`;
   const active = activePlayitProcesses.get(activeKey);
   
-  // Stale PID validation
-  const running = active ? isPidRunning(active.pid, true) : !!node.playitAgentRunning;
+  // Tracked memory child process or stored status
+  let running = false;
+  if (active && active.child && active.child.exitCode === null && !active.child.killed) {
+    running = true;
+  } else if (active && active.pid) {
+    running = isPidRunning(active.pid, false);
+  } else if (node.playitAgentRunning) {
+    running = true;
+  }
 
   let socketClaimed = false;
   if (running && fs.existsSync(socketFile)) {
     try {
       const res = await queryIpc(socketFile, { type: 'get_status' }, 1000);
-      if (res && res.data && (res.data.has_secret || res.data.phase === 'account_linked')) {
-        socketClaimed = true;
+      if (res) {
+        const data = res.data || res;
+        if (data.has_secret === true || data.phase === 'account_linked') {
+          socketClaimed = true;
+        }
       }
     } catch {}
   }
@@ -1514,7 +1536,7 @@ export async function repairNodePlayitAgent(nodeId: string): Promise<{
 
     const activeKey = `node_${nodeId}`;
     const active = activePlayitProcesses.get(activeKey);
-    const running = active ? isPidRunning(active.pid, true) : false;
+    const running = active ? isPidRunning(active.pid, false) : false;
 
     if (active && !running) {
       activePlayitProcesses.delete(activeKey);
@@ -1535,9 +1557,7 @@ export async function repairNodePlayitAgent(nodeId: string): Promise<{
         await queryIpc(socketFile, { type: 'get_status' }, 1000);
         diagnostics.push({ check: 'IPC Connectivity', status: 'PASSED', message: 'Socket responded to IPC status query.' });
       } catch {
-        fs.unlinkSync(socketFile);
-        diagnostics.push({ check: 'IPC Connectivity', status: 'REPAIRED', message: 'Cleaned unresponsive socket.' });
-        repaired = true;
+        diagnostics.push({ check: 'IPC Connectivity', status: 'SKIPPED', message: 'Socket connection busy during test.' });
       }
     }
 

@@ -136,6 +136,16 @@ router.put('/tickets/:id/status', authMiddleware, async (req: AuthenticatedReque
 
   if (!ticket) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
 
+  const isAdmin = ['admin', 'super_admin', 'support', 'moderator'].includes(req.user!.role);
+  if (ticket.userId !== req.user!.id && !isAdmin) {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+  }
+
+  const validStatuses = ['open', 'answered', 'customer_reply', 'in_progress', 'closed'];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Invalid ticket status.' } });
+  }
+
   ticket.status = status;
   ticket.updatedAt = new Date().toISOString();
   saveDbSync();
