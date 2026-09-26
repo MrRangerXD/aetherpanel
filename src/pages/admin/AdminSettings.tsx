@@ -747,7 +747,7 @@ export const AdminSettings: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 relative ${activeTab === 'updates' ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
           >
             <ArrowUpCircle className="h-3.5 w-3.5" /> Updates
-            {versionInfo?.isUpdateAvailable && (
+            {versionInfo?.isUpdateAvailable === 'YES' && (
               <span className="ml-1 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
             )}
           </button>
@@ -1792,22 +1792,20 @@ export const AdminSettings: React.FC = () => {
                   type="button"
                   disabled={checkingUpdates || triggeringUpdate}
                   onClick={() => fetchVersionInfo(true)}
-                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 transition-all"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdates ? 'animate-spin text-amber-400' : ''}`} />
                   <span>{checkingUpdates ? 'Checking...' : 'Check for Updates'}</span>
                 </button>
-                {versionInfo?.isUpdateAvailable && (
-                  <button
-                    type="button"
-                    disabled={triggeringUpdate || updateJob?.status === 'in_progress'}
-                    onClick={handleExecuteUpdate}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
-                  >
-                    <ArrowUpCircle className="h-4 w-4" />
-                    <span>Apply Update Now</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={triggeringUpdate || updateJob?.status === 'in_progress'}
+                  onClick={handleExecuteUpdate}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/10 disabled:opacity-50 transition-all"
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  <span>{versionInfo?.isUpdateAvailable === 'YES' ? 'Apply Update Now' : 'Force Sync / Update'}</span>
+                </button>
               </div>
             </div>
 
@@ -1815,25 +1813,27 @@ export const AdminSettings: React.FC = () => {
               <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                 <div className="text-[10px] font-mono uppercase text-zinc-500">Current Version</div>
                 <div className="text-base font-bold text-white font-mono flex items-center gap-2">
-                  <span>v{versionInfo?.currentVersion || '2.4.0'}</span>
+                  <span>{versionInfo?.currentVersion ? (versionInfo.currentVersion.startsWith('v') ? versionInfo.currentVersion : `v${versionInfo.currentVersion}`) : 'v3.5.2'}</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">STABLE</span>
                 </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
-                <div className="text-[10px] font-mono uppercase text-zinc-500">Latest Available</div>
+                <div className="text-[10px] font-mono uppercase text-zinc-500">Latest Upstream</div>
                 <div className="text-base font-bold text-cyan-400 font-mono">
-                  v{versionInfo?.latestVersion || '2.4.0'}
+                  {versionInfo?.latestVersion ? (versionInfo.latestVersion.startsWith('v') ? versionInfo.latestVersion : `v${versionInfo.latestVersion}`) : 'v3.5.2'}
                 </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                 <div className="text-[10px] font-mono uppercase text-zinc-500">Update Status</div>
                 <div className="text-xs font-bold text-white flex items-center gap-1.5 mt-1">
-                  {versionInfo?.isUpdateAvailable ? (
+                  {versionInfo?.isUpdateAvailable === 'YES' ? (
                     <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Update Ready</span>
-                  ) : (
+                  ) : versionInfo?.isUpdateAvailable === 'NO' ? (
                     <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> System Up-to-date</span>
+                  ) : (
+                    <span className="text-zinc-400 flex items-center gap-1"><HelpCircle className="h-3.5 w-3.5" /> Upstream Status Unknown</span>
                   )}
                 </div>
               </div>
@@ -1885,6 +1885,42 @@ export const AdminSettings: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Step Cards */}
+              {updateJob.steps && updateJob.steps.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                  {updateJob.steps.map((step) => (
+                    <div
+                      key={step.id}
+                      className={`p-3 rounded-2xl border text-xs space-y-1 transition-all ${
+                        step.status === 'SUCCESS'
+                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                          : step.status === 'RUNNING'
+                          ? 'bg-amber-950/20 border-amber-500/40 text-amber-300 animate-pulse'
+                          : step.status === 'FAILED'
+                          ? 'bg-rose-950/20 border-rose-500/40 text-rose-300'
+                          : 'bg-zinc-950 border-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold uppercase">
+                          {step.status === 'SUCCESS' && '✓ SUCCESS'}
+                          {step.status === 'RUNNING' && '⚡ RUNNING'}
+                          {step.status === 'FAILED' && '❌ FAILED'}
+                          {step.status === 'PENDING' && '⌛ PENDING'}
+                          {step.status === 'SKIPPED' && '⏭ SKIPPED'}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-[11px] leading-tight" title={step.name}>
+                        {step.name}
+                      </div>
+                      {step.message && (
+                        <div className="text-[10px] opacity-80 line-clamp-1">{step.message}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Terminal Logs Output */}
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-xs text-zinc-300 max-h-60 overflow-y-auto space-y-1">

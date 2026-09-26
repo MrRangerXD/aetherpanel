@@ -99,7 +99,7 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
             </span>
           )}
         </span>
-        <span className="text-[8px] sm:text-[9px] font-bold tracking-widest text-zinc-400 uppercase mt-0.5 font-mono hidden min-[380px]:block">
+        <span className="text-[8px] sm:text-[9px] font-bold tracking-widest text-zinc-400 uppercase mt-0.5 font-mono block">
           CLOUD INFRASTRUCTURE
         </span>
       </div>

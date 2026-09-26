@@ -13,17 +13,7 @@ export const CustomCursor: React.FC = () => {
   const [cursorType, setCursorType] = useState<'default' | 'text' | 'disabled' | 'link'>('default');
 
   useEffect(() => {
-    // Detect fine pointer (mouse/trackpad) vs coarse-only touch device
-    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    // If device doesn't support fine pointer, it's a touch-only mobile/tablet device
-    if (!hasFinePointer) {
-      setIsTouchDevice(true);
-      return;
-    }
-
-    setIsTouchDevice(false);
 
     // Apply global cursor hiding class
     if (customCursorEnabled) {
@@ -41,6 +31,11 @@ export const CustomCursor: React.FC = () => {
     let animId: number;
 
     const handleMouseMove = (e: MouseEvent) => {
+      // If mouse is moved on tablet/touch device (e.g. Bluetooth/OTG mouse attached), enable custom cursor!
+      if (isTouchDevice) {
+        setIsTouchDevice(false);
+      }
+
       mouseX = e.clientX;
       mouseY = e.clientY;
 
@@ -89,7 +84,12 @@ export const CustomCursor: React.FC = () => {
       }
     };
 
-    const handleMouseDown = () => setIsMouseDown(true);
+    const handleTouchStart = () => {
+      // Hide custom cursor during direct touch interaction
+      setIsTouchDevice(true);
+    };
+
+    const handleMouseDown = () => setIsMouseDown(false);
     const handleMouseUp = () => setIsMouseDown(false);
     const handleMouseLeave = () => {
       if (cursorDotRef.current) cursorDotRef.current.style.opacity = '0';
@@ -104,8 +104,8 @@ export const CustomCursor: React.FC = () => {
 
     // Smooth lerp for outer ring and aura using requestAnimationFrame
     const render = () => {
-      const lerpFactor = prefersReducedMotion ? 1.0 : 0.18;
-      const auraLerpFactor = prefersReducedMotion ? 1.0 : 0.09;
+      const lerpFactor = prefersReducedMotion ? 1.0 : 0.22;
+      const auraLerpFactor = prefersReducedMotion ? 1.0 : 0.12;
 
       ringX += (mouseX - ringX) * lerpFactor;
       ringY += (mouseY - ringY) * lerpFactor;
@@ -123,6 +123,7 @@ export const CustomCursor: React.FC = () => {
     };
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('mousedown', handleMouseDown, { passive: true });
     window.addEventListener('mouseup', handleMouseUp, { passive: true });
     document.addEventListener('mouseleave', handleMouseLeave);
@@ -133,22 +134,23 @@ export const CustomCursor: React.FC = () => {
     return () => {
       document.documentElement.classList.remove('custom-cursor-active');
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('mouseleave', handleMouseLeave);
       document.removeEventListener('mouseenter', handleMouseEnter);
       cancelAnimationFrame(animId);
     };
-  }, [customCursorEnabled]);
+  }, [customCursorEnabled, isTouchDevice]);
 
   if (isTouchDevice || !customCursorEnabled) {
     return null;
   }
 
   // Determine styling based on type and click state
-  let pointerContainerClass = "fixed top-0 left-0 pointer-events-none z-[9999] transition-opacity duration-150";
-  let ringClassName = "fixed top-0 left-0 rounded-full pointer-events-none z-[9998] -translate-x-1/2 -translate-y-1/2 transition-all duration-150 ease-out border";
-  let auraClassName = "fixed top-0 left-0 rounded-full pointer-events-none z-[9997] -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out";
+  let pointerContainerClass = "fixed top-0 left-0 pointer-events-none z-[10001] transition-opacity duration-150";
+  let ringClassName = "fixed top-0 left-0 rounded-full pointer-events-none z-[10000] -translate-x-1/2 -translate-y-1/2 transition-all duration-150 ease-out border";
+  let auraClassName = "fixed top-0 left-0 rounded-full pointer-events-none z-[9999] -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out";
 
   if (cursorType === 'text') {
     // Text input cursor: small vertical line, outer ring hidden/shrunk

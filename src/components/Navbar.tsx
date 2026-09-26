@@ -244,10 +244,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
 
           {/* Drawer Slide-Over Panel */}
-          <div className="relative w-full max-w-[min(86vw,340px)] sm:max-w-[min(400px,78vw)] bg-zinc-950 border-l border-zinc-800/80 p-4 sm:p-5 flex flex-col justify-between h-full overflow-y-auto shadow-2xl z-10 animate-in slide-in-from-right duration-200 pt-safe pb-safe pl-safe pr-safe">
-            <div className="space-y-5">
+          <div className="relative w-full max-w-[min(88vw,360px)] sm:max-w-[min(400px,80vw)] bg-[#0B0C10] border-l border-zinc-800/80 p-5 sm:p-6 flex flex-col justify-between h-full overflow-y-auto shadow-2xl z-10 animate-in slide-in-from-right duration-200 pt-safe pb-safe pl-safe pr-safe">
+            <div className="space-y-6">
               {/* Drawer Top Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
                 <AetherLogo onClick={() => handleNav('home')} />
                 <button
                   type="button"
@@ -256,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     e.stopPropagation();
                     setMobileMenuOpen(false);
                   }}
-                  className="h-11 w-11 flex items-center justify-center rounded-xl text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 shrink-0 min-h-[44px] min-w-[44px] focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="h-10 w-10 flex items-center justify-center rounded-2xl text-zinc-400 hover:text-white bg-[#13151C] border border-zinc-800/80 shrink-0 min-h-[40px] min-w-[40px] focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-colors"
                   aria-label="Close navigation drawer"
                 >
                   <X className="h-5 w-5" />
@@ -273,19 +273,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenSearch();
                   }}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-zinc-300 bg-zinc-900 border border-zinc-800 hover:bg-zinc-850 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  className="w-full flex items-center justify-between px-4 py-3 min-h-[46px] rounded-2xl text-xs font-semibold text-zinc-300 bg-[#13151C] border border-zinc-800/80 hover:bg-[#1C1E28] hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 >
                   <div className="flex items-center gap-2.5">
                     <Search className="h-4 w-4 text-amber-400" />
-                    <span>Search Panel & Commands</span>
+                    <span className="text-zinc-300 text-xs font-medium">Search Panel & Commands</span>
                   </div>
-                  <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-zinc-500 bg-zinc-950 rounded border border-zinc-800">⌘K</kbd>
+                  <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-zinc-500 bg-[#0B0C10] rounded-md border border-zinc-800/80">⌘K</kbd>
                 </button>
               )}
 
               {/* Server Switcher in Mobile Drawer */}
               {user && !isAdminRoute && userServers.length > 0 && (
-                <div className="p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1.5">
+                <div className="p-3.5 rounded-2xl bg-[#13151C] border border-zinc-800/80 space-y-1.5">
                   <label className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-semibold block">
                     Active Server Switcher
                   </label>
@@ -299,7 +299,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setMobileMenuOpen(false);
                       }
                     }}
-                    className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
+                    className="w-full bg-[#0B0C10] border border-zinc-800/80 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
                   >
                     <option value="overview">All Servers ({userServers.length})</option>
                     <optgroup label="Your Servers">
@@ -326,140 +326,140 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           type="button"
                           onClick={() => handleNav('admin-dashboard')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Sliders className="h-4 w-4 text-amber-400" /> System Overview
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-users')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-users' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-users' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Users className="h-4 w-4" /> User Accounts
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-servers')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-servers' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-servers' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Server className="h-4 w-4" /> All Servers
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-products')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-products' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-products' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Package className="h-4 w-4" /> Products & Plans
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-nodes')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-nodes' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-nodes' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <HardDrive className="h-4 w-4" /> Compute Nodes
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-monitoring')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-monitoring' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-monitoring' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Activity className="h-4 w-4 text-amber-400" /> Monitoring & Status
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-diagnostics')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-diagnostics' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-diagnostics' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Cpu className="h-4 w-4 text-amber-400" /> System Diagnostics
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-backups')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-backups' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-backups' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <HardDrive className="h-4 w-4" /> Backups & Storage
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-billing')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-billing' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-billing' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <CreditCard className="h-4 w-4" /> Orders & Billing
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-coupons')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-coupons' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-coupons' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Tag className="h-4 w-4" /> Coupons & Promos
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-announcements')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-announcements' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-announcements' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Megaphone className="h-4 w-4" /> Broadcast Announcements
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-ads')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-ads' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-ads' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <ShoppingBag className="h-4 w-4" /> Ad Banners & Offers
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-rewards')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-rewards' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-rewards' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Coins className="h-4 w-4 text-amber-400" /> AFK & Daily Rewards
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-discord')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-discord' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-discord' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <MessageSquare className="h-4 w-4" /> Discord Bot Sync
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-appearance')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-appearance' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-appearance' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Palette className="h-4 w-4" /> Appearance & Branding
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-legal')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-legal' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-legal' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Scale className="h-4 w-4" /> Legal Pages & Terms
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-support')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-support' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-support' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <LifeBuoy className="h-4 w-4" /> Support Desk
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-audit-logs')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-audit-logs' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-audit-logs' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <FileText className="h-4 w-4" /> Global Audit Log
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('admin-settings')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'admin-settings' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-settings' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Settings className="h-4 w-4" /> Platform Settings
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('dashboard')}
-                          className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800"
+                          className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold bg-[#13151C] text-zinc-300 hover:text-white border border-zinc-800/80"
                         >
                           <Server className="h-4 w-4 text-amber-400" /> Switch to User Panel
                         </button>
@@ -469,28 +469,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           type="button"
                           onClick={() => handleNav('dashboard')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'dashboard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <LayoutDashboard className="h-4 w-4 text-amber-400" /> Dashboard
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('servers')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'servers' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'servers' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Server className="h-4 w-4" /> My Servers
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('deploy')}
-                          className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 shadow-md"
+                          className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 shadow-md"
                         >
                           <Sparkles className="h-4 w-4" /> Deploy Server
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('billing')}
-                          className={`w-full flex items-center justify-between px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'billing' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center justify-between px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'billing' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <div className="flex items-center gap-3">
                             <CreditCard className="h-4 w-4" /> Billing & Credits
@@ -500,7 +500,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           type="button"
                           onClick={() => handleNav('afk-rewards')}
-                          className={`w-full flex items-center justify-between px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'afk-rewards' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center justify-between px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'afk-rewards' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <div className="flex items-center gap-3">
                             <Coins className="h-4 w-4 text-amber-400" /> AFK Rewards
@@ -510,21 +510,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           type="button"
                           onClick={() => handleNav('support')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'support' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'support' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <LifeBuoy className="h-4 w-4" /> Support Tickets
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('activity')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'activity' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'activity' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Activity className="h-4 w-4" /> Activity Log
                         </button>
                         <button
                           type="button"
                           onClick={() => handleNav('settings')}
-                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold ${currentPage === 'settings' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'settings' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <Settings className="h-4 w-4" /> User Settings
                         </button>
@@ -533,7 +533,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <button
                             type="button"
                             onClick={() => handleNav('admin-dashboard')}
-                            className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            className="w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20"
                           >
                             <Shield className="h-4 w-4" /> Admin Control Plane
                           </button>
@@ -544,44 +544,44 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* Public Pages */}
-              <div className="space-y-3 pt-2 border-t border-zinc-800">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 px-1">
-                  Explore
+              {/* Public Pages - EXPLORE Section */}
+              <div className="space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-500 px-1 font-sans">
+                  EXPLORE
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => handleNav('home')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors ${currentPage === 'home' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all ${currentPage === 'home' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     Home
                   </button>
                   <button
                     type="button"
                     onClick={() => handleNav('minecraft')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors ${currentPage === 'minecraft' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all ${currentPage === 'minecraft' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     Minecraft
                   </button>
                   <button
                     type="button"
                     onClick={() => handleNav('bot')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors ${currentPage === 'bot' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all ${currentPage === 'bot' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     Discord Bots
                   </button>
                   <button
                     type="button"
                     onClick={() => handleNav('pricing')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors ${currentPage === 'pricing' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all ${currentPage === 'pricing' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     Pricing
                   </button>
                   <button
                     type="button"
                     onClick={() => handleNav('status')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors flex items-center gap-1.5 ${currentPage === 'status' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all flex items-center gap-2 ${currentPage === 'status' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     <span className="relative flex h-2 w-2 shrink-0">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -592,7 +592,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <button
                     type="button"
                     onClick={() => handleNav('docs')}
-                    className={`px-3 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-left transition-colors ${currentPage === 'docs' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                    className={`px-4 py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-left transition-all ${currentPage === 'docs' ? 'bg-[#222530] text-white' : 'text-zinc-300 hover:text-white hover:bg-[#13151C]'}`}
                   >
                     Docs
                   </button>
@@ -600,10 +600,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Footer User Profile & Sign Out */}
+            {/* Footer Actions (Sign In & Get Started or Profile) */}
             {user ? (
-              <div className="pt-4 border-t border-zinc-800 mt-6 space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900 border border-zinc-800">
+              <div className="pt-4 border-t border-zinc-800/80 mt-6 space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#13151C] border border-zinc-800/80">
                   <div className="flex items-center gap-3 overflow-hidden">
                     <img
                       src={user.avatarUrl || 'https://api.dicebear.com/7.x/identicon/svg?seed=user'}
@@ -619,25 +619,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                     type="button"
                     onClick={() => { logout(); setMobileMenuOpen(false); }}
                     title="Sign Out"
-                    className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                   >
                     <LogOut className="h-5 w-5" />
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="pt-4 border-t border-zinc-800 mt-6 grid grid-cols-2 gap-2">
+              <div className="pt-5 border-t border-zinc-800/80 mt-6 grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => handleNav('login')}
-                  className="w-full py-3 min-h-[44px] rounded-xl text-xs font-semibold text-zinc-200 bg-zinc-900 border border-zinc-800"
+                  className="w-full py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-white bg-[#13151C] hover:bg-[#1C1E28] border border-zinc-800/80 transition-colors"
                 >
                   Sign In
                 </button>
                 <button
                   type="button"
                   onClick={() => handleNav('register')}
-                  className="w-full py-3 min-h-[44px] rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 shadow-md"
+                  className="w-full py-3.5 min-h-[46px] rounded-2xl text-xs font-bold text-zinc-950 bg-gradient-to-r from-orange-500 via-amber-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 shadow-lg shadow-orange-500/15 transition-all"
                 >
                   Get Started
                 </button>
