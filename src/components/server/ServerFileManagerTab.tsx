@@ -679,10 +679,10 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
               setIsStartingRemoteDownload(false);
               setShowRemoteDownloadModal(true);
             }}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-950/30 transition-all cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <DownloadCloud className="h-3.5 w-3.5" />
-            <span>📥 Remote URL</span>
+            <DownloadCloud className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Remote URL</span>
           </button>
 
           <button
@@ -1670,7 +1670,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
                   <button
                     type="submit"
                     disabled={!remoteUrl.trim() || isStartingRemoteDownload}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-cyan-950/30 transition-all cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold flex items-center gap-2 shadow-lg shadow-amber-950/20 transition-all cursor-pointer disabled:opacity-50"
                   >
                     {isStartingRemoteDownload ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
