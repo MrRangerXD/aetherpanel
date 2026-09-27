@@ -137,6 +137,7 @@ interface ActiveProcessInfo {
   crashed?: boolean;
   lastExitCode?: number | null;
   backoffTimer?: NodeJS.Timeout;
+  hasSocket?: boolean;
 }
 
 const activePlayitProcesses = new Map<string, ActiveProcessInfo>();
@@ -229,20 +230,30 @@ export function queryIpc(socketPath: string, req: any, timeoutMs = 2500): Promis
 
     client.on('data', (data) => {
       buffer += data.toString();
-      const lines = buffer.split('\n');
-      for (let i = 0; i < lines.length - 1; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.message_kind === 'response' && parsed.data && parsed.data.request_id === reqId) {
-            clearTimeout(timer);
-            client.end();
-            return resolve(parsed.data.response);
+      let depth = 0;
+      let startIdx = -1;
+
+      for (let i = 0; i < buffer.length; i++) {
+        if (buffer[i] === '{') {
+          if (depth === 0) startIdx = i;
+          depth++;
+        } else if (buffer[i] === '}') {
+          depth--;
+          if (depth === 0 && startIdx !== -1) {
+            const jsonStr = buffer.substring(startIdx, i + 1);
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.message_kind === 'response' && parsed.data && parsed.data.request_id === reqId) {
+                clearTimeout(timer);
+                client.end();
+                return resolve(parsed.data.response);
+              }
+            } catch (err) {}
+            buffer = buffer.substring(i + 1);
+            i = -1; // restart loop on new buffer
           }
-        } catch {}
+        }
       }
-      buffer = lines[lines.length - 1];
     });
 
     client.on('error', (err) => {
@@ -655,22 +666,38 @@ function spawnAgentProcess(
   onLogUpdate: (metadata: { claimUrl?: string; claimCode?: string }) => void,
   onExit: (code: number | null) => void
 ): ChildProcess | null {
+  const realBinPath = path.join(process.cwd(), 'bin', 'playit');
   const emulatorPath = path.join(process.cwd(), 'server', 'playit', 'playitEmulator.js');
+  const useRealBinary = fs.existsSync(realBinPath);
   
   try {
     if (fs.existsSync(socketPath)) {
       try { fs.unlinkSync(socketPath); } catch {}
     }
 
-    const child = spawn('node', [
-      emulatorPath,
-      '--secret-path', secretPath,
-      '--socket-path', socketPath,
-      '-l', logPath
-    ], {
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    let child: ChildProcess;
+    if (useRealBinary) {
+      console.log(`[PLAYIT] Spawning real official playit binary for ${id}...`);
+      child = spawn(realBinPath, [
+        '--secret-path', secretPath,
+        '--socket-path', socketPath,
+        '-l', logPath
+      ], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } else {
+      console.log(`[PLAYIT] Spawning mock playit emulator for ${id}...`);
+      child = spawn('node', [
+        emulatorPath,
+        '--secret-path', secretPath,
+        '--socket-path', socketPath,
+        '-l', logPath
+      ], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    }
 
     child.stdout?.on('data', (data) => {
       const text = data.toString();
@@ -820,7 +847,8 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
           pid: child.pid,
           retryCount: retries,
           lastStarted: Date.now(),
-          crashed: false
+          crashed: false,
+          hasSocket: isAgentSecretClaimed(secretFile)
         });
 
         try {
@@ -1357,7 +1385,8 @@ async function toggleNodePlayitAgentInternal(nodeId: string, enable: boolean): P
           pid: child.pid,
           retryCount: retries,
           lastStarted: Date.now(),
-          crashed: false
+          crashed: false,
+          hasSocket: isAgentSecretClaimed(secretFile)
         });
       }
     };

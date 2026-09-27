@@ -5,7 +5,7 @@ import {
   Sparkles, Search, Menu, X, LayoutDashboard, CreditCard, LifeBuoy,
   Settings, LogOut, Sliders, Users, HardDrive, Package, Coins,
   Megaphone, ShoppingBag, MessageSquare, Palette, FileText, Clock,
-  Tag, ShieldAlert, Cpu, Scale
+  Tag, ShieldAlert, Cpu, Scale, LayoutTemplate
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useTheme } from '../lib/ThemeContext';
@@ -31,6 +31,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { user, logout } = useAuth();
   const { accentClasses } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleNav = (page: string, params?: any) => {
     onNavigate(page, params);
@@ -73,64 +83,96 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isAdminRoute = currentPage.startsWith('admin-');
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-zinc-950/40 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8">
+    <header className={`sticky top-0 z-40 w-full transition-all duration-300 ${isScrolled ? 'bg-zinc-950/85 backdrop-blur-xl border-b border-white/[0.06] shadow-2xl shadow-black/40' : 'bg-transparent border-b border-transparent'}`}>
+      <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         
         {/* Logo */}
         <AetherLogo onClick={() => handleNav('home')} />
 
         {/* Navigation links (Desktop) */}
-        <nav className="hidden lg:flex items-center gap-1.5">
+        <nav className="hidden lg:flex items-center gap-2">
           <button
             type="button"
             onClick={() => handleNav('home')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'home' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'home' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Home
           </button>
           <button
             type="button"
-            onClick={() => handleNav('minecraft')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'minecraft' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
+            onClick={() => {
+              if (currentPage === 'home') {
+                const el = document.getElementById('hosting');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                else handleNav('minecraft');
+              } else {
+                handleNav('minecraft');
+              }
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'minecraft' || currentPage === 'bot' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
-            Minecraft
+            Hosting
           </button>
           <button
             type="button"
-            onClick={() => handleNav('bot')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'bot' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
+            onClick={() => {
+              if (currentPage === 'home') {
+                const el = document.getElementById('infrastructure');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                else handleNav('status');
+              } else {
+                handleNav('status');
+              }
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'status' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
-            Discord Bots
+            Infrastructure
           </button>
           <button
             type="button"
-            onClick={() => handleNav('pricing')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'pricing' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
+            onClick={() => {
+              if (currentPage === 'home') {
+                const el = document.getElementById('pricing');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                else handleNav('pricing');
+              } else {
+                handleNav('pricing');
+              }
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'pricing' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Pricing
           </button>
           <button
             type="button"
-            onClick={() => handleNav('status')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${currentPage === 'status' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
+            onClick={() => {
+              if (currentPage === 'home') {
+                const el = document.getElementById('faq');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                handleNav('home');
+                setTimeout(() => {
+                  const el = document.getElementById('faq');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }
+            }}
+            className="px-3.5 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all text-zinc-400 hover:text-white hover:bg-white/[0.02]"
           >
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-            </span>
-            Status
-          </button>
-          <button
-            type="button"
-            onClick={() => handleNav('docs')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'docs' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
-          >
-            Docs
+            FAQ
           </button>
         </nav>
 
         {/* Right CTA */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleNav('docs')}
+            className={`hidden md:inline-flex px-3 py-2 rounded-lg text-xs font-medium tracking-wide transition-all ${currentPage === 'docs' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Docs
+          </button>
+
           {onOpenSearch && (
             <button
               type="button"
@@ -139,12 +181,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.stopPropagation();
                 onOpenSearch();
               }}
-              className="hidden sm:flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl text-xs text-zinc-400 bg-zinc-950/60 hover:bg-white/[0.04] hover:text-white border border-white/5 transition-all focus:outline-none"
+              className="hidden sm:flex items-center gap-2 px-3 py-2 min-h-[40px] rounded-xl text-xs text-zinc-400 bg-zinc-950/60 hover:bg-white/[0.04] hover:text-white border border-white/5 transition-all focus:outline-none"
               title="Search everything (Ctrl+K)"
               aria-label="Search command palette"
             >
               <Search className="h-3.5 w-3.5 text-zinc-500" />
-              <span className="hidden md:inline font-medium">Search</span>
               <kbd className="hidden md:inline-flex px-1.5 py-0.5 text-[9px] font-mono text-zinc-500 bg-zinc-950/80 rounded border border-white/5">
                 ⌘K
               </kbd>
@@ -420,6 +461,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-discord' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
                         >
                           <MessageSquare className="h-4 w-4" /> Discord Bot Sync
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleNav('admin-homepage')}
+                          className={`w-full flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-2xl text-xs font-semibold ${currentPage === 'admin-homepage' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-zinc-300 hover:bg-zinc-900'}`}
+                        >
+                          <LayoutTemplate className="h-4 w-4" /> Homepage Builder
                         </button>
                         <button
                           type="button"

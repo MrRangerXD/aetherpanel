@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiRequest } from './api';
-import { SocialLinks } from '../types';
+import { SocialLinks, HomepageConfig } from '../types';
 
 interface BrandingContextType {
   brandName: string;
@@ -14,12 +14,14 @@ interface BrandingContextType {
   pageAnimationsEnabled: boolean;
   heroDescription: string;
   footerDescription: string;
+  homepageConfig: HomepageConfig;
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
   setEnablePlayitLocally: (enabled: boolean) => void;
   setPageAnimationsEnabledLocally: (enabled: boolean) => void;
   setSocialLinksLocally: (links: SocialLinks) => void;
   setHomepageDescriptionsLocally: (hero: string, footer: string) => void;
+  setHomepageConfigLocally: (config: HomepageConfig) => void;
 }
 
 const DEFAULT_HERO_DESCRIPTION = 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.';
@@ -59,6 +61,15 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [heroDescription, setHeroDescription] = useState<string>(DEFAULT_HERO_DESCRIPTION);
   const [footerDescription, setFooterDescription] = useState<string>(DEFAULT_FOOTER_DESCRIPTION);
+  const [homepageConfig, setHomepageConfig] = useState<HomepageConfig>(() => {
+    const saved = localStorage.getItem('aether_homepage_config');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {};
+  });
 
   const fetchBranding = useCallback(async () => {
     try {
@@ -97,6 +108,10 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setFooterDescription(res.data.footerDescription);
         } else {
           setFooterDescription(DEFAULT_FOOTER_DESCRIPTION);
+        }
+        if (res.data.homepageConfig) {
+          setHomepageConfig(res.data.homepageConfig);
+          localStorage.setItem('aether_homepage_config', JSON.stringify(res.data.homepageConfig));
         }
       }
     } catch (err) {
@@ -147,6 +162,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (footer) setFooterDescription(footer);
   };
 
+  const setHomepageConfigLocally = (config: HomepageConfig) => {
+    setHomepageConfig(config);
+    localStorage.setItem('aether_homepage_config', JSON.stringify(config));
+  };
+
   return (
     <BrandingContext.Provider
       value={{
@@ -161,12 +181,14 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pageAnimationsEnabled,
         heroDescription,
         footerDescription,
+        homepageConfig,
         refreshBranding: fetchBranding,
         updateBrandNameLocally,
         setEnablePlayitLocally,
         setPageAnimationsEnabledLocally,
         setSocialLinksLocally,
-        setHomepageDescriptionsLocally
+        setHomepageDescriptionsLocally,
+        setHomepageConfigLocally
       }}
     >
       {children}

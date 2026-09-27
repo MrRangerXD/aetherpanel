@@ -78,7 +78,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [customCursorEnabled, setCustomCursorState] = useState<boolean>(() => {
     const val = localStorage.getItem('aether_custom_cursor');
-    return val !== null ? val === 'true' : true;
+    return val !== null ? val === 'true' : false;
   });
 
   const [animationsEnabled, setAnimationsState] = useState<boolean>(() => {

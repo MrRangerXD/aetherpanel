@@ -1179,6 +1179,54 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           };
         }
 
+        if (!dbCache.settings.homepageConfig) {
+          dbCache.settings.homepageConfig = {
+            heroBadgeText: 'Next-Gen Game & Bot Infrastructure',
+            heroBadgeLinkText: 'Explore Nodes',
+            heroBadgeLinkTarget: '#infrastructure',
+            showHeroBadge: true,
+            heroHeadlinePrefix: 'Powerful infrastructure for your ',
+            heroHeadlineAccent: 'next server.',
+            heroDescription: 'Deploy high-performance Minecraft servers and 24/7 Discord bots in under 30 seconds. Powered by AMD Ryzen 9 7950X compute nodes, enterprise NVMe storage, and Pterodactyl-class control precision.',
+            heroPrimaryCtaText: 'Deploy Server',
+            heroPrimaryCtaPage: 'pricing',
+            heroSecondaryCtaText: 'View Infrastructure',
+            heroSecondaryCtaPage: 'infrastructure',
+            heroBullet1: 'AMD Ryzen 9 7950X',
+            heroBullet2: 'Sub-30s Provisioning',
+            heroBullet3: 'Enterprise NVMe RAID 1',
+            showTrustBar: true,
+            trustBarItem1: 'AMD Ryzen 9 7950X @ 5.7GHz',
+            trustBarItem2: 'PCIe 4.0 NVMe Storage',
+            trustBarItem3: 'DDR5 5600MHz ECC Memory',
+            trustBarItem4: 'Corero + Path.net DDoS Shield',
+            trustBarItem5: '99.9% Network SLA',
+            showMinecraftSection: true,
+            showDiscordBotSection: true,
+            showInfrastructureSection: true,
+            showStatsSection: true,
+            showFeaturesSection: true,
+            showPricingSection: true,
+            showFaqSection: true,
+            showCtaSection: true,
+            stat1Value: '99.98%',
+            stat1Label: 'Average Uptime',
+            stat2Value: '< 15ms',
+            stat2Label: 'Global Routing',
+            stat3Value: '30s',
+            stat3Label: 'Auto Deploy',
+            stat4Value: '24/7',
+            stat4Label: 'Live Monitoring',
+            ctaEyebrow: 'GET STARTED IN MINUTES',
+            ctaHeading: 'Ready to launch your server?',
+            ctaDescription: 'Instant deployment on Ryzen 9 7950X compute nodes with 24/7 proactive monitoring and unmetered DDoS mitigation.',
+            ctaPrimaryText: 'Deploy Now',
+            ctaPrimaryPage: 'pricing',
+            ctaSecondaryText: 'Explore Hosting Plans',
+            ctaSecondaryPage: 'hosting'
+          };
+        }
+
         // Filter out demo user and demo customer data
         const demoUserIds = ['usr_demo', 'usr_demo_customer'];
         const demoEmails = ['demo@aetherpanel.com', 'demo@example.com'];

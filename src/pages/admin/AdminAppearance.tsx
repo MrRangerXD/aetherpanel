@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, HelpCircle, Trash2, Plus, Edit, X } from 'lucide-react';
+import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, HelpCircle, Trash2, Plus, Edit, X, LayoutTemplate, ArrowRight } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
 import { useAnimation } from '../../lib/AnimationContext';
 import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
@@ -315,6 +315,29 @@ export const AdminAppearance: React.FC = () => {
           <span>{errorMsg}</span>
         </div>
       )}
+
+      {/* Homepage Builder Direct Link */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-900 border border-amber-500/20 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <LayoutTemplate className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white">Public Homepage Visual Builder</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Customize hero headlines, benefit pills, runtime showcases, trust metrics, and section visibility without writing code.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => { window.location.href = '/admin/homepage'; }}
+          className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+        >
+          <span>Open Homepage Builder</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Theme Presets & Typography */}

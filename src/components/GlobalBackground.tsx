@@ -24,21 +24,19 @@ export const GlobalBackground: React.FC = () => {
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none"
     >
       {/* Base Canvas Layer */}
-      <div className="absolute inset-0 bg-[#020204] overflow-hidden">
-        {/* Futuristic Technical Grid overlay */}
+      <div className="absolute inset-0 bg-[#040406] overflow-hidden">
+        {/* Subtle architectural dot grid */}
         <div 
-          className="absolute inset-0 opacity-[0.015]"
+          className="absolute inset-0 opacity-[0.02]"
           style={{
-            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px)`,
-            backgroundSize: '24px 24px'
+            backgroundImage: `radial-gradient(rgba(245, 158, 11, 0.4) 1px, transparent 1px)`,
+            backgroundSize: '28px 28px'
           }}
         />
-        {/* Floating Ambient Glow 1 (Cyan/Blue) */}
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
-        {/* Floating Ambient Glow 2 (Violet/Indigo) */}
-        <div className="absolute bottom-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full bg-violet-600/10 blur-[160px] pointer-events-none animate-pulse duration-[10000ms]" />
-        {/* Floating Ambient Glow 3 (Amber Center Muted) */}
-        <div className="absolute top-[30%] right-[25%] w-[40%] h-[40%] rounded-full bg-amber-500/5 blur-[140px] pointer-events-none" />
+        {/* Soft, restrained amber warmth at top center behind hero */}
+        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full bg-amber-500/[0.05] blur-[150px] pointer-events-none" />
+        {/* Deep subtle warm obsidian vignette */}
+        <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] rounded-full bg-orange-600/[0.025] blur-[180px] pointer-events-none" />
       </div>
 
       {/* Wallpaper Image / Animated GIF Element - Native img preserves GIF animation frames */}

@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { getDb, saveDbSync, getDbSync } from '../db';
 import { appendConsoleLog, emitServerStatus } from '../provider';
+import { startOomSafetyGuard, handleExitCodeIsolation } from '../services/containerEngine';
 
 export interface SupervisorProcess {
   pid: number;
@@ -179,6 +180,12 @@ export class RuntimeSupervisor {
     child.on('exit', (code, signal) => {
       console.log(`[RuntimeSupervisor] Process PID ${child.pid} for ${serverId} exited with code ${code}, signal ${signal}`);
       RuntimeSupervisor.activeChildren.delete(serverId);
+
+      const db = getDbSync();
+      const server = db.servers.find(s => s.id === serverId);
+      const limitRamMB = server?.limits?.ramMB || 1024;
+      const isolationCheck = handleExitCodeIsolation(serverId, code, signal, limitRamMB);
+
       try {
         const statePath = paths.stateJson;
         if (fs.existsSync(statePath)) {
@@ -190,13 +197,13 @@ export class RuntimeSupervisor {
       } catch {}
 
       try {
-        const db = getDbSync();
-        const server = db.servers.find(s => s.id === serverId);
         if (server && (server.status === 'running' || server.status === 'starting')) {
           server.status = code === 0 ? 'stopped' : 'error';
           server.cpuUsage = 0;
           server.ramUsageMB = 0;
-          if (code !== 0 && code !== null) {
+          if (isolationCheck.isOomKilled) {
+            // Already logged and startup crash reason set by handleExitCodeIsolation
+          } else if (code !== 0 && code !== null) {
             if (!server.startup) server.startup = {};
             server.startup.lastCrashReason = `Process exited with exit code ${code}`;
             appendConsoleLog(serverId, `[AetherDaemon/ERROR]: Process PID ${child.pid} exited with code ${code}.`);
@@ -210,6 +217,15 @@ export class RuntimeSupervisor {
 
       this.stopTailers(serverId);
     });
+
+    // Start OOM safety guard for PID
+    try {
+      const db = getDbSync();
+      const server = db.servers.find(s => s.id === serverId);
+      if (server) {
+        startOomSafetyGuard(serverId, child.pid, server.limits?.ramMB || 1024);
+      }
+    } catch {}
 
     // Retain child reference for interactive stdin control
     this.activeChildren.set(serverId, child);

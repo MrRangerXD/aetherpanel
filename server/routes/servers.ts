@@ -39,6 +39,13 @@ import { resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getNodePlayitStatus } from '../playit/playitService';
 import { resolveServerType } from './serverTypes';
 import { startRemoteDownload, getDownloadJob, listServerDownloadJobs } from '../services/remoteDownloadService';
+import {
+  initChunkedUpload,
+  saveChunkPart,
+  completeChunkedUpload,
+  readUploadSession,
+  abortChunkedUpload
+} from '../services/chunkedUploadService';
 
 const router = Router();
 
@@ -71,7 +78,13 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit per file
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit per file for standard uploads
+});
+
+// Memory storage for individual resumable upload chunks (up to 50MB per chunk)
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
 // Helper to check server ownership, admin power, or subuser permission
@@ -893,6 +906,146 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
       data: { filenames: uploadedNames }
     });
   });
+});
+
+// POST /api/v1/servers/:id/files/upload/init - Initialize Resumable / Chunked Upload (5GB - 15GB+)
+router.post('/:id/files/upload/init', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
+  if (!access) return;
+
+  const { fileName, fileSize, targetPath, chunkSize } = req.body;
+  if (!fileName || !fileSize) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PARAMETERS', message: 'fileName and fileSize are required.' }
+    });
+  }
+
+  try {
+    const session = await initChunkedUpload({
+      serverId: req.params.id,
+      userId: req.user!.id,
+      fileName,
+      fileSize: Number(fileSize),
+      targetPath: targetPath || '/',
+      chunkSize: chunkSize ? Number(chunkSize) : undefined
+    });
+
+    res.json({ success: true, data: session });
+  } catch (err: any) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'CHUNK_INIT_FAILED', message: err.message }
+    });
+  }
+});
+
+// POST /api/v1/servers/:id/files/upload/chunk - Upload Single Chunk Part
+router.post('/:id/files/upload/chunk', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
+  if (!access) return;
+
+  chunkUpload.single('chunk')(req as any, res as any, async (uploadErr: any) => {
+    if (uploadErr) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'CHUNK_UPLOAD_ERROR', message: uploadErr.message || 'Chunk upload failed' }
+      });
+    }
+
+    const uploadId = (req.body.uploadId || req.query.uploadId) as string;
+    const chunkIndex = parseInt((req.body.chunkIndex || req.query.chunkIndex) as string, 10);
+
+    if (!uploadId || isNaN(chunkIndex)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_PARAMETERS', message: 'uploadId and chunkIndex are required.' }
+      });
+    }
+
+    const file = (req as any).file;
+    if (!file || !file.buffer) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_CHUNK_DATA', message: 'Chunk file buffer is missing.' }
+      });
+    }
+
+    try {
+      const result = await saveChunkPart(uploadId, chunkIndex, file.buffer);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'CHUNK_SAVE_FAILED', message: err.message }
+      });
+    }
+  });
+});
+
+// GET /api/v1/servers/:id/files/upload/status/:uploadId - Query Resumable Upload Status
+router.get('/:id/files/upload/status/:uploadId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.read');
+  if (!access) return;
+
+  const session = readUploadSession(req.params.uploadId);
+  if (!session || session.serverId !== req.params.id) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'SESSION_NOT_FOUND', message: 'Upload session not found or expired.' }
+    });
+  }
+
+  res.json({ success: true, data: session });
+});
+
+// POST /api/v1/servers/:id/files/upload/complete - Finalize & Assemble Resumable Upload
+router.post('/:id/files/upload/complete', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
+  if (!access) return;
+
+  const { uploadId } = req.body;
+  if (!uploadId) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'UPLOAD_ID_REQUIRED', message: 'uploadId is required.' }
+    });
+  }
+
+  try {
+    const assembled = await completeChunkedUpload(uploadId);
+
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'RESUMABLE_FILE_UPLOAD',
+      `Completed high-capacity chunked upload for '${assembled.fileName}' (${(assembled.fileSize / (1024 * 1024)).toFixed(1)} MB)`
+    );
+
+    res.json({
+      success: true,
+      message: `File '${assembled.fileName}' assembled and verified successfully.`,
+      data: assembled
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: { code: 'ASSEMBLY_FAILED', message: err.message }
+    });
+  }
+});
+
+// POST /api/v1/servers/:id/files/upload/abort - Cancel Resumable Upload
+router.post('/:id/files/upload/abort', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.upload');
+  if (!access) return;
+
+  const { uploadId } = req.body;
+  if (!uploadId) {
+    return res.status(400).json({ success: false, error: { code: 'UPLOAD_ID_REQUIRED', message: 'uploadId required.' } });
+  }
+
+  const aborted = abortChunkedUpload(uploadId);
+  res.json({ success: true, aborted });
 });
 
 // POST /api/v1/servers/:id/files/remote-download - Trigger direct URL remote file download

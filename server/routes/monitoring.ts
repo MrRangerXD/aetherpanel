@@ -9,6 +9,7 @@ import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import { AlertRule, AlertIncident, TelemetryPoint, Node, Server } from '../../src/types';
 import { dispatchDiscordNotification } from '../discordService';
 import { queryMinecraftServerStatus } from '../minecraftService';
+import { MetricsEngine } from '../services/metricsEngine';
 
 const router = Router();
 
@@ -367,7 +368,10 @@ router.get('/server/:serverId/live', async (req: Request, res: Response) => {
     latencyMs: slpResult.latencyMs || (isRunning ? 6 : 0),
     motd: slpResult.motd,
     uptimeSeconds: isRunning && (server as any).startedAt ? Math.floor((Date.now() - new Date((server as any).startedAt).getTime()) / 1000) : (server.uptimeSeconds || 0),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    pidsCount: MetricsEngine.getRingBuffer(server.id).slice(-1)[0]?.pidsCount || (isRunning ? 1 : 0),
+    oomScore: MetricsEngine.getRingBuffer(server.id).slice(-1)[0]?.oomScore || 0,
+    oomDangerLevel: MetricsEngine.getRingBuffer(server.id).slice(-1)[0]?.oomDangerLevel || (ramPercent >= 92 ? 'critical' : ramPercent >= 82 ? 'warning' : 'safe')
   };
 
   // Record point to live ring buffer

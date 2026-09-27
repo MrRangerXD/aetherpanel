@@ -28,6 +28,7 @@ import {
   removeServerPortRule
 } from '../services/networkProtectionService';
 import { getUiDiagnosticStats, getUiErrors } from '../services/uiDiagnosticService';
+import { detectDockerCapabilities, runWingsParityDiagnosticTest } from '../services/containerEngine';
 
 const router = Router();
 
@@ -63,6 +64,34 @@ router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
       }
     }
   });
+});
+
+// GET /api/v1/admin/wings/status - Wings Parity & Docker Capabilities Check
+router.get('/wings/status', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const caps = detectDockerCapabilities();
+    res.json({ success: true, data: caps });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+// POST /api/v1/admin/wings/test - Run Wings Parity & Isolation Diagnostic Benchmark
+router.post('/wings/test', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const report = await runWingsParityDiagnosticTest();
+    await createAuditLog(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'WINGS_PARITY_TEST_EXECUTED',
+      'system/wings',
+      `Wings parity benchmark executed: grade=${report.benchmark.containerIsolationGrade}, cgroups=${report.benchmark.cgroupsVersion}, durationMs=${report.benchmark.testDurationMs}`
+    );
+    res.json({ success: true, data: report });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
 });
 
 // --- USER MANAGEMENT ---

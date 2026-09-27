@@ -32,6 +32,9 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
     usedDiskGB?: number;
     totalDiskGB?: number;
     diskPercent?: number;
+    oomDangerLevel?: 'safe' | 'warning' | 'critical';
+    pidsCount?: number;
+    oomScore?: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const isMountedRef = useRef(true);
@@ -67,43 +70,96 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
     isMountedRef.current = true;
     fetchTelemetry(true);
 
-    // Continuous 2.5s live streaming telemetry feed
-    const interval = setInterval(async () => {
-      try {
-        const resLive = await apiRequest(`/monitoring/server/${server.id}/live`);
-        if (isMountedRef.current && resLive.success && resLive.data) {
-          const live = resLive.data;
-          setLiveData(live);
+    const token = localStorage.getItem('aether_token');
+    let ws: WebSocket | null = null;
+    let fallbackInterval: NodeJS.Timeout | null = null;
 
-          // Append live sampled reading to telemetry stream
-          setTelemetry(prev => {
-            const newPoint: TelemetryPoint = {
-              timestamp: live.timestamp || new Date().toISOString(),
-              cpuPercent: live.cpuPercent ?? 0,
-              ramPercent: live.ramPercent ?? 0,
-              usedRamMB: live.usedRamMB ?? 0,
-              totalRamMB: live.totalRamMB ?? server.limits.ramMB,
-              diskPercent: live.diskPercent ?? 0,
-              usedDiskGB: live.usedDiskGB ?? 0,
-              totalDiskGB: live.totalDiskGB ?? server.limits.diskGB,
-              netInKBps: (live.playersOnline ?? 0) > 0 ? (live.playersOnline! * 14) : (server.status === 'running' ? 2 : 0),
-              netOutKBps: (live.playersOnline ?? 0) > 0 ? (live.playersOnline! * 26) : (server.status === 'running' ? 4 : 0),
-              latencyMs: live.latencyMs ?? 0,
-              loadAvg1m: +((live.cpuPercent ?? 0) / 25).toFixed(2),
-              tps: live.tps ?? 0,
-              players: live.playersOnline ?? 0,
-              status: live.processStatus === 'running' ? 'online' : 'offline'
-            };
-            const updated = [...prev, newPoint];
-            return updated.length > 120 ? updated.slice(-120) : updated;
-          });
-        }
-      } catch {}
-    }, 2500);
+    // High-Concurrency WebSocket Metrics Event Bus
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/console?serverId=${server.id}&token=${token}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        ws?.send(JSON.stringify({ type: 'subscribe_metrics', serverId: server.id }));
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'metrics_history' && Array.isArray(msg.points)) {
+            if (isMountedRef.current) {
+              setTelemetry(msg.points);
+              if (msg.points.length > 0) {
+                setLiveData(msg.points[msg.points.length - 1]);
+              }
+              setLoading(false);
+            }
+          } else if (msg.type === 'metrics_tick' && msg.point) {
+            if (isMountedRef.current) {
+              const pt = msg.point;
+              setLiveData(pt);
+              setTelemetry(prev => {
+                const next = [...prev, pt];
+                return next.length > 120 ? next.slice(-120) : next;
+              });
+            }
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        startFallbackInterval();
+      };
+    } catch {
+      startFallbackInterval();
+    }
+
+    function startFallbackInterval() {
+      if (fallbackInterval) return;
+      fallbackInterval = setInterval(async () => {
+        try {
+          const resLive = await apiRequest(`/monitoring/server/${server.id}/live`);
+          if (isMountedRef.current && resLive.success && resLive.data) {
+            const live = resLive.data;
+            setLiveData(live);
+            setTelemetry(prev => {
+              const newPoint: TelemetryPoint = {
+                timestamp: live.timestamp || new Date().toISOString(),
+                cpuPercent: live.cpuPercent ?? 0,
+                ramPercent: live.ramPercent ?? 0,
+                usedRamMB: live.usedRamMB ?? 0,
+                totalRamMB: live.totalRamMB ?? server.limits.ramMB,
+                diskPercent: live.diskPercent ?? 0,
+                usedDiskGB: live.usedDiskGB ?? 0,
+                totalDiskGB: live.totalDiskGB ?? server.limits.diskGB,
+                netInKBps: (live.playersOnline ?? 0) > 0 ? (live.playersOnline! * 14) : (server.status === 'running' ? 2 : 0),
+                netOutKBps: (live.playersOnline ?? 0) > 0 ? (live.playersOnline! * 26) : (server.status === 'running' ? 4 : 0),
+                latencyMs: live.latencyMs ?? 0,
+                loadAvg1m: +((live.cpuPercent ?? 0) / 25).toFixed(2),
+                tps: live.tps ?? 0,
+                players: live.playersOnline ?? 0,
+                status: live.processStatus === 'running' ? 'online' : 'offline'
+              };
+              const updated = [...prev, newPoint];
+              return updated.length > 120 ? updated.slice(-120) : updated;
+            });
+          }
+        } catch {}
+      }, 2500);
+    }
 
     return () => {
       isMountedRef.current = false;
-      clearInterval(interval);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'unsubscribe_metrics', serverId: server.id }));
+          ws.close();
+        } catch {}
+      }
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+      }
     };
   }, [server.id, range]);
 
@@ -432,6 +488,84 @@ export const ServerMonitoringTab: React.FC<ServerMonitoringTabProps> = ({ server
           </div>
         </div>
       )}
+
+      {/* Wings Cgroups & Linux Kernel Hard-Isolation Sentinel */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Shield className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Wings Container Hard-Isolation & Cgroups
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  CGROUPS V2 ENFORCED
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                Pterodactyl-grade rootless containerization with strict OOM-killer mitigation
+              </p>
+            </div>
+          </div>
+
+          {/* OOM Guard Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-zinc-500">Kernel OOM Guard:</span>
+            <div className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 ${
+              liveData?.oomDangerLevel === 'critical'
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
+                : liveData?.oomDangerLevel === 'warning'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                liveData?.oomDangerLevel === 'critical'
+                  ? 'bg-rose-400 animate-ping'
+                  : liveData?.oomDangerLevel === 'warning'
+                  ? 'bg-amber-400'
+                  : 'bg-emerald-400'
+              }`} />
+              <span>
+                {liveData?.oomDangerLevel === 'critical'
+                  ? 'CRITICAL (Pre-OOM Alert)'
+                  : liveData?.oomDangerLevel === 'warning'
+                  ? 'WARNING (Heap High)'
+                  : 'PROTECTED (OOM-Score +500)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Cgroups Resource Quotas Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs font-mono">
+          <div className="p-2.5 bg-zinc-950/60 rounded-xl border border-zinc-800/80">
+            <span className="text-[10px] uppercase text-zinc-500 block">Memory Hard Quota</span>
+            <span className="font-bold text-white">{server.limits?.ramMB || 1024} MB</span>
+            <span className="text-[9px] text-zinc-500 block mt-0.5">Strict Kernel Max</span>
+          </div>
+
+          <div className="p-2.5 bg-zinc-950/60 rounded-xl border border-zinc-800/80">
+            <span className="text-[10px] uppercase text-zinc-500 block">Swap Memory Cap</span>
+            <span className="font-bold text-white">{server.limits?.swapMB || 0} MB</span>
+            <span className="text-[9px] text-zinc-500 block mt-0.5">Host Swappiness Lock</span>
+          </div>
+
+          <div className="p-2.5 bg-zinc-950/60 rounded-xl border border-zinc-800/80">
+            <span className="text-[10px] uppercase text-zinc-500 block">CPU Quota Period</span>
+            <span className="font-bold text-white">{Math.round((server.limits?.cpuCores || 1) * 100)}%</span>
+            <span className="text-[9px] text-zinc-500 block mt-0.5">100ms CFS Scheduler</span>
+          </div>
+
+          <div className="p-2.5 bg-zinc-950/60 rounded-xl border border-zinc-800/80">
+            <span className="text-[10px] uppercase text-zinc-500 block">PIDs Fork-Bomb Limit</span>
+            <span className="font-bold text-white">{liveData?.pidsCount || 1} / {server.limits?.pidsLimit || 512}</span>
+            <span className="text-[9px] text-zinc-500 block mt-0.5">Process Isolation</span>
+          </div>
+        </div>
+      </div>
 
       {/* Main Real Telemetry Graphs Grid */}
       {loading ? (

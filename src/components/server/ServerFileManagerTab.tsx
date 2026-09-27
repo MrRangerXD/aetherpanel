@@ -3,7 +3,8 @@ import {
   Folder, FileText, Upload, Plus, Download, Trash2, Edit3, Archive,
   FolderPlus, FilePlus, ChevronRight, CornerLeftUp, CheckSquare,
   Square, AlertTriangle, X, Loader2, ArrowRightLeft, Copy, RefreshCw,
-  FileCode, FileArchive, CheckCircle2, AlertCircle, Globe, Link, DownloadCloud, Sparkles
+  FileCode, FileArchive, CheckCircle2, AlertCircle, Globe, Link, DownloadCloud, Sparkles,
+  Pause, Play
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useToast } from '../../lib/ToastContext';
@@ -20,8 +21,14 @@ interface UploadTask {
   name: string;
   size: number;
   progress: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
+  status: 'pending' | 'uploading' | 'completed' | 'error' | 'paused';
   error?: string;
+  uploadId?: string;
+  currentChunk?: number;
+  totalChunks?: number;
+  speedMBs?: number;
+  etaSeconds?: number;
+  isPaused?: boolean;
 }
 
 export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serverId }) => {
@@ -521,7 +528,17 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     }
   };
 
-  // Upload Management
+  const pausedTasksRef = useRef<Record<string, boolean>>({});
+
+  const togglePauseTask = (taskId: string) => {
+    const isPaused = !pausedTasksRef.current[taskId];
+    pausedTasksRef.current[taskId] = isPaused;
+    setUploadTasks(prev =>
+      prev.map(t => t.id === taskId ? { ...t, status: isPaused ? 'paused' : 'uploading', isPaused } : t)
+    );
+  };
+
+  // Upload Management (Resumable Chunked Engine for 5GB - 15GB+)
   const processUploadQueue = async (tasks: UploadTask[]) => {
     setShowUploadDrawer(true);
     const token = localStorage.getItem('aether_token');
@@ -529,39 +546,159 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
     for (const task of tasks) {
       if (task.status === 'completed') continue;
 
+      const normCurrent = normalizeServerPath(currentPath);
+      const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunk slices
+      const totalChunks = Math.max(1, Math.ceil(task.file.size / CHUNK_SIZE));
+
       setUploadTasks(prev =>
-        prev.map(t => t.id === task.id ? { ...t, status: 'uploading', progress: 30 } : t)
+        prev.map(t => t.id === task.id ? {
+          ...t,
+          status: 'uploading',
+          progress: 1,
+          totalChunks,
+          currentChunk: 0,
+          speedMBs: 0
+        } : t)
       );
 
-      const formData = new FormData();
-      formData.append('files', task.file);
-
       try {
-        setUploadTasks(prev =>
-          prev.map(t => t.id === task.id ? { ...t, progress: 70 } : t)
-        );
-
-        const normCurrent = normalizeServerPath(currentPath);
-        const res = await fetch(`/api/v1/servers/${serverId}/files/upload?path=${encodeURIComponent(normCurrent)}`, {
+        // Step 1: Initialize Resumable Session
+        const initRes = await fetch(`/api/v1/servers/${serverId}/files/upload/init`, {
           method: 'POST',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-          body: formData
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            fileName: task.file.name,
+            fileSize: task.file.size,
+            targetPath: normCurrent,
+            chunkSize: CHUNK_SIZE
+          })
         });
 
-        const data = await res.json();
-        if (data.success) {
+        const initData = await initRes.json();
+        if (!initData.success) {
+          throw new Error(initData.error?.message || 'Failed to initialize resumable upload session');
+        }
+
+        const session = initData.data;
+        const uploadId = session.uploadId;
+        const uploadedChunks: number[] = session.uploadedChunks || [];
+        let totalUploadedBytes = uploadedChunks.length * CHUNK_SIZE;
+
+        setUploadTasks(prev =>
+          prev.map(t => t.id === task.id ? { ...t, uploadId, totalChunks } : t)
+        );
+
+        const uploadStartTime = Date.now();
+        let bytesTransferredThisSession = 0;
+
+        // Step 2: Upload Chunks Sequentially
+        for (let i = 0; i < totalChunks; i++) {
+          // Pause handling: wait while task is paused
+          while (pausedTasksRef.current[task.id]) {
+            await new Promise(r => setTimeout(r, 400));
+          }
+
+          if (uploadedChunks.includes(i)) continue;
+
+          const startByte = i * CHUNK_SIZE;
+          const endByte = Math.min(task.file.size, startByte + CHUNK_SIZE);
+          const chunkBlob = task.file.slice(startByte, endByte);
+
+          let chunkSuccess = false;
+          let retries = 3;
+
+          while (retries > 0 && !chunkSuccess) {
+            try {
+              const formData = new FormData();
+              formData.append('uploadId', uploadId);
+              formData.append('chunkIndex', String(i));
+              formData.append('chunk', chunkBlob, `part_${i}.chunk`);
+
+              const chunkRes = await fetch(`/api/v1/servers/${serverId}/files/upload/chunk`, {
+                method: 'POST',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                body: formData
+              });
+
+              const chunkData = await chunkRes.json();
+              if (chunkData.success) {
+                chunkSuccess = true;
+                uploadedChunks.push(i);
+                totalUploadedBytes += chunkBlob.size;
+                bytesTransferredThisSession += chunkBlob.size;
+
+                const elapsedSeconds = Math.max(0.1, (Date.now() - uploadStartTime) / 1000);
+                const currentSpeedMBs = +((bytesTransferredThisSession / (1024 * 1024)) / elapsedSeconds).toFixed(1);
+                const remainingBytes = Math.max(0, task.file.size - totalUploadedBytes);
+                const etaSec = currentSpeedMBs > 0 ? Math.ceil((remainingBytes / (1024 * 1024)) / currentSpeedMBs) : 0;
+                const pct = Math.min(99, Math.round((totalUploadedBytes / task.file.size) * 100));
+
+                setUploadTasks(prev =>
+                  prev.map(t => t.id === task.id ? {
+                    ...t,
+                    progress: pct,
+                    currentChunk: i + 1,
+                    totalChunks,
+                    speedMBs: currentSpeedMBs,
+                    etaSeconds: etaSec
+                  } : t)
+                );
+              } else {
+                retries--;
+                await new Promise(r => setTimeout(r, 1000));
+              }
+            } catch (err) {
+              retries--;
+              await new Promise(r => setTimeout(r, 1000));
+            }
+          }
+
+          if (!chunkSuccess) {
+            throw new Error(`Chunk ${i + 1}/${totalChunks} failed after 3 retries.`);
+          }
+        }
+
+        // Step 3: Finalize & Assemble File
+        setUploadTasks(prev =>
+          prev.map(t => t.id === task.id ? { ...t, progress: 99, status: 'uploading' } : t)
+        );
+
+        const completeRes = await fetch(`/api/v1/servers/${serverId}/files/upload/complete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ uploadId })
+        });
+
+        const completeData = await completeRes.json();
+        if (completeData.success) {
           setUploadTasks(prev =>
-            prev.map(t => t.id === task.id ? { ...t, status: 'completed', progress: 100 } : t)
+            prev.map(t => t.id === task.id ? {
+              ...t,
+              status: 'completed',
+              progress: 100,
+              speedMBs: 0,
+              etaSeconds: 0
+            } : t)
           );
+          toast.success(`'${task.file.name}' uploaded and verified successfully.`);
         } else {
-          setUploadTasks(prev =>
-            prev.map(t => t.id === task.id ? { ...t, status: 'error', error: data.error?.message || 'Upload failed' } : t)
-          );
+          throw new Error(completeData.error?.message || 'Assembly verification failed');
         }
       } catch (err: any) {
         setUploadTasks(prev =>
-          prev.map(t => t.id === task.id ? { ...t, status: 'error', error: err.message || 'Upload error' } : t)
+          prev.map(t => t.id === task.id ? {
+            ...t,
+            status: 'error',
+            error: err.message || 'Upload error'
+          } : t)
         );
+        toast.error(`Upload error on '${task.file.name}': ${err.message}`);
       }
     }
 
@@ -1946,6 +2083,111 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Resumable Upload Engine Drawer (5GB - 15GB+ Support) */}
+      {showUploadDrawer && uploadTasks.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] bg-zinc-900/95 backdrop-blur-xl border border-zinc-700 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in slide-in-from-bottom-5">
+          <div className="px-4 py-3 bg-zinc-800/80 border-b border-zinc-700 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4 text-amber-400" />
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Resumable Uploads ({uploadTasks.filter(t => t.status === 'completed').length}/{uploadTasks.length})
+              </h4>
+            </div>
+            <button
+              onClick={() => setShowUploadDrawer(false)}
+              className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-700 transition-colors"
+              title="Close Drawer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto p-3 space-y-2.5">
+            {uploadTasks.map(task => {
+              const sizeFormatted = task.size > 1024 * 1024 * 1024
+                ? `${(task.size / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                : `${(task.size / (1024 * 1024)).toFixed(1)} MB`;
+
+              return (
+                <div key={task.id} className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-white truncate max-w-[220px]" title={task.name}>
+                      {task.name}
+                    </span>
+                    <span className="text-[11px] font-mono text-zinc-400">
+                      {sizeFormatted}
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        task.status === 'completed'
+                          ? 'bg-emerald-500'
+                          : task.status === 'error'
+                          ? 'bg-rose-500'
+                          : task.status === 'paused'
+                          ? 'bg-amber-500'
+                          : 'bg-gradient-to-r from-amber-500 to-cyan-500'
+                      }`}
+                      style={{ width: `${Math.max(2, task.progress)}%` }}
+                    />
+                  </div>
+
+                  {/* Meta Details & Controls */}
+                  <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                    <div className="flex items-center gap-2">
+                      {task.status === 'uploading' && (
+                        <>
+                          <span className="text-cyan-400 font-bold">{task.speedMBs || 0} MB/s</span>
+                          <span>•</span>
+                          <span>ETA {task.etaSeconds ? `${task.etaSeconds}s` : 'calculating...'}</span>
+                        </>
+                      )}
+                      {task.status === 'paused' && (
+                        <span className="text-amber-400 font-bold">PAUSED</span>
+                      )}
+                      {task.status === 'completed' && (
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Verified Complete
+                        </span>
+                      )}
+                      {task.status === 'error' && (
+                        <span className="text-rose-400 truncate max-w-[200px]" title={task.error}>
+                          {task.error || 'Failed'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {task.totalChunks && task.totalChunks > 1 && (
+                        <span className="text-[10px] text-zinc-500">
+                          Chunk {task.currentChunk || 0}/{task.totalChunks}
+                        </span>
+                      )}
+                      {(task.status === 'uploading' || task.status === 'paused') && (
+                        <button
+                          onClick={() => togglePauseTask(task.id)}
+                          className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"
+                          title={task.status === 'paused' ? 'Resume Upload' : 'Pause Upload'}
+                        >
+                          {task.status === 'paused' ? (
+                            <Play className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <Pause className="h-3 w-3 text-amber-400" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

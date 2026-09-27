@@ -169,6 +169,8 @@ export interface ServerResourceLimits {
   maxBackupStorageMB?: number;
   allowScheduledBackups?: boolean;
   databases: number;
+  swapMB?: number;
+  pidsLimit?: number;
 }
 
 export interface BotRuntimeSettings {
@@ -252,6 +254,7 @@ export interface Server {
   status: ServerStatus;
   primaryIp: string;
   primaryPort: number;
+  additionalPorts?: number[];
   location: string;
   software: string; // e.g., 'Paper', 'Purpur', 'Spigot', 'Node.js', 'Python'
   version: string; // e.g. '1.20.4', 'Node 20', 'Python 3.11'
@@ -1072,6 +1075,11 @@ export interface TelemetryPoint {
   tps?: number;
   players?: number;
   status?: string;
+  pidsCount?: number;
+  oomScore?: number;
+  oomDangerLevel?: 'safe' | 'warning' | 'critical';
+  diskReadKBps?: number;
+  diskWriteKBps?: number;
 }
 
 export type AlertTargetType = 'node' | 'server' | 'api' | 'database' | 'storage';

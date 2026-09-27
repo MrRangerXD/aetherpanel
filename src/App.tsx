@@ -67,6 +67,7 @@ import { AdminDiscord } from './pages/admin/AdminDiscord';
 import { AdminMonitoring } from './pages/admin/AdminMonitoring';
 import { AdminLegal } from './pages/admin/AdminLegal';
 import { AdminDiagnostics } from './pages/admin/AdminDiagnostics';
+import { AdminHomepageBuilder } from './pages/admin/AdminHomepageBuilder';
 
 
 function AppContent() {
@@ -373,6 +374,7 @@ function AppContent() {
                     {currentPage === 'admin-ads' && <AdminAds />}
                     {currentPage === 'admin-rewards' && <AdminRewards />}
                     {currentPage === 'admin-discord' && <AdminDiscord />}
+                    {currentPage === 'admin-homepage' && <AdminHomepageBuilder onNavigate={handleNavigate} />}
                     {currentPage === 'admin-appearance' && <AdminAppearance />}
                   </div>
                 </PageTransition>

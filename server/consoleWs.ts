@@ -5,6 +5,7 @@ import { verifyToken } from './auth';
 import { getDb } from './db';
 import { getInstallationId } from './installation';
 import { getServerConsoleLogs, sendServerCommand, onConsoleLog, onServerStatus } from './provider';
+import { MetricsEngine } from './services/metricsEngine';
 
 interface WsClientInfo {
   ws: WebSocket;
@@ -12,6 +13,7 @@ interface WsClientInfo {
   userId: string;
   isAlive: boolean;
   connectedAt: Date;
+  cleanup?: () => void;
 }
 
 const activeClients: Set<WsClientInfo> = new Set();
@@ -112,12 +114,22 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
   });
 
   wss.on('connection', async (ws: WebSocket, req, serverId: string, user: any) => {
+    let unsubMetrics: (() => void) | null = null;
+
+    const cleanupClient = () => {
+      if (unsubMetrics) {
+        try { unsubMetrics(); } catch {}
+        unsubMetrics = null;
+      }
+    };
+
     const clientInfo: WsClientInfo = {
       ws,
       serverId,
       userId: user.id,
       isAlive: true,
-      connectedAt: new Date()
+      connectedAt: new Date(),
+      cleanup: cleanupClient
     };
     activeClients.add(clientInfo);
 
@@ -182,6 +194,35 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
               timestamp: new Date().toISOString()
             }));
           }
+        } else if (payload.type === 'subscribe_metrics') {
+          // Send instant 60s sliding window history from ring buffer
+          const history = MetricsEngine.getRingBuffer(serverId);
+          ws.send(JSON.stringify({
+            type: 'metrics_history',
+            serverId,
+            points: history,
+            timestamp: new Date().toISOString()
+          }));
+
+          // Attach subscription listener if not already attached
+          if (!unsubMetrics) {
+            unsubMetrics = MetricsEngine.subscribe(serverId, (point) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                try {
+                  ws.send(JSON.stringify({
+                    type: 'metrics_tick',
+                    serverId,
+                    point
+                  }));
+                } catch {}
+              }
+            });
+          }
+        } else if (payload.type === 'unsubscribe_metrics') {
+          if (unsubMetrics) {
+            unsubMetrics();
+            unsubMetrics = null;
+          }
         } else if (payload.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
         }
@@ -194,10 +235,12 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
     });
 
     ws.on('close', () => {
+      cleanupClient();
       activeClients.delete(clientInfo);
     });
 
     ws.on('error', () => {
+      cleanupClient();
       activeClients.delete(clientInfo);
     });
   });
@@ -206,6 +249,7 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
   const pingInterval = setInterval(() => {
     activeClients.forEach((client) => {
       if (!client.isAlive) {
+        client.cleanup?.();
         client.ws.terminate();
         activeClients.delete(client);
         return;
@@ -214,6 +258,7 @@ export function setupConsoleWebSocket(httpServer: HttpServer) {
       try {
         client.ws.ping();
       } catch {
+        client.cleanup?.();
         activeClients.delete(client);
       }
     });
@@ -277,6 +322,7 @@ export function closeServerConsoleClients(serverId: string, reason: string = 'Se
   activeClients.forEach((client) => {
     if (client.serverId === serverId) {
       try {
+        client.cleanup?.();
         client.ws.send(JSON.stringify({
           type: 'server_deleted',
           message: reason,
@@ -294,6 +340,7 @@ export function closeUserConsoleClient(serverId: string, userId: string, reason:
   activeClients.forEach((client) => {
     if (client.serverId === serverId && client.userId === userId) {
       try {
+        client.cleanup?.();
         client.ws.send(JSON.stringify({
           type: 'error',
           message: reason,
