@@ -517,15 +517,6 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
     } catch {}
   }
 
-  // If daemon is running but was spawned without a socket, and the agent is now claimed:
-  // Restart the daemon so it launches with the IPC socket enabled!
-  if (activeProc && isAgentSecretClaimed(secretFile) && !activeProc.hasSocket) {
-    console.log(`[PLAYIT] Agent for server ${serverId} is now claimed! Restarting to enable IPC socket...`);
-    togglePlayitAgentInternal(serverId, false).then(() => {
-      togglePlayitAgentInternal(serverId, true).catch(() => {});
-    }).catch(() => {});
-  }
-
   const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 3000) : false;
   const isCrashed = running ? false : Boolean(activeProc?.crashed || (savedConfig.crashed && !running));
 
@@ -687,15 +678,11 @@ function spawnAgentProcess(
     let child: ChildProcess;
     if (useRealBinary) {
       console.log(`[PLAYIT] Spawning real official playit binary for ${id}...`);
-      const isClaimed = isAgentSecretClaimed(secretPath);
-      const args = [
+      child = spawn(realBinPath, [
         '--secret-path', secretPath,
+        '--socket-path', socketPath,
         '-l', logPath
-      ];
-      if (isClaimed) {
-        args.push('--socket-path', socketPath);
-      }
-      child = spawn(realBinPath, args, {
+      ], {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe']
       });
@@ -1238,15 +1225,6 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
       toggleNodePlayitAgentInternal(nodeId, true).catch(() => {});
       running = true;
     } catch {}
-  }
-
-  // If daemon is running but was spawned without a socket, and the agent is now claimed:
-  // Restart the daemon so it launches with the IPC socket enabled!
-  if (active && isAgentSecretClaimed(secretFile) && !active.hasSocket) {
-    console.log(`[PLAYIT] Node Agent for node ${nodeId} is now claimed! Restarting to enable IPC socket...`);
-    toggleNodePlayitAgentInternal(nodeId, false).then(() => {
-      toggleNodePlayitAgentInternal(nodeId, true).catch(() => {});
-    }).catch(() => {});
   }
 
   let socketClaimed = false;
