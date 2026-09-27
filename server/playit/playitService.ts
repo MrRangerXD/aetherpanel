@@ -655,22 +655,38 @@ function spawnAgentProcess(
   onLogUpdate: (metadata: { claimUrl?: string; claimCode?: string }) => void,
   onExit: (code: number | null) => void
 ): ChildProcess | null {
+  const realBinPath = path.join(process.cwd(), 'bin', 'playit');
   const emulatorPath = path.join(process.cwd(), 'server', 'playit', 'playitEmulator.js');
+  const useRealBinary = fs.existsSync(realBinPath);
   
   try {
     if (fs.existsSync(socketPath)) {
       try { fs.unlinkSync(socketPath); } catch {}
     }
 
-    const child = spawn('node', [
-      emulatorPath,
-      '--secret-path', secretPath,
-      '--socket-path', socketPath,
-      '-l', logPath
-    ], {
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    let child: ChildProcess;
+    if (useRealBinary) {
+      console.log(`[PLAYIT] Spawning real official playit binary for ${id}...`);
+      child = spawn(realBinPath, [
+        '--secret-path', secretPath,
+        '--socket-path', socketPath,
+        '-l', logPath
+      ], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } else {
+      console.log(`[PLAYIT] Spawning mock playit emulator for ${id}...`);
+      child = spawn('node', [
+        emulatorPath,
+        '--secret-path', secretPath,
+        '--socket-path', socketPath,
+        '-l', logPath
+      ], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    }
 
     child.stdout?.on('data', (data) => {
       const text = data.toString();
