@@ -1813,7 +1813,7 @@ export const AdminSettings: React.FC = () => {
               <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                 <div className="text-[10px] font-mono uppercase text-zinc-500">Current Version</div>
                 <div className="text-base font-bold text-white font-mono flex items-center gap-2">
-                  <span>{versionInfo?.currentVersion ? (versionInfo.currentVersion.startsWith('v') ? versionInfo.currentVersion : `v${versionInfo.currentVersion}`) : 'v3.5.2'}</span>
+                  <span>{versionInfo?.currentVersion ? (versionInfo.currentVersion.startsWith('v') ? versionInfo.currentVersion : `v${versionInfo.currentVersion}`) : 'v2.4.0'}</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">STABLE</span>
                 </div>
               </div>
@@ -1821,7 +1821,7 @@ export const AdminSettings: React.FC = () => {
               <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
                 <div className="text-[10px] font-mono uppercase text-zinc-500">Latest Upstream</div>
                 <div className="text-base font-bold text-cyan-400 font-mono">
-                  {versionInfo?.latestVersion ? (versionInfo.latestVersion.startsWith('v') ? versionInfo.latestVersion : `v${versionInfo.latestVersion}`) : 'v3.5.2'}
+                  {versionInfo?.latestVersion ? (versionInfo.latestVersion.startsWith('v') ? versionInfo.latestVersion : `v${versionInfo.latestVersion}`) : 'v2.4.0'}
                 </div>
               </div>
 

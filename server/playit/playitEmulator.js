@@ -72,62 +72,80 @@ let hasSecret = false;
 let secretKey = '';
 let registeredWithApi = false;
 
-// Register code with official playit.gg API
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 10,
+  keepAliveMsecs: 1000,
+  timeout: 4000
+});
+
+let isPolling = false;
+
+// Register code and send rapid heartbeats to official playit.gg API
 function registerWithPlayitApi() {
-  const data = JSON.stringify({
+  if (isPolling) return;
+  isPolling = true;
+
+  const payloadObj = {
     code: claimCode,
     agent_type: 'assignable',
-    version: '1.0.10'
-  });
+    version: '1.0.10',
+    client_time: Date.now()
+  };
+  const data = JSON.stringify(payloadObj);
 
-  try {
-    const req = https.request({
-      hostname: 'api.playit.gg',
-      path: '/claim/setup',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 7000
-    }, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('error', () => {});
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(body);
-          if (parsed.status === 'success') {
-            registeredWithApi = true;
-            writeLog(`[Playit API] Registered claim code with playit.gg successfully.`);
-            
-            // Check if secret key was returned directly or if user accepted
-            if (parsed.data && typeof parsed.data === 'object' && (parsed.data.secret_key || parsed.data.UserAccepted)) {
-              const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
-              if (key) {
-                saveSecretKey(key);
+  const endpoints = ['/claim/setup', '/claim/heartbeat', '/claim/ping', '/v1/claim/setup'];
+
+  endpoints.forEach((pathUrl) => {
+    try {
+      const req = https.request({
+        hostname: 'api.playit.gg',
+        path: pathUrl,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'playit-agent/1.0.10',
+          'Accept': 'application/json',
+          'Content-Length': Buffer.byteLength(data)
+        },
+        agent: httpsAgent,
+        timeout: 3500
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('error', () => {});
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed.status === 'success') {
+              registeredWithApi = true;
+              if (parsed.data && typeof parsed.data === 'object') {
+                const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
+                if (key) {
+                  saveSecretKey(key);
+                }
               }
             }
-          }
-        } catch (e) {
-          // Ignore parse errors on raw responses
-        }
+          } catch {}
+        });
       });
-    });
 
-    req.on('timeout', () => {
-      req.destroy();
-    });
+      req.on('timeout', () => {
+        try { req.destroy(); } catch {}
+      });
 
-    req.on('error', (err) => {
-      writeLog(`[Playit API Error] Notice reaching api.playit.gg: ${err.message}`);
-    });
+      req.on('error', (err) => {
+        writeLog(`[Playit API Notice] Heartbeat ping (${pathUrl}): ${err.message || 'Connecting'}`);
+      });
 
-    req.write(data);
-    req.end();
-  } catch (err) {
-    writeLog(`[Playit API Exception] ${err.message}`);
-  }
+      req.write(data);
+      req.end();
+    } catch {}
+  });
+
+  setTimeout(() => {
+    isPolling = false;
+  }, 1000);
 }
 
 function saveSecretKey(key) {
@@ -175,54 +193,55 @@ function checkSecret() {
     } catch {}
   }
 
-  // If we don't have a secret yet, poll the official playit.gg API to see if the user accepted the claim
+  // If we don't have a secret yet, continuously ping and poll the official playit.gg API
   if (!hasSecret) {
-    if (!registeredWithApi) {
-      registerWithPlayitApi();
-    } else {
-      // Poll setup endpoint
-      const data = JSON.stringify({
-        code: claimCode,
-        agent_type: 'assignable',
-        version: '1.0.10'
-      });
+    registerWithPlayitApi();
 
-      try {
-        const req = https.request({
-          hostname: 'api.playit.gg',
-          path: '/claim/setup',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(data)
-          },
-          timeout: 7000
-        }, (res) => {
-          let body = '';
-          res.on('data', chunk => body += chunk);
-          res.on('error', () => {});
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(body);
-              if (parsed.status === 'success' && parsed.data) {
-                if (typeof parsed.data === 'object') {
-                  const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
-                  if (key) {
-                    saveSecretKey(key);
-                  }
+    const data = JSON.stringify({
+      code: claimCode,
+      agent_type: 'assignable',
+      version: '1.0.10',
+      client_time: Date.now()
+    });
+
+    try {
+      const req = https.request({
+        hostname: 'api.playit.gg',
+        path: '/claim/setup',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'playit-agent/1.0.10',
+          'Accept': 'application/json',
+          'Content-Length': Buffer.byteLength(data)
+        },
+        agent: httpsAgent,
+        timeout: 3000
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('error', () => {});
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed.status === 'success' && parsed.data) {
+              if (typeof parsed.data === 'object') {
+                const key = parsed.data.secret_key || parsed.data.UserAccepted?.secret_key;
+                if (key) {
+                  saveSecretKey(key);
                 }
               }
-            } catch {}
-          });
+            }
+          } catch {}
         });
-        req.on('timeout', () => {
-          req.destroy();
-        });
-        req.on('error', () => {});
-        req.write(data);
-        req.end();
-      } catch {}
-    }
+      });
+      req.on('timeout', () => {
+        try { req.destroy(); } catch {}
+      });
+      req.on('error', () => {});
+      req.write(data);
+      req.end();
+    } catch {}
   }
 }
 
@@ -249,9 +268,9 @@ function updateDbNodeSftp(nodeId, host, port) {
   }
 }
 
-// Initial registration and loop
+// Initial registration and rapid loop every 1.5 seconds
 checkSecret();
-const secretInterval = setInterval(checkSecret, 4000);
+const secretInterval = setInterval(checkSecret, 1500);
 
 // Perpetual agent daemon keep-alive ensuring background worker never unexpectedly terminates
 const keepAliveInterval = setInterval(() => {

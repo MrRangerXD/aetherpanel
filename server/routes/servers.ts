@@ -38,6 +38,7 @@ import { removeServerPortRule } from '../services/networkProtectionService';
 import { resolveServerPublicEndpoint } from '../network/endpointResolver';
 import { getNodePlayitStatus } from '../playit/playitService';
 import { resolveServerType } from './serverTypes';
+import { startRemoteDownload, getDownloadJob, listServerDownloadJobs } from '../services/remoteDownloadService';
 
 const router = Router();
 
@@ -892,6 +893,62 @@ router.post('/:id/files/upload', authMiddleware, async (req: AuthenticatedReques
       data: { filenames: uploadedNames }
     });
   });
+});
+
+// POST /api/v1/servers/:id/files/remote-download - Trigger direct URL remote file download
+router.post('/:id/files/remote-download', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.create');
+  if (!access) return;
+
+  const { url, targetFolder, customFilename, autoExtract } = req.body;
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return res.status(400).json({ success: false, error: { code: 'URL_REQUIRED', message: 'Valid file URL is required.' } });
+  }
+
+  try {
+    const job = await startRemoteDownload(
+      req.params.id,
+      url.trim(),
+      targetFolder || '/',
+      customFilename?.trim(),
+      Boolean(autoExtract)
+    );
+
+    await recordServerActivity(
+      req.params.id, req.user!.id, req.user!.username,
+      'FILE_REMOTE_DOWNLOAD', `Initiated remote download from URL: ${url.trim()}`
+    );
+
+    res.json({
+      success: true,
+      message: 'Remote file download initiated.',
+      data: job
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'DOWNLOAD_FAILED', message: err.message || 'Failed to start remote download.' } });
+  }
+});
+
+// GET /api/v1/servers/:id/files/remote-download/jobs - List remote download jobs
+router.get('/:id/files/remote-download/jobs', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.read');
+  if (!access) return;
+
+  const jobs = listServerDownloadJobs(req.params.id);
+  res.json({ success: true, data: jobs });
+});
+
+// GET /api/v1/servers/:id/files/remote-download/jobs/:jobId - Get download job details
+router.get('/:id/files/remote-download/jobs/:jobId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'files.read');
+  if (!access) return;
+
+  const job = getDownloadJob(req.params.jobId);
+  if (!job || job.serverId !== req.params.id) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Download job not found.' } });
+  }
+
+  res.json({ success: true, data: job });
 });
 
 // POST /api/v1/servers/:id/files/rename - Rename file or folder

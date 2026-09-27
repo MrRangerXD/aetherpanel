@@ -366,6 +366,7 @@ router.get('/server/:serverId/live', async (req: Request, res: Response) => {
     diskPercent: totalDiskGB > 0 ? Math.min(100, +((usedDiskGB / totalDiskGB) * 100).toFixed(1)) : 0,
     latencyMs: slpResult.latencyMs || (isRunning ? 6 : 0),
     motd: slpResult.motd,
+    uptimeSeconds: isRunning && (server as any).startedAt ? Math.floor((Date.now() - new Date((server as any).startedAt).getTime()) / 1000) : (server.uptimeSeconds || 0),
     timestamp: new Date().toISOString()
   };
 

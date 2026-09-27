@@ -26,6 +26,7 @@ import minecraftRoutes from './server/routes/minecraft';
 import serverTypesRoutes from './server/routes/serverTypes';
 import runtimesRoutes from './server/routes/runtimes';
 import diagnosticsRoutes from './server/routes/diagnostics';
+import importerRoutes from './server/routes/importer';
 import { startSchedulerLoop } from './server/scheduler';
 import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
@@ -270,6 +271,7 @@ async function startServer() {
   app.use('/api/v1/runtimes', runtimesRoutes);
   app.use('/api/v1/diagnostics', diagnosticsRoutes);
   app.use('/api/v1/public/diagnostics', diagnosticsRoutes);
+  app.use('/api/v1', importerRoutes);
 
   // Catch-all for missing API routes - must return JSON, not HTML
   app.all('/api/*', (req, res) => {

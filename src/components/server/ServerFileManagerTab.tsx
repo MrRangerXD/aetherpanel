@@ -3,7 +3,7 @@ import {
   Folder, FileText, Upload, Plus, Download, Trash2, Edit3, Archive,
   FolderPlus, FilePlus, ChevronRight, CornerLeftUp, CheckSquare,
   Square, AlertTriangle, X, Loader2, ArrowRightLeft, Copy, RefreshCw,
-  FileCode, FileArchive, CheckCircle2, AlertCircle
+  FileCode, FileArchive, CheckCircle2, AlertCircle, Globe, Link, DownloadCloud, Sparkles
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useToast } from '../../lib/ToastContext';
@@ -42,6 +42,13 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const [showUploadDrawer, setShowUploadDrawer] = useState<boolean>(false);
 
   // Modals
+  const [showRemoteDownloadModal, setShowRemoteDownloadModal] = useState<boolean>(false);
+  const [remoteUrl, setRemoteUrl] = useState<string>('');
+  const [remoteFilename, setRemoteFilename] = useState<string>('');
+  const [autoExtractRemote, setAutoExtractRemote] = useState<boolean>(false);
+  const [isStartingRemoteDownload, setIsStartingRemoteDownload] = useState<boolean>(false);
+  const [activeRemoteJob, setActiveRemoteJob] = useState<any | null>(null);
+
   const [showNewFileModal, setShowNewFileModal] = useState<boolean>(false);
   const [newFileName, setNewFileName] = useState<string>('');
   
@@ -234,6 +241,62 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       toast.error(`Create error: ${err.message}`);
     }
   };
+
+  // Start Remote URL Download
+  const handleStartRemoteDownload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!remoteUrl.trim()) return;
+
+    setIsStartingRemoteDownload(true);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/files/remote-download`, {
+        method: 'POST',
+        body: JSON.stringify({
+          url: remoteUrl.trim(),
+          targetFolder: currentPath,
+          customFilename: remoteFilename.trim() || undefined,
+          autoExtract: autoExtractRemote
+        })
+      });
+
+      if (res.success && res.data) {
+        toast.success('Remote download job started!');
+        setActiveRemoteJob(res.data);
+      } else {
+        toast.error(res.error?.message || 'Failed to start remote download.');
+        setIsStartingRemoteDownload(false);
+      }
+    } catch (err: any) {
+      toast.error(`Remote download error: ${err.message}`);
+      setIsStartingRemoteDownload(false);
+    }
+  };
+
+  // Poll Active Remote Download Job
+  useEffect(() => {
+    if (!activeRemoteJob || ['completed', 'error'].includes(activeRemoteJob.status)) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiRequest(`/servers/${serverId}/files/remote-download/jobs/${activeRemoteJob.id}`);
+        if (res.success && res.data) {
+          setActiveRemoteJob(res.data);
+          if (res.data.status === 'completed') {
+            toast.success(`Successfully downloaded '${res.data.filename}'!`);
+            setIsStartingRemoteDownload(false);
+            fetchFiles(currentPath);
+          } else if (res.data.status === 'error') {
+            toast.error(`Download failed: ${res.data.error || 'Unknown error'}`);
+            setIsStartingRemoteDownload(false);
+          }
+        }
+      } catch {
+        // keep polling
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeRemoteJob, serverId, currentPath, fetchFiles, toast]);
 
   // Create Folder
   const handleCreateFolder = async (e: React.FormEvent) => {
@@ -604,6 +667,22 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
           >
             <Upload className="h-3.5 w-3.5" />
             <span>Upload</span>
+          </button>
+
+          <button
+            id="file-manager-remote-download-btn"
+            onClick={() => {
+              setRemoteUrl('');
+              setRemoteFilename('');
+              setAutoExtractRemote(false);
+              setActiveRemoteJob(null);
+              setIsStartingRemoteDownload(false);
+              setShowRemoteDownloadModal(true);
+            }}
+            className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-950/30 transition-all cursor-pointer"
+          >
+            <DownloadCloud className="h-3.5 w-3.5" />
+            <span>📥 Remote URL</span>
           </button>
 
           <button
@@ -1472,6 +1551,229 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Remote File URL Downloader Modal */}
+      {showRemoteDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 max-w-lg w-full space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <DownloadCloud className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Remote File URL Downloader</span>
+                    <Sparkles className="h-4 w-4 text-amber-400" />
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Directly pull files from remote links straight into server storage
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeRemoteJob && activeRemoteJob.status === 'downloading') {
+                    if (!confirm('Download is in progress. Are you sure you want to close?')) return;
+                  }
+                  setShowRemoteDownloadModal(false);
+                }}
+                className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Quick Provider Badges */}
+            <div className="flex flex-wrap gap-1.5">
+              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">Google Drive</span>
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium">MediaFire</span>
+              <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-medium">Discord Attachments</span>
+              <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-medium">GitHub Releases</span>
+              <span className="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-medium">Dropbox</span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">Direct ZIP / JAR URLs</span>
+            </div>
+
+            {!activeRemoteJob || activeRemoteJob.status === 'pending' ? (
+              <form onSubmit={handleStartRemoteDownload} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center justify-between">
+                    <span>Direct File / Shared Link URL</span>
+                    <span className="text-[10px] text-cyan-400 font-mono">http:// or https://</span>
+                  </label>
+                  <div className="relative">
+                    <Link className="h-4 w-4 absolute left-3.5 top-3 text-zinc-500" />
+                    <input
+                      type="url"
+                      value={remoteUrl}
+                      onChange={e => setRemoteUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/... or https://mediafire.com/file/... or .zip URL"
+                      required
+                      autoFocus
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Save Location
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={currentPath}
+                      className="w-full bg-zinc-950/60 border border-zinc-800/80 rounded-xl px-3.5 py-2 text-xs text-amber-400 font-mono cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Custom Filename <span className="text-[10px] text-zinc-500">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={remoteFilename}
+                      onChange={e => setRemoteFilename(e.target.value)}
+                      placeholder="e.g. server_files.zip"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-2xl flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="auto-extract-checkbox"
+                    checked={autoExtractRemote}
+                    onChange={e => setAutoExtractRemote(e.target.checked)}
+                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-cyan-500 focus:ring-cyan-500/20 cursor-pointer"
+                  />
+                  <label htmlFor="auto-extract-checkbox" className="text-xs text-zinc-300 cursor-pointer select-none">
+                    <span className="font-semibold text-white">Auto-extract archive</span>
+                    <span className="block text-[11px] text-zinc-500">Automatically uncompress .zip archives directly into target directory</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRemoteDownloadModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!remoteUrl.trim() || isStartingRemoteDownload}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-cyan-950/30 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isStartingRemoteDownload ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <DownloadCloud className="h-4 w-4" />
+                    )}
+                    <span>{isStartingRemoteDownload ? 'Initiating...' : 'Download to Server'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Download Progress View */
+              <div className="space-y-4 py-2">
+                <div className="p-4 bg-zinc-950 border border-cyan-500/30 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 overflow-hidden pr-2">
+                      {activeRemoteJob.status === 'downloading' || activeRemoteJob.status === 'extracting' ? (
+                        <Loader2 className="h-4 w-4 text-cyan-400 animate-spin shrink-0" />
+                      ) : activeRemoteJob.status === 'completed' ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-bold text-white font-mono truncate">
+                        {activeRemoteJob.filename}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold font-mono text-cyan-400 shrink-0">
+                      {activeRemoteJob.progress}%
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        activeRemoteJob.status === 'completed'
+                          ? 'bg-emerald-500'
+                          : activeRemoteJob.status === 'error'
+                          ? 'bg-rose-500'
+                          : 'bg-gradient-to-r from-cyan-500 to-blue-500'
+                      }`}
+                      style={{ width: `${Math.max(5, activeRemoteJob.progress)}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1">
+                    <span>
+                      {activeRemoteJob.status === 'extracting'
+                        ? 'Uncompressing Archive...'
+                        : activeRemoteJob.status === 'completed'
+                        ? 'Download Finished!'
+                        : activeRemoteJob.status === 'error'
+                        ? `Error: ${activeRemoteJob.error}`
+                        : `${(activeRemoteJob.downloadedBytes / (1024 * 1024)).toFixed(2)} MB ${
+                            activeRemoteJob.totalBytes ? `/ ${(activeRemoteJob.totalBytes / (1024 * 1024)).toFixed(2)} MB` : ''
+                          }`}
+                    </span>
+                    {activeRemoteJob.speedBytesPerSec > 0 && activeRemoteJob.status === 'downloading' && (
+                      <span className="text-cyan-400">
+                        {(activeRemoteJob.speedBytesPerSec / (1024 * 1024)).toFixed(2)} MB/s
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {activeRemoteJob.status === 'completed' && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>File saved to <strong>{currentPath}</strong></span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRemoteDownloadModal(false);
+                      setActiveRemoteJob(null);
+                      setIsStartingRemoteDownload(false);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    {activeRemoteJob.status === 'completed' ? 'Close' : 'Dismiss'}
+                  </button>
+                  {['completed', 'error'].includes(activeRemoteJob.status) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveRemoteJob(null);
+                        setRemoteUrl('');
+                        setRemoteFilename('');
+                        setIsStartingRemoteDownload(false);
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Download Another File
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

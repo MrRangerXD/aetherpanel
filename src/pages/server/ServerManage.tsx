@@ -6,7 +6,7 @@ import {
   Save, PlayCircle, Shield, AlertTriangle, ArrowLeft, Key, ExternalLink,
   Layers, CheckCircle2, ChevronRight, Zap, RefreshCcw, Upload, FileArchive,
   Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare,
-  Globe, Wifi, Sliders, X
+  Globe, Wifi, Sliders, X, FolderInput
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
@@ -17,6 +17,7 @@ import { useBranding } from '../../lib/BrandingContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
 import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
+import { ServerImporterTab } from '../../components/server/ServerImporterTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
 import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
@@ -51,17 +52,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const { enablePlayit } = useBranding();
 
   const [server, setServer] = useState<Server | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers'>(
+  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'importer' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers'>(
     (initialTab as any) || 'console'
   );
 
   useEffect(() => {
-    if (initialTab && ['console', 'monitoring', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity', 'subusers'].includes(initialTab)) {
+    if (initialTab && ['console', 'monitoring', 'importer', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity', 'subusers'].includes(initialTab)) {
       setActiveTab(initialTab as any);
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'console' | 'monitoring' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers') => {
+  const handleTabSelect = (tab: 'console' | 'monitoring' | 'importer' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers') => {
     if (activeTab === 'env' && isEnvDirty) {
       const confirmLeave = window.confirm("You have unsaved environment variable changes. Are you sure you want to leave and discard these changes?");
       if (!confirmLeave) return;
@@ -755,6 +756,41 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     fetchRuntimes();
   }, [serverId]);
 
+  // Continuous 2.5s Live Telemetry Sync for Top Header Cards
+  useEffect(() => {
+    if (!serverId) return;
+    let isMounted = true;
+
+    const syncLiveMetrics = async () => {
+      try {
+        const res = await apiRequest(`/monitoring/server/${serverId}/live`);
+        if (isMounted && res.success && res.data) {
+          const live = res.data;
+          setServer(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              status: live.processStatus || prev.status,
+              cpuUsage: live.cpuPercent !== undefined ? live.cpuPercent : prev.cpuUsage,
+              ramUsageMB: live.usedRamMB !== undefined ? live.usedRamMB : prev.ramUsageMB,
+              diskUsageMB: live.diskUsageMB !== undefined ? live.diskUsageMB : prev.diskUsageMB,
+              playerCount: live.playersOnline !== undefined ? live.playersOnline : prev.playerCount,
+              maxPlayers: live.maxPlayers || prev.maxPlayers,
+              uptimeSeconds: live.uptimeSeconds !== undefined ? live.uptimeSeconds : prev.uptimeSeconds
+            };
+          });
+        }
+      } catch {}
+    };
+
+    syncLiveMetrics();
+    const interval = setInterval(syncLiveMetrics, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [serverId]);
+
   useEffect(() => {
     if (!server) return;
     if (activeTab === 'files') {
@@ -1320,9 +1356,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             <span>CPU Load</span>
             <Cpu className="h-3.5 w-3.5 text-violet-400" />
           </div>
-          <div className="text-sm sm:text-base font-bold text-white font-mono">{isRunning ? `${server.cpuUsage}%` : '0%'}</div>
+          <div className="text-sm sm:text-base font-bold text-white font-mono">{isRunning ? `${server.cpuUsage.toFixed(1)}%` : '0%'}</div>
           <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-violet-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, server.cpuUsage * 2) : 0}%` }} />
+            <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${isRunning ? Math.min(100, server.cpuUsage) : 0}%` }} />
           </div>
         </div>
 
@@ -1378,6 +1414,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   {(hasPerm('console.view') || hasPerm('monitoring.view')) && <option value="monitoring">📊 Monitoring & Metrics</option>}
                   {hasPerm('files.view') && <option value="network">🌐 {enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</option>}
                   {hasPerm('files.view') && <option value="files">📁 File Manager</option>}
+                  {hasPerm('files.create') && <option value="importer">🚀 Server Importer (Migration)</option>}
                   {isMinecraft && hasPerm('plugins.view') && <option value="plugins">🧩 Plugins Manager</option>}
                   {isMinecraft && hasPerm('startup.update') && <option value="properties">⚙️ Server Properties</option>}
                   {isBot && hasPerm('startup.update') && <option value="env">🔑 Environment Variables</option>}
@@ -1438,6 +1475,18 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             >
               <Folder className="h-4 w-4" />
               <span>File Manager</span>
+            </button>
+          )}
+
+          {hasPerm('files.create') && (
+            <button
+              onClick={() => handleTabSelect('importer')}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
+                activeTab === 'importer' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              }`}
+            >
+              <FolderInput className="h-4 w-4" />
+              <span>Server Importer</span>
             </button>
           )}
 
@@ -1599,6 +1648,13 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {activeTab === 'files' && (
         <TabTransition>
           <ServerFileManagerTab serverId={serverId} />
+        </TabTransition>
+      )}
+
+      {/* TAB: SERVER IMPORTER (EXTERNAL MIGRATION TOOL) */}
+      {activeTab === 'importer' && (
+        <TabTransition>
+          <ServerImporterTab server={server} onRefreshServer={fetchServerDetails} />
         </TabTransition>
       )}
 
