@@ -1765,7 +1765,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
                         setRemoteFilename('');
                         setIsStartingRemoteDownload(false);
                       }}
-                      className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold cursor-pointer"
+                      className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition-colors cursor-pointer"
                     >
                       Download Another File
                     </button>

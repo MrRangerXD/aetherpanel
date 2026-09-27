@@ -112,29 +112,23 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
           }}
         />
 
-        {/* Top Header: Category Badge & Status Badge */}
+        {/* Top Header: Status Indicator & Shared label */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className={getBadgeClasses()}
-              style={{ backgroundColor: badgeStyle === 'outline' ? undefined : `${accentColor}CC` }}
-            >
-              {serverType?.category || 'Hosting'}
-            </span>
+          <div className="flex items-center gap-1.5">
             {server.isSubuser && (
-              <span className="px-1.5 py-0.5 rounded bg-violet-600/40 backdrop-blur-md text-[8px] font-bold uppercase tracking-widest text-white shadow-lg border border-violet-400/20">
-                Shared
+              <span className="px-2 py-0.5 rounded-lg bg-violet-600/20 backdrop-blur-md text-[8px] font-mono font-bold uppercase tracking-wider text-violet-300 border border-violet-500/30">
+                Shared Access
               </span>
             )}
           </div>
 
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold border backdrop-blur-md ${
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-mono font-bold border backdrop-blur-md tracking-wider uppercase ${
             isRunning
               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
               : 'bg-zinc-950/80 text-zinc-400 border-white/5'
           }`}>
-            <span className={`h-1 w-1 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
-            <span className="capitalize">{server.status}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+            <span>{server.status}</span>
           </span>
         </div>
 
@@ -157,12 +151,14 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
           )}
 
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors truncate drop-shadow">
+            <div className="text-[9px] font-mono tracking-widest uppercase font-extrabold text-zinc-400/95 mb-0.5 flex items-center gap-1.5">
+              <span style={{ color: accentColor }}>{serverType?.category || 'Hosting'}</span>
+              <span className="text-zinc-600">·</span>
+              <span className="text-zinc-400">{server.software}</span>
+            </div>
+            <h3 className="text-sm font-extrabold text-white group-hover:text-amber-400 transition-colors truncate drop-shadow-md">
               {server.name}
             </h3>
-            <p className="text-[10px] text-zinc-400 font-mono truncate">
-              {server.software} ({server.version})
-            </p>
           </div>
         </div>
       </div>

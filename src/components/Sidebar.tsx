@@ -22,7 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectServer
 }) => {
   const { user, logout } = useAuth();
-  const { accentClasses, accent, setAccent } = useTheme();
+  const { accentClasses, accent, setActiveThemeId } = useTheme();
 
   return (
     <aside id="aether-sidebar" className="hidden lg:flex w-64 flex-none border-r border-white/5 bg-zinc-950/40 backdrop-blur-md flex-col h-full select-none z-20">
@@ -161,7 +161,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(['violet', 'cyan', 'emerald', 'amber', 'rose'] as const).map((color) => (
               <button
                 key={color}
-                onClick={() => setAccent(color)}
+                onClick={() => {
+                  const themeMap: Record<string, string> = {
+                    violet: 'cyberpunk',
+                    cyan: 'midnight',
+                    emerald: 'emerald',
+                    amber: 'golden',
+                    rose: 'crimson'
+                  };
+                  setActiveThemeId(themeMap[color]);
+                }}
                 className={`h-3 w-3 rounded-full border border-white/10 transition-all duration-300 ${accent === color ? 'scale-125 ring-2 ring-white/40 shadow-md shadow-white/10' : 'opacity-60 hover:opacity-100 hover:scale-110'} ${
                   color === 'violet' ? 'bg-violet-500' :
                   color === 'cyan' ? 'bg-cyan-500' :
