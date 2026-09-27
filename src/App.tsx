@@ -379,9 +379,9 @@ function AppContent() {
               </div>
 
               {/* Subtle Panel Footer for Customer & Admin Pages */}
-              <footer className="py-3 px-6 border-t border-zinc-900/80 bg-zinc-950/60 text-[11px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl">
+              <footer className="py-3 px-5 border border-white/5 bg-zinc-950/20 text-[10px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl shadow-inner">
                 <span className="font-medium text-zinc-400">© 2025–2026 {brandName || 'AetherPanel'}</span>
-                <span className="text-[10px] text-zinc-600 hidden sm:inline">Enterprise Distributed Control Plane</span>
+                <span className="text-[9px] text-zinc-600 hidden sm:inline tracking-widest uppercase font-semibold">Enterprise Distributed Control Plane</span>
               </footer>
             </main>
           </div>

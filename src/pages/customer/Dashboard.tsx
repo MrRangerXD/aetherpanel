@@ -105,59 +105,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2">
-          <div className="text-xs font-medium text-zinc-400 flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/5 space-y-2 hover:bg-white/[0.04] transition-all duration-300 shadow-xl shadow-black/30 hover:border-white/10 group">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
             <span>Server Allocations</span>
-            <ServerIcon className="h-4 w-4 text-violet-400" />
+            <ServerIcon className="h-3.5 w-3.5 text-zinc-400 group-hover:text-violet-400 transition-colors" />
           </div>
-          <div className="text-2xl font-extrabold text-white font-mono">
+          <div className="text-2xl font-extrabold text-white font-mono tracking-tight tabular-nums">
             {allocations?.unlimited ? (
               <span className="text-xl text-violet-400 font-sans font-bold">Unlimited</span>
             ) : (
               <span>{allocations ? `${allocations.used} / ${allocations.limit}` : `${ownedServers.length} / ${user?.serverLimit || 1}`}</span>
             )}
           </div>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[10px] font-mono text-zinc-500">
             {allocations?.unlimited
               ? `${ownedServers.length} active instances • No limit`
               : `${allocations?.remaining ?? 0} available • ${ownedServers.length} used`}
           </p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2">
-          <div className="text-xs font-medium text-zinc-400 flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/5 space-y-2 hover:bg-white/[0.04] transition-all duration-300 shadow-xl shadow-black/30 hover:border-white/10 group">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
             <span>Memory Allocated</span>
-            <Cpu className="h-4 w-4 text-cyan-400" />
+            <Cpu className="h-3.5 w-3.5 text-zinc-400 group-hover:text-cyan-400 transition-colors" />
           </div>
-          <div className="text-2xl font-extrabold text-white font-mono">
+          <div className="text-2xl font-extrabold text-white font-mono tracking-tight tabular-nums">
             {formatMemory(totalRamMB)}
           </div>
-          <p className="text-[11px] text-zinc-500">Across {servers.length} container instances</p>
+          <p className="text-[10px] font-mono text-zinc-500">Across {servers.length} container instances</p>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2">
-          <div className="text-xs font-medium text-zinc-400 flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/5 space-y-2 hover:bg-white/[0.04] transition-all duration-300 shadow-xl shadow-black/30 hover:border-white/10 group">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
             <span>Account Credits</span>
-            <span className="text-emerald-400 text-xs font-bold">$</span>
+            <span className="text-zinc-500 group-hover:text-emerald-400 text-xs font-mono transition-colors font-bold">$</span>
           </div>
-          <div className="text-2xl font-extrabold text-emerald-400 font-mono">
+          <div className="text-2xl font-extrabold text-emerald-400 font-mono tracking-tight tabular-nums">
             ${user?.credits?.toFixed(2) || '0.00'}
           </div>
-          <button onClick={() => onNavigate('billing')} className="text-[11px] text-violet-400 hover:underline">
+          <button onClick={() => onNavigate('billing')} className="text-[10px] font-mono font-bold text-violet-400 hover:text-violet-300 transition-colors uppercase tracking-wider cursor-pointer">
             + Add Credits
           </button>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2">
-          <div className="text-xs font-medium text-zinc-400 flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/5 space-y-2 hover:bg-white/[0.04] transition-all duration-300 shadow-xl shadow-black/30 hover:border-white/10 group">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
             <span>Cluster Status</span>
-            <Activity className="h-4 w-4 text-emerald-400" />
+            <Activity className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-400 transition-colors" />
           </div>
           <div className="text-2xl font-extrabold text-white flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse inline-block" />
-            <span className="text-lg">Optimal</span>
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+            <span className="text-base font-bold">Optimal</span>
           </div>
-          <p className="text-[11px] text-zinc-500">0 pending maintenance events</p>
+          <p className="text-[10px] font-mono text-zinc-500">0 pending maintenance events</p>
         </div>
 
       </div>

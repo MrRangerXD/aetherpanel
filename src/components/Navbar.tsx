@@ -73,57 +73,57 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isAdminRoute = currentPage.startsWith('admin-');
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-zinc-950/40 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8">
         
         {/* Logo */}
         <AetherLogo onClick={() => handleNav('home')} />
 
         {/* Navigation links (Desktop) */}
-        <nav className="hidden lg:flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => handleNav('home')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 'home' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'home' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Home
           </button>
           <button
             type="button"
             onClick={() => handleNav('minecraft')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 'minecraft' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'minecraft' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Minecraft
           </button>
           <button
             type="button"
             onClick={() => handleNav('bot')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 'bot' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'bot' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Discord Bots
           </button>
           <button
             type="button"
             onClick={() => handleNav('pricing')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 'pricing' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'pricing' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Pricing
           </button>
           <button
             type="button"
             onClick={() => handleNav('status')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${currentPage === 'status' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${currentPage === 'status' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
             </span>
             Status
           </button>
           <button
             type="button"
             onClick={() => handleNav('docs')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 'docs' ? 'text-white bg-zinc-800/60' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'}`}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${currentPage === 'docs' ? 'text-white bg-white/[0.06] border border-white/5 shadow-inner' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'}`}
           >
             Docs
           </button>
@@ -139,13 +139,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.stopPropagation();
                 onOpenSearch();
               }}
-              className="hidden sm:flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-xl text-xs text-zinc-400 bg-zinc-900/80 hover:bg-zinc-800/80 hover:text-white border border-zinc-800 transition focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl text-xs text-zinc-400 bg-zinc-950/60 hover:bg-white/[0.04] hover:text-white border border-white/5 transition-all focus:outline-none"
               title="Search everything (Ctrl+K)"
               aria-label="Search command palette"
             >
-              <Search className="h-4 w-4 text-zinc-400" />
-              <span className="hidden md:inline">Search</span>
-              <kbd className="hidden md:inline-flex px-1.5 py-0.5 text-[10px] font-mono text-zinc-500 bg-zinc-950 rounded border border-zinc-800">
+              <Search className="h-3.5 w-3.5 text-zinc-500" />
+              <span className="hidden md:inline font-medium">Search</span>
+              <kbd className="hidden md:inline-flex px-1.5 py-0.5 text-[9px] font-mono text-zinc-500 bg-zinc-950/80 rounded border border-white/5">
                 ⌘K
               </kbd>
             </button>

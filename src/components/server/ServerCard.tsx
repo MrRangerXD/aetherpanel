@@ -78,30 +78,12 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
 
   // Preset Card Classes
   const getCardClasses = () => {
-    if (cardStyle === 'glass') {
-      return 'bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-zinc-700 shadow-xl';
-    }
-    if (cardStyle === 'bordered') {
-      return 'bg-zinc-900 border-2 hover:shadow-2xl';
-    }
-    if (cardStyle === 'compact') {
-      return 'bg-zinc-900 border border-zinc-800 hover:border-zinc-700 shadow-md';
-    }
-    return 'bg-zinc-900 border border-zinc-800 hover:border-zinc-700 shadow-lg';
+    return 'bg-white/[0.01] backdrop-blur-md border border-white/5 shadow-xl hover:shadow-black/50 hover:border-white/10 hover:bg-white/[0.03]';
   };
 
   // Category Badge Style
   const getBadgeClasses = () => {
-    if (badgeStyle === 'solid') {
-      return 'px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-white shadow-md';
-    }
-    if (badgeStyle === 'outline') {
-      return 'px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider text-white border border-white/30 backdrop-blur-md';
-    }
-    if (badgeStyle === 'minimal') {
-      return 'px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider text-zinc-300 bg-zinc-900/80';
-    }
-    return 'px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider text-white shadow-md backdrop-blur-md';
+    return 'px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white shadow-md backdrop-blur-md';
   };
 
   return (
@@ -123,9 +105,9 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
         <div
           className="absolute inset-0 transition-opacity"
           style={{
-            backgroundColor: `rgba(9, 9, 11, ${overlayOpacity})`,
+            backgroundColor: `rgba(4, 4, 6, ${overlayOpacity})`,
             backgroundImage: theme.gradientEnabled !== false
-              ? `linear-gradient(to bottom, rgba(9,9,11,0.1), rgba(9,9,11,0.95))`
+              ? `linear-gradient(to bottom, rgba(4,4,6,0.1), rgba(4,4,6,0.98))`
               : 'none'
           }}
         />
@@ -135,23 +117,23 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
           <div className="flex items-center gap-2">
             <span
               className={getBadgeClasses()}
-              style={{ backgroundColor: badgeStyle === 'outline' ? undefined : `${accentColor}DD` }}
+              style={{ backgroundColor: badgeStyle === 'outline' ? undefined : `${accentColor}CC` }}
             >
               {serverType?.category || 'Hosting'}
             </span>
             {server.isSubuser && (
-              <span className="px-2 py-1 rounded-md bg-violet-600/80 backdrop-blur-md text-[9px] font-bold uppercase tracking-widest text-white shadow-lg border border-violet-400/30">
+              <span className="px-1.5 py-0.5 rounded bg-violet-600/40 backdrop-blur-md text-[8px] font-bold uppercase tracking-widest text-white shadow-lg border border-violet-400/20">
                 Shared
               </span>
             )}
           </div>
 
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border backdrop-blur-md ${
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold border backdrop-blur-md ${
             isRunning
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-              : 'bg-zinc-900/80 text-zinc-400 border-zinc-700'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : 'bg-zinc-950/80 text-zinc-400 border-white/5'
           }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+            <span className={`h-1 w-1 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
             <span className="capitalize">{server.status}</span>
           </span>
         </div>
@@ -163,11 +145,11 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
               src={theme.iconUrl}
               alt={serverType?.name || 'runtime'}
               onError={() => setIconError(true)}
-              className="h-10 w-10 rounded-xl object-contain bg-zinc-900/90 p-1 border border-zinc-700/60 shadow-lg shrink-0"
+              className="h-10 w-10 rounded-xl object-contain bg-zinc-950/90 p-1.5 border border-white/5 shadow-lg shrink-0"
             />
           ) : (
             <div
-              className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shrink-0"
+              className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shadow-lg shrink-0"
               style={{ backgroundColor: accentColor }}
             >
               {(serverType?.name || server.software || 'MC').substring(0, 2).toUpperCase()}
@@ -175,10 +157,10 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
           )}
 
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors truncate drop-shadow">
+            <h3 className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors truncate drop-shadow">
               {server.name}
             </h3>
-            <p className="text-[11px] text-zinc-300 font-mono truncate">
+            <p className="text-[10px] text-zinc-400 font-mono truncate">
               {server.software} ({server.version})
             </p>
           </div>
@@ -186,51 +168,51 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
       </div>
 
       {/* Body Section: Endpoint IP & Live Telemetry */}
-      <div className="p-4 space-y-3 bg-zinc-900/90 flex-1 flex flex-col justify-between">
+      <div className="p-4 space-y-3 bg-transparent flex-1 flex flex-col justify-between">
         {/* Endpoint & Region Info */}
         <div className="flex items-center justify-between text-xs gap-2">
           <button
             onClick={handleCopyIp}
             title="Click to copy endpoint IP"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800/80 font-mono text-[11px] text-zinc-300 hover:text-white hover:border-zinc-700 active:bg-zinc-800 transition-colors truncate max-w-[70%]"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950/60 border border-white/5 font-mono text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-950 transition-all truncate max-w-[70%] cursor-pointer"
           >
             <span className="truncate">{fullIp}</span>
-            {copied ? <Check className="h-3 w-3 text-emerald-400 shrink-0" /> : <Copy className="h-3 w-3 text-zinc-500 shrink-0" />}
+            {copied ? <Check className="h-3 w-3 text-emerald-400 shrink-0" /> : <Copy className="h-3 w-3 text-zinc-600 shrink-0" />}
           </button>
 
-          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-950 px-2 py-1 rounded-lg border border-zinc-800 shrink-0">
+          <span className="text-[9px] font-mono tracking-wider text-zinc-500 bg-zinc-950/40 px-2 py-1 rounded-lg border border-white/5 shrink-0 uppercase font-semibold">
             {server.location || 'us-west'}
           </span>
         </div>
 
         {/* Real-time Hardware Usage Grid */}
-        <div className="grid grid-cols-3 gap-2 bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/80 text-[11px] font-mono">
+        <div className="grid grid-cols-3 gap-2 bg-zinc-950/30 p-2.5 rounded-xl border border-white/5 text-[10px] font-mono">
           <div>
-            <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-              <Cpu className="h-3 w-3 text-amber-400" /> CPU
+            <div className="text-[9px] text-zinc-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
+              <Cpu className="h-3 w-3 text-amber-500/80" /> CPU
             </div>
-            <div className="text-white font-bold">{formatCpu()}</div>
+            <div className="text-zinc-200 font-bold tabular-nums mt-0.5">{formatCpu()}</div>
           </div>
 
           <div>
-            <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-              <Activity className="h-3 w-3 text-cyan-400" /> RAM
+            <div className="text-[9px] text-zinc-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
+              <Activity className="h-3 w-3 text-cyan-500/80" /> RAM
             </div>
-            <div className="text-white font-bold">{formatRam()}</div>
+            <div className="text-zinc-200 font-bold tabular-nums mt-0.5">{formatRam()}</div>
           </div>
 
           <div>
-            <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-              <HardDrive className="h-3 w-3 text-emerald-400" /> Disk
+            <div className="text-[9px] text-zinc-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
+              <HardDrive className="h-3 w-3 text-emerald-500/80" /> Disk
             </div>
-            <div className="text-white font-bold">{formatDisk()}</div>
+            <div className="text-zinc-200 font-bold tabular-nums mt-0.5">{formatDisk()}</div>
           </div>
         </div>
 
         {/* Quick Power Actions Bar */}
-        <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+        <div className="flex items-center justify-between pt-2.5 border-t border-white/5 text-xs">
           <div className="flex flex-col">
-            <span className="text-[10px] text-zinc-500 font-mono">
+            <span className="text-[9px] text-zinc-500 font-mono tracking-wide">
               ID: {server.id}
             </span>
             {server.isSubuser && server.owner && (

@@ -57,6 +57,52 @@
   .pr-safe {
     padding-right: max(1rem, env(safe-area-inset-right));
   }
+
+  /* Premium Futuristic Glassmorphic and Micro-interaction Utilities */
+  .glass-panel {
+    background: rgba(15, 15, 22, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  .glass-card-interactive {
+    background: rgba(18, 18, 26, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-card-interactive:hover {
+    background: rgba(24, 24, 35, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.5);
+    transform: translateY(-2px);
+  }
+
+  .subtle-border {
+    border-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .glow-cyan-subtle {
+    box-shadow: 0 0 30px rgba(6, 182, 212, 0.06);
+  }
+
+  .glow-amber-subtle {
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.06);
+  }
+
+  /* Fine-grained uppercase typography */
+  .premium-label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(161, 161, 170, 0.7);
+  }
 }
 
 /* Custom sleek dark scrollbar */

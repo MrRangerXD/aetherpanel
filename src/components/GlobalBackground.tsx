@@ -24,7 +24,14 @@ export const GlobalBackground: React.FC = () => {
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none"
     >
       {/* Base Canvas Layer */}
-      <div className="absolute inset-0 bg-[#09090b]" />
+      <div className="absolute inset-0 bg-[#040406] overflow-hidden">
+        {/* Floating Ambient Glow 1 (Cyan/Blue) */}
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
+        {/* Floating Ambient Glow 2 (Violet/Indigo) */}
+        <div className="absolute bottom-[-15%] right-[-10%] w-[70%] h-[70%] rounded-full bg-violet-600/10 blur-[160px] pointer-events-none animate-pulse duration-[10000ms]" />
+        {/* Floating Ambient Glow 3 (Amber Center Muted) */}
+        <div className="absolute top-[30%] right-[25%] w-[40%] h-[40%] rounded-full bg-amber-500/5 blur-[140px] pointer-events-none" />
+      </div>
 
       {/* Wallpaper Image / Animated GIF Element - Native img preserves GIF animation frames */}
       {wallpaperUrl && !hasError && (
