@@ -777,10 +777,12 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
         },
         (code) => {
           const procInfo = activePlayitProcesses.get(serverId);
-          if (procInfo) {
-            procInfo.crashed = (code !== 0 && code !== null);
-            procInfo.lastExitCode = code;
+          if (!procInfo || procInfo.pid !== child.pid) {
+            // Process was stopped or replaced, do not auto-restart
+            return;
           }
+          procInfo.crashed = (code !== 0 && code !== null);
+          procInfo.lastExitCode = code;
           activePlayitProcesses.delete(serverId);
           appendConsoleLog(serverId, `[Playit/Agent]: Process exited with code ${code}.`);
 
@@ -1333,9 +1335,11 @@ async function toggleNodePlayitAgentInternal(nodeId: string, enable: boolean): P
         },
         (code) => {
           const procInfo = activePlayitProcesses.get(activeKey);
-          if (procInfo) {
-            procInfo.crashed = (code !== 0 && code !== null);
+          if (!procInfo || procInfo.pid !== child.pid) {
+            // Process was stopped or replaced, do not auto-restart
+            return;
           }
+          procInfo.crashed = (code !== 0 && code !== null);
           activePlayitProcesses.delete(activeKey);
           
           if (enable && retries < 5 && code !== 0) {
