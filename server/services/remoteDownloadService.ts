@@ -51,7 +51,28 @@ export async function resolveDirectDownloadUrl(rawUrl: string): Promise<{ direct
     }
 
     if (fileId) {
-      directUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
+      const baseDirect = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      try {
+        const response = await fetch(baseDirect, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          const html = await response.text();
+          const confirmMatch = html.match(/confirm=([a-zA-Z0-9_-]+)/i) || html.match(/name="confirm"\s+value="([^"]+)"/i);
+          if (confirmMatch && confirmMatch[1]) {
+            directUrl = `${baseDirect}&confirm=${confirmMatch[1]}`;
+          } else {
+            directUrl = `${baseDirect}&confirm=t`; // Fallback
+          }
+        } else {
+          directUrl = baseDirect;
+        }
+      } catch {
+        directUrl = `${baseDirect}&confirm=t`;
+      }
     }
   }
 
@@ -181,18 +202,13 @@ async function executeDownload(job: RemoteDownloadJob) {
     throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
   }
 
-  // Check if response is HTML confirmation (Google Drive confirm)
   const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('text/html') && job.originalUrl.includes('drive.google.com')) {
+  if (contentType.includes('text/html')) {
     const html = await response.text();
-    const confirmMatch = html.match(/confirm=([a-zA-Z0-9_-]+)/i) || html.match(/name="confirm"\s+value="([^"]+)"/i);
-    if (confirmMatch && confirmMatch[1]) {
-      const confirmToken = confirmMatch[1];
-      const retryUrl = `${directUrl}&confirm=${confirmToken}`;
-      const retryRes = await fetch(retryUrl, { headers: reqHeaders, redirect: 'follow' });
-      if (retryRes.ok) {
-        return handleStreamResponse(job, retryRes, filenameFromUrl);
-      }
+    if (html.includes('Google Drive') && (html.includes('unauthorized') || html.includes('not found') || html.includes('permission') || html.includes('Sign in'))) {
+      throw new Error('Google Drive file is private or access restricted. Please ensure the link is shared with "Anyone with the link" viewer permission.');
+    } else {
+      throw new Error('The URL did not return a valid downloadable stream (returned HTML instead).');
     }
   }
 
@@ -229,10 +245,9 @@ async function handleStreamResponse(job: RemoteDownloadJob, response: Response, 
   job.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
 
   const fileStream = fs.createWriteStream(tempPath);
-  const reader = response.body?.getReader();
 
-  if (!reader) {
-    throw new Error('Response body stream is unreadable.');
+  if (!response.body) {
+    throw new Error('Response body stream is empty or unreadable.');
   }
 
   let startTime = Date.now();
@@ -240,12 +255,9 @@ async function handleStreamResponse(job: RemoteDownloadJob, response: Response, 
   let lastBytes = 0;
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      fileStream.write(value);
-      job.downloadedBytes += value.length;
+    for await (const chunk of response.body as any) {
+      fileStream.write(chunk);
+      job.downloadedBytes += chunk.length;
 
       const now = Date.now();
       if (job.totalBytes > 0) {
