@@ -11,7 +11,7 @@ import {
   DiscordAccount, DiscordBotSettings, ServerDiscordLink, DiscordAuditLog,
   MarketplaceItem, StatusComponent, Incident, ScheduledMaintenance, AlertRule,
   AlertIncident, TelemetryPoint, DayUptime, ApiKey, ApiAuditLog, WebhookSubscription, LegalPage,
-  ServerType, ServerTypeTheme, ServerSubuser, CryptoInvoice
+  ServerType, ServerTypeTheme, ServerSubuser, CryptoInvoice, FaqItem
 } from '../src/types';
 import { migrateUserAllocations } from './services/allocationService';
 
@@ -63,6 +63,7 @@ export interface DatabaseSchema {
   legalPages: LegalPage[];
   subusers: ServerSubuser[];
   cryptoInvoices?: CryptoInvoice[];
+  faqs: FaqItem[];
 }
 
 
@@ -667,6 +668,45 @@ You may NOT use AetherPanel infrastructure for:
   }
 ];
 
+export const defaultFaqs: FaqItem[] = [
+  {
+    id: 'faq_1',
+    question: 'AetherPanel server specifications kya hain?',
+    answer: 'AetherPanel premium compute nodes high-frequency AMD Ryzen 9 7950X/9950X processors, fast enterprise NVMe storage, and fully isolated memory & CPU limits utilize karte hain.',
+    sortOrder: 1,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_2',
+    question: 'Minecraft/Bot server deploy hone me kitna time lagta hai?',
+    answer: 'Deployment instantaneous hai! Template aur location select karne ke bad, aapka custom isolated container instance under 30 seconds ke andar active aur running ho jata hai.',
+    sortOrder: 2,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_3',
+    question: 'Kya automatic backup snapshots supported hain?',
+    answer: 'Haan, absolute secure backups systems live hain! Server tab me Backups section se aap manually snapshots generate kar sakte hain aur automation scheduler configure kar sakte hain.',
+    sortOrder: 3,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_4',
+    question: 'Direct link ya other panels se files migrate kaise karein?',
+    answer: 'Humare premium "Server Importer & Migration Engine" tab se direct URL download link (Google Drive, MediaFire, Discord attachments, zip/tar links) ya regular SFTP migration configure karke data easily migrate ho jata hai.',
+    sortOrder: 4,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 export const defaultServerTypes: ServerType[] = [
   {
     id: 'st_minecraft_java',
@@ -861,7 +901,8 @@ export function getDbSync(): DatabaseSchema {
     apiAuditLogs: [],
     webhooks: [],
     legalPages: [],
-    subusers: []
+    subusers: [],
+    faqs: []
   };
 }
 
@@ -1004,6 +1045,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         }
         if (!dbCache.subusers) {
           dbCache.subusers = [];
+        }
+        if (!dbCache.faqs || dbCache.faqs.length === 0) {
+          dbCache.faqs = defaultFaqs;
         }
         if (!dbCache.ads) {
           dbCache.ads = [];
@@ -1854,7 +1898,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     apiAuditLogs: [],
     webhooks: [],
     legalPages: defaultLegalPages,
-    subusers: []
+    subusers: [],
+    faqs: defaultFaqs
   };
 }
 

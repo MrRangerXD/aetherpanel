@@ -1362,3 +1362,13 @@ export interface UiDiagnosticStats {
   lastIncidentAt: string | null;
   affectedComponents: string[];
 }
+
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Palette, Type, Check, RefreshCw, Sparkles, Sliders, Eye, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, HelpCircle, Trash2, Plus, Edit, X } from 'lucide-react';
 import { useTheme } from '../../lib/ThemeContext';
 import { useAnimation } from '../../lib/AnimationContext';
 import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
@@ -43,6 +43,16 @@ export const AdminAppearance: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // FAQ Management State
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [faqFormId, setFaqFormId] = useState<string | null>(null);
+  const [faqQuestion, setFaqQuestion] = useState('');
+  const [faqAnswer, setFaqAnswer] = useState('');
+  const [faqSortOrder, setFaqSortOrder] = useState<number>(1);
+  const [faqIsActive, setFaqIsActive] = useState(true);
+  const [showFaqForm, setShowFaqForm] = useState(false);
+  const [faqLoading, setFaqLoading] = useState(false);
+
   useEffect(() => {
     const loadSettings = async () => {
       const res = await apiRequest('/admin/theme-settings');
@@ -75,9 +85,77 @@ export const AdminAppearance: React.FC = () => {
       }
     };
 
+    const loadFaqs = async () => {
+      try {
+        const res = await apiRequest('/admin/faqs');
+        if (res.success && Array.isArray(res.data)) {
+          setFaqs(res.data);
+        }
+      } catch {}
+    };
+
     loadSettings();
     loadAnimations();
+    loadFaqs();
   }, []);
+
+  const handleSaveFaq = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqQuestion.trim() || !faqAnswer.trim()) return;
+
+    setFaqLoading(true);
+    const payload = {
+      id: faqFormId || undefined,
+      question: faqQuestion.trim(),
+      answer: faqAnswer.trim(),
+      sortOrder: Number(faqSortOrder) || 1,
+      isActive: faqIsActive
+    };
+
+    const res = await apiRequest('/admin/faqs', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (res.success && res.data) {
+      const loadRes = await apiRequest('/admin/faqs');
+      if (loadRes.success && Array.isArray(loadRes.data)) {
+        setFaqs(loadRes.data);
+      }
+      setShowFaqForm(false);
+      resetFaqForm();
+    } else {
+      alert(res.error?.message || 'Failed to save FAQ.');
+    }
+    setFaqLoading(false);
+  };
+
+  const handleEditFaqClick = (faq: any) => {
+    setFaqFormId(faq.id);
+    setFaqQuestion(faq.question);
+    setFaqAnswer(faq.answer);
+    setFaqSortOrder(faq.sortOrder);
+    setFaqIsActive(faq.isActive);
+    setShowFaqForm(true);
+  };
+
+  const handleDeleteFaq = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this FAQ?')) return;
+    const res = await apiRequest(`/admin/faqs/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      setFaqs(prev => prev.filter(f => f.id !== id));
+    } else {
+      alert(res.error?.message || 'Failed to delete FAQ.');
+    }
+  };
+
+  const resetFaqForm = () => {
+    setFaqFormId(null);
+    setFaqQuestion('');
+    setFaqAnswer('');
+    setFaqSortOrder(faqs.length + 1);
+    setFaqIsActive(true);
+  };
 
   const handleSaveTheme = async () => {
     setLoading(true);
@@ -592,6 +670,187 @@ export const AdminAppearance: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* FAQ Management Section */}
+      <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="h-5 w-5 text-amber-400" />
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Homepage Frequently Asked Questions (FAQ)
+              </h3>
+              <p className="text-[11px] text-zinc-400 mt-0.5">Manage the FAQs list displayed at the bottom of the public homepage.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              resetFaqForm();
+              setShowFaqForm(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add FAQ</span>
+          </button>
+        </div>
+
+        {/* FAQ Add/Edit Inline Form */}
+        {showFaqForm && (
+          <form onSubmit={handleSaveFaq} className="p-5 rounded-xl border border-zinc-800 bg-zinc-950/80 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">
+                {faqFormId ? 'Edit FAQ Item' : 'Create FAQ Item'}
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFaqForm(false);
+                  resetFaqForm();
+                }}
+                className="text-zinc-500 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="sm:col-span-3 space-y-1.5">
+                <label className="text-[11px] font-medium text-zinc-300">Question</label>
+                <input
+                  type="text"
+                  required
+                  value={faqQuestion}
+                  onChange={e => setFaqQuestion(e.target.value)}
+                  placeholder="e.g. AetherPanel server specifications kya hain?"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium text-zinc-300">Sort Order</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={faqSortOrder}
+                  onChange={e => setFaqSortOrder(Number(e.target.value) || 1)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-zinc-300">Detailed Answer</label>
+              <textarea
+                required
+                rows={3}
+                value={faqAnswer}
+                onChange={e => setFaqAnswer(e.target.value)}
+                placeholder="Provide the detailed explanation here..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="faq-active-toggle"
+                  checked={faqIsActive}
+                  onChange={e => setFaqIsActive(e.target.checked)}
+                  className="h-4 w-4 rounded bg-zinc-950 border-zinc-850 text-amber-500 focus:ring-amber-500/20 cursor-pointer"
+                />
+                <label htmlFor="faq-active-toggle" className="text-xs text-zinc-300 font-semibold cursor-pointer select-none">
+                  Active (Show on Homepage)
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFaqForm(false);
+                    resetFaqForm();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={faqLoading}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {faqLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                  <span>Save FAQ</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* FAQs List Table */}
+        {faqs.length === 0 ? (
+          <div className="p-8 text-center text-xs text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+            No FAQs added yet. Create your first FAQ to show it on the homepage.
+          </div>
+        ) : (
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/30">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-zinc-950 border-b border-zinc-800 text-[10px] uppercase font-mono tracking-widest text-zinc-500">
+                  <th className="py-2.5 px-4 font-bold w-16 text-center">Order</th>
+                  <th className="py-2.5 px-4 font-bold">Question & Answer</th>
+                  <th className="py-2.5 px-4 font-bold w-24 text-center">Status</th>
+                  <th className="py-2.5 px-4 font-bold w-28 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60 font-medium">
+                {faqs.map((faq) => (
+                  <tr key={faq.id} className="hover:bg-zinc-900/30 transition-colors">
+                    <td className="py-3.5 px-4 text-center text-zinc-450 font-mono text-[11px]">{faq.sortOrder}</td>
+                    <td className="py-3.5 px-4 space-y-1">
+                      <p className="font-bold text-zinc-200">{faq.question}</p>
+                      <p className="text-[11px] text-zinc-500 line-clamp-1">{faq.answer}</p>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                        faq.isActive
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                      }`}>
+                        {faq.isActive ? 'Active' : 'Muted'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleEditFaqClick(faq)}
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                          title="Edit FAQ"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFaq(faq.id)}
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-450 transition-all cursor-pointer"
+                          title="Delete FAQ"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

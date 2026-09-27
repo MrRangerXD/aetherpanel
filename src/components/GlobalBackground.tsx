@@ -24,7 +24,15 @@ export const GlobalBackground: React.FC = () => {
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none"
     >
       {/* Base Canvas Layer */}
-      <div className="absolute inset-0 bg-[#040406] overflow-hidden">
+      <div className="absolute inset-0 bg-[#020204] overflow-hidden">
+        {/* Futuristic Technical Grid overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.015]"
+          style={{
+            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px)`,
+            backgroundSize: '24px 24px'
+          }}
+        />
         {/* Floating Ambient Glow 1 (Cyan/Blue) */}
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
         {/* Floating Ambient Glow 2 (Violet/Indigo) */}

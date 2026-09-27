@@ -2911,4 +2911,70 @@ router.post('/network-protection/reconcile', async (req: AuthenticatedRequest, r
   }
 });
 
+// GET /api/v1/admin/faqs
+router.get('/faqs', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const faqs = db.faqs || [];
+  res.json({ success: true, data: faqs.sort((a, b) => a.sortOrder - b.sortOrder) });
+});
+
+// POST /api/v1/admin/faqs
+router.post('/faqs', async (req: AuthenticatedRequest, res: Response) => {
+  const { id, question, answer, sortOrder, isActive } = req.body;
+  if (!question || !answer) {
+    return res.status(400).json({ success: false, error: { code: 'MISSING_FIELDS', message: 'Question and answer are required.' } });
+  }
+
+  const db = await getDb();
+  if (!db.faqs) db.faqs = [];
+
+  let faqItem;
+  if (id) {
+    const existingIdx = db.faqs.findIndex(f => f.id === id);
+    if (existingIdx !== -1) {
+      faqItem = {
+        ...db.faqs[existingIdx],
+        question: question.trim(),
+        answer: answer.trim(),
+        sortOrder: typeof sortOrder === 'number' ? sortOrder : db.faqs[existingIdx].sortOrder,
+        isActive: isActive !== undefined ? !!isActive : db.faqs[existingIdx].isActive,
+        updatedAt: new Date().toISOString()
+      };
+      db.faqs[existingIdx] = faqItem;
+    } else {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'FAQ not found.' } });
+    }
+  } else {
+    faqItem = {
+      id: `faq_${Date.now()}`,
+      question: question.trim(),
+      answer: answer.trim(),
+      sortOrder: typeof sortOrder === 'number' ? sortOrder : db.faqs.length + 1,
+      isActive: isActive !== undefined ? !!isActive : true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.faqs.push(faqItem);
+  }
+
+  saveDbSync();
+  res.json({ success: true, data: faqItem, message: id ? 'FAQ updated successfully' : 'FAQ created successfully' });
+});
+
+// DELETE /api/v1/admin/faqs/:id
+router.delete('/faqs/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  const db = await getDb();
+  if (!db.faqs) db.faqs = [];
+
+  const existingIdx = db.faqs.findIndex(f => f.id === id);
+  if (existingIdx === -1) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'FAQ not found.' } });
+  }
+
+  db.faqs.splice(existingIdx, 1);
+  saveDbSync();
+  res.json({ success: true, message: 'FAQ deleted successfully' });
+});
+
 export default router;

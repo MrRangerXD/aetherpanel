@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Gamepad2, Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
   Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame,
-  Sliders, Gauge, Layers
+  Sliders, Gauge, Layers, ChevronDown
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../../lib/ThemeContext';
@@ -19,6 +19,22 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { pageAnimationsEnabled, heroDescription } = useBranding();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadFaqs = async () => {
+      try {
+        const res = await apiRequest('/public/faqs');
+        if (res.success && Array.isArray(res.data)) {
+          setFaqs(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load FAQs:', err);
+      }
+    };
+    loadFaqs();
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -526,6 +542,50 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
         </div>
       </motion.section>
+
+      {/* Frequently Asked Questions Section */}
+      {faqs.length > 0 && (
+        <motion.section {...motionChildProps} className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 space-y-8 pt-8 pb-4">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-zinc-450 text-xs sm:text-sm max-w-lg mx-auto leading-relaxed">
+              Find instant answers to general questions about specs, deployments, migrations, and billing below.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {faqs.map((faq) => {
+              const isOpen = openFaqId === faq.id;
+              return (
+                <div
+                  key={faq.id}
+                  className={`rounded-2xl border transition-all duration-300 overflow-hidden bg-zinc-900/40 backdrop-blur-md ${
+                    isOpen ? 'border-amber-500/30 shadow-lg shadow-amber-500/5' : 'border-zinc-800/60 hover:border-zinc-700/60'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                    className="w-full flex items-center justify-between p-5 text-left transition-colors text-zinc-200 hover:text-white cursor-pointer"
+                  >
+                    <span className="text-xs sm:text-sm font-bold pr-4 leading-snug">{faq.question}</span>
+                    <span className={`p-1.5 rounded-lg bg-zinc-950 border border-zinc-850 text-zinc-500 transition-transform duration-300 shrink-0 ${isOpen ? 'rotate-180 text-amber-400 border-amber-500/20' : ''}`}>
+                      <ChevronDown className="h-4 w-4" />
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-5 pb-5 pt-1.5 text-xs text-zinc-400 font-medium leading-relaxed border-t border-zinc-900/50 animate-in fade-in slide-in-from-top-1 duration-200">
+                      {faq.answer}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </motion.section>
+      )}
     </motion.div>
   );
 };

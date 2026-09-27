@@ -201,4 +201,14 @@ router.get('/legal/:slug', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/v1/public/faqs
+router.get('/faqs', async (req: Request, res: Response) => {
+  const db = await getDb();
+  const faqs = (db.faqs || []).filter(f => f.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+  res.json({
+    success: true,
+    data: faqs
+  });
+});
+
 export default router;

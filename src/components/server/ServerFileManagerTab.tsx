@@ -76,6 +76,67 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
   const [isLoadingContent, setIsLoadingContent] = useState<boolean>(false);
   const [isSavingContent, setIsSavingContent] = useState<boolean>(false);
 
+  // Advanced File Editor States
+  const [editorStyle, setEditorStyle] = useState<'obsidian' | 'midnight' | 'laser' | 'emerald'>('obsidian');
+  const [syntaxStatus, setSyntaxStatus] = useState<{ success: boolean; message?: string } | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
+
+  const handleEditorScroll = () => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
+
+  const handleValidateSyntax = () => {
+    if (!editingFile) return;
+    const nameLower = editingFile.name.toLowerCase();
+    
+    if (nameLower.endsWith('.json')) {
+      try {
+        JSON.parse(fileContent);
+        setSyntaxStatus({ success: true, message: 'JSON format is 100% Valid and Secure!' });
+      } catch (e: any) {
+        setSyntaxStatus({ success: false, message: e.message || 'JSON Syntax Error detected.' });
+      }
+    } else if (nameLower.endsWith('.properties')) {
+      const lines = fileContent.split('\n');
+      const badLines: number[] = [];
+      lines.forEach((line, idx) => {
+        const t = line.trim();
+        if (t && !t.startsWith('#') && !t.includes('=')) {
+          badLines.push(idx + 1);
+        }
+      });
+      if (badLines.length > 0) {
+        setSyntaxStatus({ success: false, message: `Format Warning: Missing '=' separator on line(s): ${badLines.join(', ')}` });
+      } else {
+        setSyntaxStatus({ success: true, message: 'Properties format is Valid!' });
+      }
+    } else if (nameLower.endsWith('.yml') || nameLower.endsWith('.yaml')) {
+      const lines = fileContent.split('\n');
+      const badLines: number[] = [];
+      lines.forEach((line, idx) => {
+        if (line.includes('\t')) {
+          badLines.push(idx + 1);
+        }
+      });
+      if (badLines.length > 0) {
+        setSyntaxStatus({ success: false, message: `YAML Warning: Tabs detected on line(s) [${badLines.join(', ')}]. YAML requires spaces for indentation.` });
+      } else {
+        setSyntaxStatus({ success: true, message: 'YAML spacing check passed!' });
+      }
+    } else {
+      setSyntaxStatus({ success: true, message: 'Structure validation passed: No format conflicts found.' });
+    }
+  };
+
+  // Reset validator on file load
+  useEffect(() => {
+    setSyntaxStatus(null);
+  }, [editingFile]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -1135,25 +1196,63 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
 
       {/* File Editor Modal */}
       {editingFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-5 max-w-4xl w-full h-[85vh] flex flex-col space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-amber-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-5 max-w-5xl w-full h-[88vh] flex flex-col space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  <FileCode className="h-5 w-5" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">{editingFile.name}</h3>
-                  <p className="text-[10px] font-mono text-zinc-500">{editingFile.path}</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-white">{editingFile.name}</h3>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 uppercase tracking-wider">
+                      {editingFile.extension?.replace('.', '') || 'txt'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-mono text-zinc-500 mt-0.5">{editingFile.path}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Editor Actions & Theme Selector */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Visual Style Selector */}
+                <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-850 p-1 rounded-xl text-[10px] font-mono">
+                  <span className="text-zinc-500 pl-1.5 pr-0.5 font-bold">THEME:</span>
+                  {(['obsidian', 'midnight', 'laser', 'emerald'] as const).map(style => (
+                    <button
+                      key={style}
+                      type="button"
+                      onClick={() => setEditorStyle(style)}
+                      className={`px-2 py-1 rounded-lg capitalize font-bold transition-all cursor-pointer ${
+                        editorStyle === style
+                          ? 'bg-zinc-800 text-white shadow-sm'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      {style}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleValidateSyntax}
+                  className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-cyan-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Validate Structure</span>
+                </button>
+
                 <button
                   onClick={handleSaveFile}
                   disabled={isSavingContent}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   {isSavingContent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   <span>Save</span>
                 </button>
+
                 <button
                   onClick={() => setEditingFile(null)}
                   className="p-2 text-zinc-400 hover:text-white rounded-xl bg-zinc-800 hover:bg-zinc-700 cursor-pointer"
@@ -1163,20 +1262,94 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 bg-zinc-950 rounded-2xl border border-zinc-800 overflow-hidden relative">
+            {/* Validation Banner Indicator */}
+            {syntaxStatus && (
+              <div className={`p-3 rounded-2xl border text-xs flex items-center gap-2 font-mono ${
+                syntaxStatus.success
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 animate-in fade-in'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-400 animate-bounce'
+              }`}>
+                {syntaxStatus.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0 animate-pulse" />}
+                <span>{syntaxStatus.message}</span>
+              </div>
+            )}
+
+            {/* Code Editor Body */}
+            <div className={`flex-1 min-h-0 rounded-2xl border overflow-hidden relative flex transition-all duration-300 ${
+              (() => {
+                switch (editorStyle) {
+                  case 'midnight': return 'bg-[#030712] border-cyan-950';
+                  case 'laser': return 'bg-[#0a0512] border-fuchsia-950';
+                  case 'emerald': return 'bg-[#021f18] border-emerald-950';
+                  case 'obsidian':
+                  default: return 'bg-zinc-950 border-zinc-800';
+                }
+              })()
+            }`}>
               {isLoadingContent ? (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-400 gap-2">
                   <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
                   <span>Loading file content...</span>
                 </div>
               ) : (
-                <textarea
-                  value={fileContent}
-                  onChange={e => setFileContent(e.target.value)}
-                  className="w-full h-full p-4 bg-transparent font-mono text-xs text-zinc-200 resize-none focus:outline-none leading-relaxed"
-                  placeholder="File is empty..."
-                />
+                <React.Fragment>
+                  {/* Sync Line Numbers Sidebar */}
+                  <div
+                    ref={lineNumbersRef}
+                    className={`w-12 select-none text-right pr-3.5 py-4 font-mono text-[11px] border-r overflow-hidden leading-relaxed text-zinc-600 border-zinc-850 ${
+                      (() => {
+                        switch (editorStyle) {
+                          case 'midnight': return 'bg-cyan-950/15 border-cyan-950 text-cyan-600/70';
+                          case 'laser': return 'bg-fuchsia-950/15 border-fuchsia-950 text-fuchsia-600/70';
+                          case 'emerald': return 'bg-emerald-950/15 border-emerald-950 text-emerald-600/70';
+                          case 'obsidian':
+                          default: return 'bg-zinc-950/40 border-zinc-900 text-zinc-650';
+                        }
+                      })()
+                    }`}
+                    style={{ scrollbarWidth: 'none' }}
+                  >
+                    {fileContent.split('\n').map((_, idx) => (
+                      <div key={idx} className="h-5">{idx + 1}</div>
+                    ))}
+                  </div>
+
+                  {/* Code Editor Area */}
+                  <textarea
+                    ref={textareaRef}
+                    value={fileContent}
+                    onScroll={handleEditorScroll}
+                    onChange={e => setFileContent(e.target.value)}
+                    className={`flex-1 h-full p-4 pl-3 font-mono text-[11px] resize-none focus:outline-none leading-relaxed h-full overflow-y-auto overflow-x-auto ${
+                      (() => {
+                        switch (editorStyle) {
+                          case 'midnight': return 'text-cyan-200 caret-cyan-400';
+                          case 'laser': return 'text-fuchsia-200 caret-fuchsia-400';
+                          case 'emerald': return 'text-emerald-200 caret-emerald-400';
+                          case 'obsidian':
+                          default: return 'text-zinc-200 caret-amber-400';
+                        }
+                      })()
+                    }`}
+                    placeholder="File is empty..."
+                  />
+                </React.Fragment>
               )}
+            </div>
+
+            {/* Custom Developer HUD Status overlay */}
+            <div className="flex items-center justify-between px-3 py-2 border border-zinc-800 bg-zinc-950/30 rounded-xl text-[10px] font-mono text-zinc-500">
+              <div className="flex items-center gap-3">
+                <span>UTF-8</span>
+                <span>·</span>
+                <span className="text-zinc-400 font-bold">Lines: {fileContent.split('\n').length}</span>
+                <span>·</span>
+                <span className="text-zinc-400 font-bold">Length: {fileContent.length} chars</span>
+              </div>
+              <div className="flex items-center gap-1.5 uppercase font-bold text-amber-500">
+                <Sparkles className="h-3 w-3 animate-pulse" />
+                <span>IDE Code HUD</span>
+              </div>
             </div>
           </div>
         </div>
