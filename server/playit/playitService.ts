@@ -487,19 +487,22 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
   let running = false;
   if (activeProc && activeProc.child && activeProc.child.exitCode === null && !activeProc.child.killed) {
     running = true;
-  } else if (storedPid) {
-    running = isPidRunning(storedPid, false);
-  } else if (savedConfig.isRunning) {
+  } else if (storedPid && isPidRunning(storedPid, false)) {
     running = true;
+  } else if (fs.existsSync(socketFile)) {
+    // If socket file exists, verify IPC connection
+    try {
+      const res = await queryIpc(socketFile, { type: 'get_status' }, 1500);
+      if (res) running = true;
+    } catch {}
   }
 
-  if (savedConfig.pid && !running && !activeProc) {
-    // Detect & clean stale PID
-    console.log(`[PLAYIT] Stale PID ${savedConfig.pid} detected for server ${serverId}. Cleaning runtime state.`);
-    savedConfig.pid = undefined;
-    savedConfig.isRunning = false;
+  // Self-healing: If configuration expects the agent to run but process is absent, auto-revive it
+  if (savedConfig.isRunning && !running && !activeProc) {
+    console.log(`[PLAYIT] Auto-reviving Playit daemon for server ${serverId}...`);
     try {
-      fs.writeFileSync(configFile, JSON.stringify(savedConfig, null, 2));
+      togglePlayitAgentInternal(serverId, true).catch(() => {});
+      running = true;
     } catch {}
   }
 
@@ -781,9 +784,9 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
           activePlayitProcesses.delete(serverId);
           appendConsoleLog(serverId, `[Playit/Agent]: Process exited with code ${code}.`);
 
-          if (enable && retries < 5 && code !== 0) {
-            const backoff = Math.min(4000 * Math.pow(1.5, retries), 30000);
-            appendConsoleLog(serverId, `[Playit/Agent]: Reconnecting in ${Math.round(backoff / 1000)}s...`);
+          if (enable && retries < 10) {
+            const backoff = 500;
+            appendConsoleLog(serverId, `[Playit/Agent]: Reconnecting agent daemon in ${backoff}ms...`);
             setTimeout(() => {
               startAgent(retries + 1);
             }, backoff);
@@ -791,12 +794,12 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
             try {
               if (fs.existsSync(configFile)) {
                 const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-                fd.crashed = true;
-                fd.errorReason = `Process exited (code ${code}). Reconnecting...`;
+                fd.crashed = false;
+                fd.isRunning = true;
                 fs.writeFileSync(configFile, JSON.stringify(fd, null, 2));
               }
             } catch {}
-          } else if (retries >= 5) {
+          } else if (retries >= 10) {
             try {
               if (fs.existsSync(configFile)) {
                 const fd = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
@@ -1176,10 +1179,22 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
   let running = false;
   if (active && active.child && active.child.exitCode === null && !active.child.killed) {
     running = true;
-  } else if (active && active.pid) {
-    running = isPidRunning(active.pid, false);
-  } else if (node.playitAgentRunning) {
+  } else if (active && active.pid && isPidRunning(active.pid, false)) {
     running = true;
+  } else if (fs.existsSync(socketFile)) {
+    try {
+      const res = await queryIpc(socketFile, { type: 'get_status' }, 1500);
+      if (res) running = true;
+    } catch {}
+  }
+
+  // Self-healing: Auto-revive node playit agent if enabled but inactive
+  if (node.playitAgentRunning && !running && !active) {
+    console.log(`[PLAYIT] Auto-reviving Node Playit daemon for node ${nodeId}...`);
+    try {
+      toggleNodePlayitAgentInternal(nodeId, true).catch(() => {});
+      running = true;
+    } catch {}
   }
 
   let socketClaimed = false;
