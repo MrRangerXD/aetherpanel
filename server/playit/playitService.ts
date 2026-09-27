@@ -137,6 +137,7 @@ interface ActiveProcessInfo {
   crashed?: boolean;
   lastExitCode?: number | null;
   backoffTimer?: NodeJS.Timeout;
+  hasSocket?: boolean;
 }
 
 const activePlayitProcesses = new Map<string, ActiveProcessInfo>();
@@ -229,20 +230,30 @@ export function queryIpc(socketPath: string, req: any, timeoutMs = 2500): Promis
 
     client.on('data', (data) => {
       buffer += data.toString();
-      const lines = buffer.split('\n');
-      for (let i = 0; i < lines.length - 1; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.message_kind === 'response' && parsed.data && parsed.data.request_id === reqId) {
-            clearTimeout(timer);
-            client.end();
-            return resolve(parsed.data.response);
+      let depth = 0;
+      let startIdx = -1;
+
+      for (let i = 0; i < buffer.length; i++) {
+        if (buffer[i] === '{') {
+          if (depth === 0) startIdx = i;
+          depth++;
+        } else if (buffer[i] === '}') {
+          depth--;
+          if (depth === 0 && startIdx !== -1) {
+            const jsonStr = buffer.substring(startIdx, i + 1);
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.message_kind === 'response' && parsed.data && parsed.data.request_id === reqId) {
+                clearTimeout(timer);
+                client.end();
+                return resolve(parsed.data.response);
+              }
+            } catch (err) {}
+            buffer = buffer.substring(i + 1);
+            i = -1; // restart loop on new buffer
           }
-        } catch {}
+        }
       }
-      buffer = lines[lines.length - 1];
     });
 
     client.on('error', (err) => {
@@ -506,6 +517,15 @@ export async function getPlayitStatus(serverId: string): Promise<PlayitStatus> {
     } catch {}
   }
 
+  // If daemon is running but was spawned without a socket, and the agent is now claimed:
+  // Restart the daemon so it launches with the IPC socket enabled!
+  if (activeProc && isAgentSecretClaimed(secretFile) && !activeProc.hasSocket) {
+    console.log(`[PLAYIT] Agent for server ${serverId} is now claimed! Restarting to enable IPC socket...`);
+    togglePlayitAgentInternal(serverId, false).then(() => {
+      togglePlayitAgentInternal(serverId, true).catch(() => {});
+    }).catch(() => {});
+  }
+
   const isStarting = activeProc ? (Date.now() - activeProc.lastStarted < 3000) : false;
   const isCrashed = running ? false : Boolean(activeProc?.crashed || (savedConfig.crashed && !running));
 
@@ -667,11 +687,15 @@ function spawnAgentProcess(
     let child: ChildProcess;
     if (useRealBinary) {
       console.log(`[PLAYIT] Spawning real official playit binary for ${id}...`);
-      child = spawn(realBinPath, [
+      const isClaimed = isAgentSecretClaimed(secretPath);
+      const args = [
         '--secret-path', secretPath,
-        '--socket-path', socketPath,
         '-l', logPath
-      ], {
+      ];
+      if (isClaimed) {
+        args.push('--socket-path', socketPath);
+      }
+      child = spawn(realBinPath, args, {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe']
       });
@@ -836,7 +860,8 @@ async function togglePlayitAgentInternal(serverId: string, enable: boolean): Pro
           pid: child.pid,
           retryCount: retries,
           lastStarted: Date.now(),
-          crashed: false
+          crashed: false,
+          hasSocket: isAgentSecretClaimed(secretFile)
         });
 
         try {
@@ -1215,6 +1240,15 @@ export async function getNodePlayitStatus(nodeId: string): Promise<NodePlayitSta
     } catch {}
   }
 
+  // If daemon is running but was spawned without a socket, and the agent is now claimed:
+  // Restart the daemon so it launches with the IPC socket enabled!
+  if (active && isAgentSecretClaimed(secretFile) && !active.hasSocket) {
+    console.log(`[PLAYIT] Node Agent for node ${nodeId} is now claimed! Restarting to enable IPC socket...`);
+    toggleNodePlayitAgentInternal(nodeId, false).then(() => {
+      toggleNodePlayitAgentInternal(nodeId, true).catch(() => {});
+    }).catch(() => {});
+  }
+
   let socketClaimed = false;
   if (running && fs.existsSync(socketFile)) {
     try {
@@ -1373,7 +1407,8 @@ async function toggleNodePlayitAgentInternal(nodeId: string, enable: boolean): P
           pid: child.pid,
           retryCount: retries,
           lastStarted: Date.now(),
-          crashed: false
+          crashed: false,
+          hasSocket: isAgentSecretClaimed(secretFile)
         });
       }
     };
