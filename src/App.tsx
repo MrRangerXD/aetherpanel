@@ -23,6 +23,8 @@ import { GlobalBackground } from './components/GlobalBackground';
 
 // Public Pages
 import { Home } from './pages/public/Home';
+import { About } from './pages/public/About';
+import { Contact } from './pages/public/Contact';
 import { MinecraftHosting } from './pages/public/MinecraftHosting';
 import { BotHosting } from './pages/public/BotHosting';
 import { Pricing } from './pages/public/Pricing';
@@ -157,7 +159,7 @@ function AppContent() {
   useEffect(() => {
     if (loading) return;
 
-    const publicPages = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'];
+    const publicPages = ['home', 'about', 'contact', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'];
     const isPublic = publicPages.includes(currentPage);
     const isAdmin = currentPage.startsWith('admin-');
 
@@ -192,7 +194,7 @@ function AppContent() {
     );
   }
 
-  const isPublicPage = ['home', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'].includes(currentPage);
+  const isPublicPage = ['home', 'about', 'contact', 'minecraft', 'bot', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'].includes(currentPage);
   const isAdminPage = currentPage.startsWith('admin-');
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
@@ -200,7 +202,7 @@ function AppContent() {
     if (isCustomerPage) {
       return (
         <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative font-sans select-none">
-          <GlobalBackground />
+          <GlobalBackground isPanel={true} />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
           
           <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800/80 p-8 rounded-3xl backdrop-blur-md text-center space-y-6 relative shadow-2xl">
@@ -254,7 +256,7 @@ function AppContent() {
     return (
       <div className="h-[100dvh] w-full overflow-hidden bg-[#09090b] text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
         {/* Authoritative Global Background System */}
-        <GlobalBackground />
+        <GlobalBackground isPanel={true} />
 
         {/* Maintenance Mode Warning Banner */}
         {maintenanceMode && (
@@ -277,7 +279,7 @@ function AppContent() {
         {/* App Shell Flex Contract */}
         <div id="aether-app-shell" className="flex h-full w-full overflow-hidden relative z-10">
           {/* Customer Sidebar */}
-          {isCustomerPage && (
+          {isCustomerPage && currentPage !== 'server-manage' && (
             <Sidebar
               currentPage={currentPage}
               onNavigate={handleNavigate}
@@ -297,8 +299,8 @@ function AppContent() {
 
           {/* Main Viewport Container */}
           <div id="aether-main-viewport" className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden relative z-10">
-            {/* Top Navbar */}
-            <header className="flex-none sticky top-0 z-30">
+            {/* Top Floating Glass Navbar */}
+            <div className="flex-none sticky top-0 z-30 w-full">
               <Navbar
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
@@ -307,10 +309,10 @@ function AppContent() {
                 currentServerId={pageParams?.serverId}
                 onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
               />
-            </header>
+            </div>
 
             {/* Content Viewport */}
-            <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto flex flex-col justify-between">
+            <main className={currentPage === 'server-manage' ? 'flex-1 w-full min-w-0 p-0 flex flex-col' : 'flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto flex flex-col justify-between'}>
               <div className="flex-1 flex flex-col">
                 <PageTransition routeKey={currentPage}>
                   <div className="flex-1 flex flex-col">
@@ -396,7 +398,7 @@ function AppContent() {
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-[#09090b] text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black relative">
       {/* Authoritative Global Background System */}
-      <GlobalBackground />
+      <GlobalBackground isPanel={false} />
 
       {/* Maintenance Mode Warning Banner for Public Pages */}
       {maintenanceMode && isPublicPage && (
@@ -416,8 +418,8 @@ function AppContent() {
         onNavigate={handleNavigate}
       />
 
-      {/* Top Header Navbar */}
-      <div className="relative z-30">
+      {/* Top Header Orihost Navbar */}
+      <div className="sticky top-0 z-50 w-full">
         <Navbar
           currentPage={currentPage}
           onNavigate={handleNavigate}
@@ -434,6 +436,8 @@ function AppContent() {
           <div className="flex-1 flex flex-col">
             {/* Public Views */}
             {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
+            {currentPage === 'about' && <About onNavigate={handleNavigate} />}
+            {currentPage === 'contact' && <Contact onNavigate={handleNavigate} />}
             {currentPage === 'minecraft' && <MinecraftHosting onNavigate={handleNavigate} />}
             {currentPage === 'bot' && <BotHosting onNavigate={handleNavigate} />}
             {currentPage === 'pricing' && <Pricing onNavigate={handleNavigate} />}

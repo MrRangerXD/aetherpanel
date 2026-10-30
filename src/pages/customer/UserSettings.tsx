@@ -1,30 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User, Key, Shield, Check, Copy, RefreshCw, Save, Sparkles,
-  MousePointer, Palette, MessageSquare, Link, Unlink, ExternalLink,
-  Plus, Trash2, Globe, Send, AlertCircle, Radio, Terminal, ShieldCheck,
-  CheckCircle2, Lock
+  User, Key, Shield, Check, Save,
+  Palette, MessageSquare, Link, Unlink,
+  Plus, Trash2, Send, Radio, Lock
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useTheme } from '../../lib/ThemeContext';
 import { THEME_PRESETS, FONT_OPTIONS } from '../../lib/theme';
 import { apiRequest } from '../../lib/api';
-import { DiscordAccount, ApiKey, WebhookSubscription } from '../../types';
+import { DiscordAccount, WebhookSubscription } from '../../types';
 import { useToast } from '../../lib/ToastContext';
 
 export const UserSettings: React.FC = () => {
   const { user, refreshUser } = useAuth();
   const { toast } = useToast();
   const {
-    accent, setAccent,
     customCursorEnabled, setCustomCursorEnabled,
     animationsEnabled, setAnimationsEnabled,
     adsEnabled, setAdsEnabled,
     activeThemeId, setActiveThemeId,
     activeFontId, setActiveFontId,
-    allowUserCustomization,
-    backgroundBlur, setBackgroundBlur,
-    backgroundOverlayOpacity, setBackgroundOverlayOpacity
+    allowUserCustomization
   } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -49,15 +45,10 @@ export const UserSettings: React.FC = () => {
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [newWebhookName, setNewWebhookName] = useState('');
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
-  const [selectedEvents, setSelectedEvents] = useState<string[]>(['*']);
+  const [selectedEvents] = useState<string[]>(['*']);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
   const [testResult, setTestResult] = useState<{ id: string; msg: string; success: boolean } | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchDiscordStatus();
-    fetchWebhooks();
-  }, []);
 
   const fetchDiscordStatus = async () => {
     try {
@@ -86,6 +77,11 @@ export const UserSettings: React.FC = () => {
       setLoadingWebhooks(false);
     }
   };
+
+  useEffect(() => {
+    fetchDiscordStatus();
+    fetchWebhooks();
+  }, []);
 
   const handleCreateWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,7 +147,6 @@ export const UserSettings: React.FC = () => {
       setConnectingDiscord(true);
       setDiscordNotice(null);
 
-      // Fetch real Discord OAuth URL from server
       const urlRes = await apiRequest<{ url: string }>('/auth/discord/url');
       if (urlRes.success && urlRes.data?.url) {
         const width = 500;
@@ -187,7 +182,7 @@ export const UserSettings: React.FC = () => {
               }
               fetchDiscordStatus();
               refreshUser();
-              setDiscordNotice('✅ Discord account authorized and linked successfully!');
+              setDiscordNotice('Discord account authorized and linked successfully!');
               setConnectingDiscord(false);
             } else if (type === 'AETHERPANEL_DISCORD_OAUTH_ERROR' || type === 'DISCORD_AUTH_ERROR') {
               clearInterval(checkTimer);
@@ -275,86 +270,86 @@ export const UserSettings: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       
       {/* Header */}
-      <div className="border-b border-zinc-800 pb-5">
-        <h1 className="text-2xl font-bold text-white">Account & Developer Settings</h1>
-        <p className="text-xs text-zinc-400 mt-1">Manage your identity, Discord integration, REST API tokens, and real-time Webhook subscriptions.</p>
+      <div className="border-b border-[var(--color-line)] pb-5">
+        <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-ink)]">Account & Settings</h1>
+        <p className="text-xs text-[var(--color-ink-mute)] mt-1">Manage your identity, Discord integration, and real-time Webhook subscriptions.</p>
       </div>
 
       {savedSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400 flex items-center gap-2">
+        <div className="p-3 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-xs font-medium text-[var(--color-ok)] flex items-center gap-2">
           <Check className="h-4 w-4" /> Profile details updated successfully!
         </div>
       )}
 
       {/* Profile Form */}
-      <form onSubmit={handleSaveProfile} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <User className="h-4 w-4 text-amber-400" /> Personal Profile
+      <form onSubmit={handleSaveProfile} className="surface p-5 sm:p-6 rounded-lg space-y-4">
+        <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+          <User className="h-4 w-4 text-[var(--color-accent)]" /> Personal Profile
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Display Name</label>
+            <label className="label block mb-1">Display Name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              className="field w-full px-3 py-1.5 text-xs rounded-md"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Email Address</label>
+            <label className="label block mb-1">Email Address</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              className="field w-full px-3 py-1.5 text-xs rounded-md"
             />
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2"
+            className="btn btn-primary text-xs"
           >
-            <Save className="h-4 w-4" /> Save Profile
+            <Save className="h-3.5 w-3.5" />
+            <span>Save Profile</span>
           </button>
         </div>
       </form>
 
       {/* Visual Themes & Personalization */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+      <div className="surface p-5 sm:p-6 rounded-lg space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Palette className="h-4 w-4 text-amber-400" /> Interface Personalization
+          <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+            <Palette className="h-4 w-4 text-[var(--color-accent)]" /> Interface Preferences
           </h3>
           {!allowUserCustomization && (
-            <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/50 flex items-center gap-1.5 shadow-sm">
-              <Shield className="h-3.5 w-3.5 text-amber-500" />
-              <span>LOCKED BY ADMIN</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md surface-2 text-[var(--color-ink-mute)] border border-[var(--color-line)] flex items-center gap-1">
+              <Shield className="h-3 w-3 text-[var(--color-accent)]" />
+              <span>SYSTEM CONTROLLED</span>
             </span>
           )}
         </div>
 
         {!allowUserCustomization ? (
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-start gap-3">
-            <Shield className="h-5 w-5 text-amber-500/80 shrink-0 mt-0.5" />
-            <div className="text-xs text-zinc-400 leading-relaxed">
-              <div className="font-semibold text-white">System theme settings are authoritative</div>
-              Platform-wide styling is locked by system administrators to maintain AetherPanel's consistent luxury identity. Personal customization controls are currently disabled.
+          <div className="surface-2 p-3.5 rounded-md border border-[var(--color-line)] flex items-start gap-2.5">
+            <Shield className="h-4 w-4 text-[var(--color-accent)] shrink-0 mt-0.5" />
+            <div className="text-xs text-[var(--color-ink-dim)] leading-relaxed">
+              <div className="font-semibold text-[var(--color-ink)]">Platform theme settings are authoritative</div>
+              Platform styling is managed globally to ensure a clean, high-density interface across all modules.
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Theme Selector */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">Select Visual Theme</label>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="label block">Select Visual Theme</label>
                 <div className="grid grid-cols-2 gap-2">
                   {THEME_PRESETS.map((p) => {
                     const isSelected = activeThemeId === p.id;
@@ -363,16 +358,16 @@ export const UserSettings: React.FC = () => {
                         key={p.id}
                         type="button"
                         onClick={() => setActiveThemeId(p.id)}
-                        className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-1.5 transition-all ${
+                        className={`p-2.5 rounded-md border text-left flex flex-col justify-between gap-1 transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-zinc-800/90 border-amber-500 ring-1 ring-amber-500/30'
-                            : 'bg-zinc-950 border-zinc-800 hover:bg-zinc-900/60'
+                            ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)]'
+                            : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
                         }`}
                       >
-                        <span className="text-xs font-bold text-white">{p.name}</span>
+                        <span className="text-xs font-semibold text-[var(--color-ink)]">{p.name}</span>
                         <div className="flex gap-1">
                           {p.previewColors.map((color, i) => (
-                            <span key={i} className="w-3.5 h-3.5 rounded-full border border-black/40" style={{ backgroundColor: color }} />
+                            <span key={i} className="w-2.5 h-2.5 rounded-full border border-black/40" style={{ backgroundColor: color }} />
                           ))}
                         </div>
                       </button>
@@ -381,30 +376,29 @@ export const UserSettings: React.FC = () => {
                 </div>
               </div>
 
-              {/* Font Selector */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">Select Typography</label>
+              <div className="space-y-1.5">
+                <label className="label block">Typography</label>
                 <select
                   value={activeFontId}
                   onChange={(e) => setActiveFontId(e.target.value)}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  className="field w-full px-2.5 py-1.5 text-xs font-mono rounded-md"
                 >
                   {FONT_OPTIONS.map((f) => (
                     <option key={f.id} value={f.id}>{f.name} ({f.category})</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-zinc-500 leading-relaxed">
-                  Applies high-legibility displaying and body typeface styling globally across AetherPanel modules.
+                <p className="text-[10px] text-[var(--color-ink-mute)]">
+                  Applies displaying and body typeface styling across modules.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               {/* Custom Cursor Toggle */}
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+              <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white">Interactive Custom Cursor</div>
-                  <div className="text-[10px] text-zinc-500">Premium glowing aura outer ring.</div>
+                  <div className="text-xs font-medium text-[var(--color-ink)]">Custom Pointer</div>
+                  <div className="text-[10px] text-[var(--color-ink-mute)]">Hardware-accelerated ring pointer.</div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -413,15 +407,15 @@ export const UserSettings: React.FC = () => {
                     onChange={(e) => setCustomCursorEnabled(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  <div className="w-8 h-4 bg-[var(--color-line)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
                 </label>
               </div>
 
               {/* Animations Toggle */}
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+              <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white">Layout Transitions</div>
-                  <div className="text-[10px] text-zinc-500">Smooth kinetic route movements.</div>
+                  <div className="text-xs font-medium text-[var(--color-ink)]">Transitions</div>
+                  <div className="text-[10px] text-[var(--color-ink-mute)]">GPU route movements.</div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -430,15 +424,15 @@ export const UserSettings: React.FC = () => {
                     onChange={(e) => setAnimationsEnabled(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  <div className="w-8 h-4 bg-[var(--color-line)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
                 </label>
               </div>
 
               {/* Promotional Ads Toggle */}
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+              <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white">Platform Sponsor Cards</div>
-                  <div className="text-[10px] text-zinc-500">Support development by enabling.</div>
+                  <div className="text-xs font-medium text-[var(--color-ink)]">Sponsor Cards</div>
+                  <div className="text-[10px] text-[var(--color-ink-mute)]">Support development by enabling.</div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -447,7 +441,7 @@ export const UserSettings: React.FC = () => {
                     onChange={(e) => setAdsEnabled(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  <div className="w-8 h-4 bg-[var(--color-line)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
                 </label>
               </div>
             </div>
@@ -456,99 +450,100 @@ export const UserSettings: React.FC = () => {
       </div>
 
       {/* Change Password Form */}
-      <form onSubmit={handleChangePassword} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Lock className="h-4 w-4 text-amber-400" /> Security & Password
+      <form onSubmit={handleChangePassword} className="surface p-5 sm:p-6 rounded-lg space-y-4">
+        <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+          <Lock className="h-4 w-4 text-[var(--color-accent)]" /> Security & Password
         </h3>
 
         {passwordMsg && (
-          <div className={`p-3.5 rounded-xl text-xs font-semibold ${
-            passwordMsg.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+          <div className={`p-2.5 rounded-md text-xs font-medium ${
+            passwordMsg.success ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border border-[var(--color-ok)]/30' : 'bg-[var(--color-err)]/10 text-[var(--color-err)] border border-[var(--color-err)]/30'
           }`}>
             {passwordMsg.text}
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Current Password</label>
+            <label className="label block mb-1">Current Password</label>
             <input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              className="field w-full px-3 py-1.5 text-xs rounded-md"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">New Password</label>
+            <label className="label block mb-1">New Password</label>
             <input
               type="password"
               required
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Min 6 characters"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              placeholder="Min 6 chars"
+              className="field w-full px-3 py-1.5 text-xs rounded-md"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Confirm New Password</label>
+            <label className="label block mb-1">Confirm New Password</label>
             <input
               type="password"
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repeat new password"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              placeholder="Repeat password"
+              className="field w-full px-3 py-1.5 text-xs rounded-md"
             />
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           <button
             type="submit"
             disabled={updatingPassword}
-            className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-2 disabled:opacity-50"
+            className="btn btn-ghost text-xs"
           >
-            <Key className="h-4 w-4" /> {updatingPassword ? 'Updating...' : 'Update Password'}
+            <Key className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+            <span>{updatingPassword ? 'Updating...' : 'Update Password'}</span>
           </button>
         </div>
       </form>
 
       {/* Discord Integration */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-indigo-400" /> Discord Account Integration
+      <div className="surface p-5 sm:p-6 rounded-lg space-y-4">
+        <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-[var(--color-accent)]" /> Discord Integration
         </h3>
 
         {discordNotice && (
-          <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300">
+          <div className="p-2.5 rounded-md surface-2 border border-[var(--color-line)] text-xs text-[var(--color-ink-dim)]">
             {discordNotice}
           </div>
         )}
 
         {loadingDiscord ? (
-          <div className="p-4 rounded-2xl bg-zinc-950 text-xs text-zinc-400 animate-pulse">
-            Checking Discord integration status...
+          <div className="surface-2 p-3 rounded-md text-xs text-[var(--color-ink-mute)]">
+            Checking Discord status...
           </div>
         ) : discordAccount ? (
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-indigo-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="surface-2 p-3.5 rounded-md border border-[var(--color-line)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <img
                 src={discordAccount.avatar}
                 alt={discordAccount.username}
-                className="w-12 h-12 rounded-full border border-indigo-500/30 object-cover"
+                className="w-10 h-10 rounded-full border border-[var(--color-line)] object-cover"
               />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">{discordAccount.globalName || discordAccount.username}</span>
-                  <span className="text-[11px] font-mono text-zinc-400">({discordAccount.username})</span>
+                  <span className="text-xs font-semibold text-[var(--color-ink)]">{discordAccount.globalName || discordAccount.username}</span>
+                  <span className="text-[11px] font-mono text-[var(--color-ink-mute)]">({discordAccount.username})</span>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-zinc-500 mt-0.5">
-                  <span>ID: <code className="text-indigo-300">{discordAccount.discordId}</code></span>
-                  <span>•</span>
+                <div className="flex items-center gap-2 text-[10px] text-[var(--color-ink-mute)] mt-0.5">
+                  <span>ID: <code className="text-[var(--color-accent)] font-mono">{discordAccount.discordId}</code></span>
+                  <span>·</span>
                   <span>Linked {new Date(discordAccount.linkedAt).toLocaleDateString()}</span>
                 </div>
               </div>
@@ -556,68 +551,69 @@ export const UserSettings: React.FC = () => {
 
             <button
               onClick={handleDisconnectDiscord}
-              className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1.5"
+              className="btn btn-danger text-xs py-1 px-3"
             >
-              <Unlink className="h-3.5 w-3.5" /> Disconnect Discord
+              <Unlink className="h-3 w-3" />
+              <span>Disconnect</span>
             </button>
           </div>
         ) : (
-          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 text-center space-y-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400">
-              <MessageSquare className="h-5 w-5" />
+          <div className="surface-2 p-4 rounded-md border border-[var(--color-line)] text-center space-y-2">
+            <div className="w-8 h-8 rounded-full surface border border-[var(--color-line)] flex items-center justify-center mx-auto text-[var(--color-accent)]">
+              <MessageSquare className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">No Discord Account Connected</h4>
-              <p className="text-[11px] text-zinc-400 max-w-md mx-auto mt-0.5">
-                Authorize AetherPanel on Discord to control your Minecraft servers, Discord bots, and node instances directly from Discord channels.
+              <h4 className="text-xs font-semibold text-[var(--color-ink)]">No Discord Account Connected</h4>
+              <p className="text-[11px] text-[var(--color-ink-mute)] max-w-sm mx-auto mt-0.5">
+                Link Discord to manage alerts, bot bots, and node instances.
               </p>
             </div>
             <button
               onClick={handleConnectDiscord}
               disabled={connectingDiscord}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-2 mx-auto"
+              className="btn btn-primary text-xs py-1.5 px-4 mx-auto"
             >
-              <Link className="h-4 w-4" />
-              <span>{connectingDiscord ? 'Authorizing OAuth2...' : 'Connect Discord Account'}</span>
+              <Link className="h-3.5 w-3.5" />
+              <span>{connectingDiscord ? 'Authorizing...' : 'Connect Discord'}</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* REAL WEBHOOKS INTEGRATION */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
+      {/* WEBHOOKS INTEGRATION */}
+      <div className="surface p-5 sm:p-6 rounded-lg space-y-4">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Radio className="h-4 w-4 text-emerald-400" /> Webhook Subscriptions
+          <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+            <Radio className="h-4 w-4 text-[var(--color-accent)]" /> Webhook Subscriptions
           </h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Receive real-time HTTP POST notifications with HMAC-SHA256 signatures when servers start, stop, deploy, crash, or finish backups.
+          <p className="text-xs text-[var(--color-ink-mute)] mt-0.5">
+            Receive real-time HTTP POST notifications when servers start, stop, deploy, or backup.
           </p>
         </div>
 
         {/* Create Webhook Form */}
-        <form onSubmit={handleCreateWebhook} className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form onSubmit={handleCreateWebhook} className="surface-2 p-3.5 rounded-md border border-[var(--color-line)] space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Webhook Name</label>
+              <label className="label block mb-1">Webhook Name</label>
               <input
                 type="text"
                 required
-                placeholder="e.g. Discord Bot Hook, Slack Alerts"
+                placeholder="e.g. Discord Bot Hook"
                 value={newWebhookName}
                 onChange={e => setNewWebhookName(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
+                className="field w-full px-2.5 py-1.5 text-xs rounded-md"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">Target Endpoint URL</label>
+              <label className="label block mb-1">Target Endpoint URL</label>
               <input
                 type="url"
                 required
                 placeholder="https://your-domain.com/api/webhook"
                 value={newWebhookUrl}
                 onChange={e => setNewWebhookUrl(e.target.value)}
-                className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
+                className="field w-full px-2.5 py-1.5 text-xs rounded-md"
               />
             </div>
           </div>
@@ -626,49 +622,52 @@ export const UserSettings: React.FC = () => {
             <button
               type="submit"
               disabled={creatingWebhook}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1.5"
+              className="btn btn-primary text-xs py-1 px-3"
             >
-              <Plus className="h-3.5 w-3.5" /> Subscribe Webhook
+              <Plus className="h-3 w-3" />
+              <span>Subscribe Webhook</span>
             </button>
           </div>
         </form>
 
         {/* Webhooks List */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {loadingWebhooks ? (
-            <div className="text-xs text-zinc-500 py-3">Loading webhooks...</div>
+            <div className="text-xs text-[var(--color-ink-mute)] py-2">Loading webhooks...</div>
           ) : webhooks.length === 0 ? (
-            <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl text-xs text-zinc-500">
+            <div className="text-center py-5 border border-dashed border-[var(--color-line)] rounded-md text-xs text-[var(--color-ink-mute)]">
               No webhook endpoints configured.
             </div>
           ) : (
             webhooks.map(wh => (
-              <div key={wh.id} className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="space-y-1">
+              <div key={wh.id} className="p-3 rounded-md surface-2 border border-[var(--color-line)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">{wh.name}</span>
-                    <span className="text-[10px] font-mono text-zinc-500 truncate max-w-xs">{wh.url}</span>
+                    <span className="text-xs font-semibold text-[var(--color-ink)]">{wh.name}</span>
+                    <span className="text-[10px] font-mono text-[var(--color-ink-mute)] truncate max-w-xs">{wh.url}</span>
                   </div>
                   {testResult && testResult.id === wh.id && (
-                    <div className={`text-[11px] font-mono ${testResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <div className={`text-[11px] font-mono ${testResult.success ? 'text-[var(--color-ok)]' : 'text-[var(--color-err)]'}`}>
                       {testResult.msg}
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleTestWebhook(wh.id)}
                     disabled={testingId === wh.id}
-                    className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+                    className="btn btn-ghost text-xs py-1 px-2.5"
                   >
-                    <Send className="h-3 w-3" /> Test
+                    <Send className="h-3 w-3" />
+                    <span>Test</span>
                   </button>
                   <button
                     onClick={() => handleDeleteWebhook(wh.id)}
-                    className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1"
+                    className="btn btn-danger text-xs py-1 px-2.5"
                   >
-                    <Trash2 className="h-3 w-3" /> Delete
+                    <Trash2 className="h-3 w-3" />
+                    <span>Delete</span>
                   </button>
                 </div>
               </div>

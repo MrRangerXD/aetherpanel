@@ -215,27 +215,27 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-900 border border-amber-500/20 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            <FolderInput className="h-6 w-6" />
+      <div className="surface rounded-lg p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-md bg-surface-2 border border-line text-accent">
+            <FolderInput className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold text-white">Server Importer & Migration Engine</h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                PRO MIGRATION
+              <h2 className="text-sm font-semibold text-ink">Server Importer & Migration Engine</h2>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-surface-2 border border-line text-accent">
+                MIGRATION
               </span>
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Migrate worlds, plugins, and full server data from external hosts (Pterodactyl, Multicraft, VPS, SFTP or Direct URL) into this server in 1-Click.
+            <p className="text-xs text-ink-mute mt-0.5">
+              Transfer worlds, plugins, and configuration files from external hosts or remote SFTP endpoints.
             </p>
           </div>
         </div>
 
         {isJobActive && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold animate-pulse">
-            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-warn/10 border border-warn/25 text-warn text-xs font-mono">
+            <RefreshCw className="h-3 w-3 animate-spin" />
             <span>Import In Progress</span>
           </div>
         )}
@@ -246,115 +246,116 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
         <button
           type="button"
           onClick={() => setActiveProtocol('sftp')}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-3.5 rounded-lg border text-left transition-colors ${
             activeProtocol === 'sftp'
-              ? 'bg-amber-500/10 border-amber-500/50 text-white shadow-lg shadow-amber-500/10'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850'
+              ? 'bg-surface-2 border-accent text-ink'
+              : 'surface text-ink-mute hover:text-ink hover:bg-surface-2'
           }`}
         >
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400">
-            <Server className="h-4 w-4" /> Remote SFTP / FTP
+          <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+            <Server className={`h-3.5 w-3.5 ${activeProtocol === 'sftp' ? 'text-accent' : 'text-ink-mute'}`} />
+            <span>Remote SFTP / FTP</span>
           </div>
-          <p className="text-[11px] text-zinc-400 mt-1">Pull files directly from any remote Linux VPS or game hosting SFTP server.</p>
+          <p className="text-[11px] text-ink-mute mt-1">Directly pull files from an external VPS or game host via SFTP stream.</p>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveProtocol('url')}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-3.5 rounded-lg border text-left transition-colors ${
             activeProtocol === 'url'
-              ? 'bg-amber-500/10 border-amber-500/50 text-white shadow-lg shadow-amber-500/10'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850'
+              ? 'bg-surface-2 border-accent text-ink'
+              : 'surface text-ink-mute hover:text-ink hover:bg-surface-2'
           }`}
         >
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-400">
-            <LinkIcon className="h-4 w-4" /> Archive URL / Link
+          <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+            <LinkIcon className={`h-3.5 w-3.5 ${activeProtocol === 'url' ? 'text-accent' : 'text-ink-mute'}`} />
+            <span>Archive URL Download</span>
           </div>
-          <p className="text-[11px] text-zinc-400 mt-1">Download and auto-extract `.zip`, `.tar.gz`, or `.rar` backup files directly from any URL.</p>
+          <p className="text-[11px] text-ink-mute mt-1">Download and auto-unpack `.zip` or `.tar.gz` backup bundles from direct URLs.</p>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveProtocol('pterodactyl')}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-3.5 rounded-lg border text-left transition-colors ${
             activeProtocol === 'pterodactyl'
-              ? 'bg-amber-500/10 border-amber-500/50 text-white shadow-lg shadow-amber-500/10'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850'
+              ? 'bg-surface-2 border-accent text-ink'
+              : 'surface text-ink-mute hover:text-ink hover:bg-surface-2'
           }`}
         >
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-400">
-            <Sparkles className="h-4 w-4" /> Pterodactyl 1-Click
+          <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+            <Sparkles className={`h-3.5 w-3.5 ${activeProtocol === 'pterodactyl' ? 'text-accent' : 'text-ink-mute'}`} />
+            <span>Pterodactyl 1-Click</span>
           </div>
-          <p className="text-[11px] text-zinc-400 mt-1">One-click automated migration using Pterodactyl Panel API Key & Server ID.</p>
+          <p className="text-[11px] text-ink-mute mt-1">Automated panel-to-panel sync using Client API Key and Server Identifier.</p>
         </button>
       </div>
 
       {/* Protocol Configuration Cards */}
-      <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-5 space-y-5">
+      <div className="surface rounded-lg p-5 space-y-4">
         {activeProtocol === 'sftp' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Server className="h-4 w-4 text-amber-400" /> SFTP / FTP Credentials
-                </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">Enter the SFTP host details of your previous provider or VPS.</p>
-              </div>
+            <div className="pb-3 border-b border-line">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+                <Server className="h-3.5 w-3.5 text-accent" /> Remote SFTP Host Credentials
+              </h3>
+              <p className="text-xs text-ink-mute mt-0.5">Enter the remote server credentials of your previous provider.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2 space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">SFTP Host / IP</label>
+                <label className="label">Host / IP</label>
                 <input
                   type="text"
                   value={sftpHost}
                   onChange={(e) => setSftpHost(e.target.value)}
                   placeholder="e.g. sftp.node1.host.com or 192.168.1.100"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Port</label>
+                <label className="label">Port</label>
                 <input
                   type="number"
                   value={sftpPort}
                   onChange={(e) => setSftpPort(e.target.value)}
-                  placeholder="22 or 2022"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  placeholder="22"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Username</label>
+                <label className="label">Username</label>
                 <input
                   type="text"
                   value={sftpUsername}
                   onChange={(e) => setSftpUsername(e.target.value)}
                   placeholder="e.g. user.a1b2c3d4 or root"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Password</label>
+                <label className="label">Password</label>
                 <input
                   type="password"
                   value={sftpPassword}
                   onChange={(e) => setSftpPassword(e.target.value)}
                   placeholder="Remote SFTP Password"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Remote Directory</label>
+                <label className="label">Remote Directory</label>
                 <input
                   type="text"
                   value={sftpRemotePath}
                   onChange={(e) => setSftpRemotePath(e.target.value)}
                   placeholder="e.g. / or /home/container"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
             </div>
@@ -365,42 +366,42 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
                 id="sftpAutoExtract"
                 checked={sftpAutoExtract}
                 onChange={(e) => setSftpAutoExtract(e.target.checked)}
-                className="rounded border-zinc-800 bg-zinc-950 text-amber-500 focus:ring-amber-500 h-4 w-4 cursor-pointer"
+                className="w-3.5 h-3.5 accent-accent rounded"
               />
-              <label htmlFor="sftpAutoExtract" className="text-xs text-zinc-300 font-medium cursor-pointer">
-                Auto-unpack `.zip`, `.tar.gz`, or `.tgz` archive backups if found on remote server.
+              <label htmlFor="sftpAutoExtract" className="text-xs text-ink cursor-pointer">
+                Auto-unpack `.zip` or `.tar.gz` archives discovered in remote directory.
               </label>
             </div>
 
             {testSftpResult && (
-              <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-mono ${
+              <div className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 font-mono ${
                 testSftpResult.success
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  ? 'bg-ok/10 border-ok/25 text-ok'
+                  : 'bg-err/10 border-err/25 text-err'
               }`}>
-                {testSftpResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+                {testSftpResult.success ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
                 <span>{testSftpResult.success ? testSftpResult.message : testSftpResult.error}</span>
               </div>
             )}
 
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
                 disabled={isTestingSftp || !sftpHost || !sftpUsername}
                 onClick={handleTestSftp}
-                className="px-4 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold flex items-center gap-2 disabled:opacity-50 transition"
+                className="btn btn-ghost border-line"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isTestingSftp ? 'animate-spin text-amber-400' : ''}`} />
-                <span>{isTestingSftp ? 'Testing SFTP...' : 'Test Connection'}</span>
+                <RefreshCw className={`h-3 w-3 ${isTestingSftp ? 'animate-spin text-accent' : ''}`} />
+                <span>{isTestingSftp ? 'Testing...' : 'Test Connection'}</span>
               </button>
 
               <button
                 type="button"
                 disabled={isStartingImport || isJobActive || !sftpHost || !sftpUsername}
                 onClick={handleStartSftpImport}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition"
+                className="btn btn-primary"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-3.5 w-3.5" />
                 <span>Start SFTP Migration</span>
               </button>
             </div>
@@ -409,21 +410,21 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
 
         {activeProtocol === 'url' && (
           <div className="space-y-4">
-            <div className="pb-3 border-b border-zinc-800">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <LinkIcon className="h-4 w-4 text-cyan-400" /> Direct Archive URL Download
+            <div className="pb-3 border-b border-line">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+                <LinkIcon className="h-3.5 w-3.5 text-accent" /> Direct Archive URL Download
               </h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Provide a direct download URL for a server backup zip or tarball file.</p>
+              <p className="text-xs text-ink-mute mt-0.5">Provide a direct HTTPS download link for an archive or world backup.</p>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Archive Download URL</label>
+              <label className="label">Archive Download URL</label>
               <input
                 type="text"
                 value={downloadUrl}
                 onChange={(e) => setDownloadUrl(e.target.value)}
-                placeholder="https://example.com/backups/server_backup.zip or https://mediafire.com/file..."
-                className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                placeholder="https://example.com/backups/server_backup.zip"
+                className="field w-full font-mono text-xs"
               />
             </div>
 
@@ -433,22 +434,22 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
                 id="urlAutoExtract"
                 checked={urlAutoExtract}
                 onChange={(e) => setUrlAutoExtract(e.target.checked)}
-                className="rounded border-zinc-800 bg-zinc-950 text-amber-500 focus:ring-amber-500 h-4 w-4 cursor-pointer"
+                className="w-3.5 h-3.5 accent-accent rounded"
               />
-              <label htmlFor="urlAutoExtract" className="text-xs text-zinc-300 font-medium cursor-pointer">
-                Auto-extract archive (`.zip`, `.tar.gz`, `.rar`) into server root directory after download completes.
+              <label htmlFor="urlAutoExtract" className="text-xs text-ink cursor-pointer">
+                Auto-extract archive into server root directory after download completes.
               </label>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 type="button"
                 disabled={isStartingImport || isJobActive || !downloadUrl}
                 onClick={handleStartUrlImport}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition"
+                className="btn btn-primary"
               >
-                <Download className="h-4 w-4" />
-                <span>Start Archive Download & Import</span>
+                <Download className="h-3.5 w-3.5" />
+                <span>Start Download & Extract</span>
               </button>
             </div>
           </div>
@@ -456,56 +457,56 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
 
         {activeProtocol === 'pterodactyl' && (
           <div className="space-y-4">
-            <div className="pb-3 border-b border-zinc-800">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-400" /> Pterodactyl One-Click Import
+            <div className="pb-3 border-b border-line">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5 text-accent" /> Pterodactyl 1-Click Migration
               </h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Automated migration using your existing Pterodactyl Panel Client API Key.</p>
+              <p className="text-xs text-ink-mute mt-0.5">Automated sync using your source panel Client API Key and Server Identifier.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2 space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Pterodactyl Panel URL</label>
+                <label className="label">Pterodactyl Panel URL</label>
                 <input
                   type="text"
                   value={pteroPanelUrl}
                   onChange={(e) => setPteroPanelUrl(e.target.value)}
-                  placeholder="https://panel.yourhost.com"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  placeholder="https://panel.example.com"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Server Identifier</label>
+                <label className="label">Server Identifier</label>
                 <input
                   type="text"
                   value={pteroServerId}
                   onChange={(e) => setPteroServerId(e.target.value)}
                   placeholder="e.g. a1b2c3d4"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
 
               <div className="sm:col-span-3 space-y-1">
-                <label className="text-xs font-mono uppercase text-zinc-400 font-semibold block">Client API Key (`ptlc_...`)</label>
+                <label className="label">Client API Key</label>
                 <input
                   type="password"
                   value={pteroApiKey}
                   onChange={(e) => setPteroApiKey(e.target.value)}
                   placeholder="ptlc_xxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs font-mono rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500"
+                  className="field w-full font-mono text-xs"
                 />
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 type="button"
                 disabled={isStartingImport || isJobActive || !pteroPanelUrl || !pteroApiKey || !pteroServerId}
                 onClick={handleStartPterodactylImport}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition"
+                className="btn btn-primary"
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-3.5 w-3.5" />
                 <span>Fetch & One-Click Import</span>
               </button>
             </div>
@@ -515,20 +516,20 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
 
       {/* Live Job Progress & Terminal Telemetry Monitor */}
       {job && job.status !== 'IDLE' && (
-        <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="surface rounded-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className={`p-2 rounded-xl border text-xs font-bold font-mono ${
-                job.status === 'COMPLETED' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                job.status === 'FAILED' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
-                job.status === 'CANCELED' ? 'bg-zinc-800 border-zinc-700 text-zinc-400' :
-                'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse'
+              <div className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                job.status === 'COMPLETED' ? 'bg-ok/10 border-ok/25 text-ok' :
+                job.status === 'FAILED' ? 'bg-err/10 border-err/25 text-err' :
+                job.status === 'CANCELED' ? 'bg-surface-2 border-line text-ink-mute' :
+                'bg-accent/10 border-accent/25 text-accent'
               }`}>
                 {job.status}
               </div>
               <div>
-                <h4 className="text-xs font-bold text-white">{job.message}</h4>
-                <p className="text-[10px] text-zinc-400 font-mono truncate max-w-md mt-0.5">{job.currentFile}</p>
+                <h4 className="text-xs font-semibold text-ink">{job.message}</h4>
+                <p className="text-[10px] text-ink-mute font-mono truncate max-w-md mt-0.5">{job.currentFile}</p>
               </div>
             </div>
 
@@ -536,62 +537,65 @@ export const ServerImporterTab: React.FC<ServerImporterTabProps> = ({ server, on
               <button
                 type="button"
                 onClick={handleCancelJob}
-                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition"
+                className="btn btn-ghost border-err/25 text-err hover:bg-err/10 text-xs"
               >
-                <XCircle className="h-3.5 w-3.5" /> Cancel Job
+                <XCircle className="h-3 w-3" />
+                <span>Cancel</span>
               </button>
             )}
           </div>
 
           {/* Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-mono">
-              <span className="text-zinc-400">
+          <div className="space-y-1">
+            <div className="flex justify-between text-[11px] font-mono">
+              <span className="text-ink-mute">
                 {job.transferredFiles > 0 && `${job.transferredFiles} / ${job.totalFiles} files • `}
                 {(job.transferredBytes / (1024 * 1024)).toFixed(2)} MB transferred
               </span>
-              <span className="text-amber-400 font-bold">{job.progressPercent}%</span>
+              <span className="text-accent font-semibold">{job.progressPercent}%</span>
             </div>
-            <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
+            <div className="h-1.5 w-full bg-surface-2 rounded-full overflow-hidden border border-line">
               <div
                 className={`h-full transition-all duration-300 ${
-                  job.status === 'COMPLETED' ? 'bg-emerald-500' :
-                  job.status === 'FAILED' ? 'bg-rose-500' :
-                  'bg-amber-500'
+                  job.status === 'COMPLETED' ? 'bg-ok' :
+                  job.status === 'FAILED' ? 'bg-err' :
+                  'bg-accent'
                 }`}
                 style={{ width: `${job.progressPercent}%` }}
               />
             </div>
             {job.speedMBps > 0 && (
-              <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-2 pt-0.5">
-                <span>Speed: <strong className="text-amber-300">{job.speedMBps} MB/s</strong></span>
+              <div className="text-[10px] font-mono text-ink-mute pt-0.5">
+                Speed: <span className="text-ink font-semibold">{job.speedMBps} MB/s</span>
               </div>
             )}
           </div>
 
           {/* Terminal Console Logs */}
-          <div className="space-y-1.5 pt-2">
-            <div className="flex items-center justify-between text-xs text-zinc-400 font-mono">
-              <span className="flex items-center gap-1.5"><Terminal className="h-3.5 w-3.5 text-amber-400" /> Migration Execution Log</span>
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-xs text-ink-mute font-mono">
+              <span className="flex items-center gap-1.5">
+                <Terminal className="h-3 w-3 text-accent" /> Migration Output Log
+              </span>
               <button
                 type="button"
                 onClick={handleCopyLogs}
-                className="hover:text-white flex items-center gap-1 transition"
+                className="hover:text-ink flex items-center gap-1 transition-colors text-[11px]"
               >
-                {copiedLogs ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                {copiedLogs ? <Check className="h-3 w-3 text-ok" /> : <Copy className="h-3 w-3" />}
                 <span>{copiedLogs ? 'Copied' : 'Copy Log'}</span>
               </button>
             </div>
             <div
               ref={terminalRef}
-              className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-[11px] text-zinc-300 max-h-48 overflow-y-auto space-y-1"
+              className="bg-black border border-line rounded-md p-3 font-mono text-[11px] text-ink-dim max-h-48 overflow-y-auto space-y-0.5"
             >
               {job.logs && job.logs.length > 0 ? (
                 job.logs.map((line, idx) => (
                   <div key={idx} className="leading-tight break-all">{line}</div>
                 ))
               ) : (
-                <div className="text-zinc-600 italic">Awaiting migration execution output...</div>
+                <div className="text-ink-mute italic">Awaiting migration execution output...</div>
               )}
             </div>
           </div>

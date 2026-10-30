@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Bot, CheckCircle2, ArrowRight, ArrowLeft, Cpu,
-  Globe2, ShieldCheck, Tag, Sparkles, Check, Server as ServerIcon,
+  Globe2, ShieldCheck, Server as ServerIcon,
   Zap, Layers, Terminal, Loader2, AlertCircle, HardDrive, MemoryStick,
-  Boxes, CheckCircle, RefreshCw, Radio, DollarSign, Activity, CreditCard,
-  QrCode, Coins, Plus, FileText, Copy, Crown
+  Boxes, CheckCircle, RefreshCw, DollarSign, Activity, CreditCard,
+  QrCode, Coins, Plus, FileText, Crown, X, Check
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
 import { formatMemory } from '../../lib/serverNormalize';
 import { Product, Plan, Node, UserAllocationStatus } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
-import { useTheme } from '../../lib/ThemeContext';
 import { CryptoPaymentModal } from '../../components/billing/CryptoPaymentModal';
 
 interface ServerDeployWizardProps {
@@ -124,14 +123,13 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   initialCategory
 }) => {
   const { user, refreshUser } = useAuth();
-  const { accentClasses } = useTheme();
 
   // Wizard Steps: 1 = Product & Software, 2 = Plan Tier & Resources, 3 = Name, Region & Billing, 4 = Review & Deploy
   const [step, setStep] = useState<number>(1);
   const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
-  const [serverTypes, setServerTypes] = useState<any[]>([]);
+  const [, setServerTypes] = useState<any[]>([]);
   const [selectedServerTypeId, setSelectedServerTypeId] = useState<string>('st_minecraft_java');
 
   // Selection States
@@ -150,7 +148,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [serverName, setServerName] = useState<string>(
     selectedProductCategory === 'minecraft' ? 'Minecraft Server' : 'Discord Bot Server'
   );
-  const [selectedLocation, setSelectedLocation] = useState<string>('auto');
+  const [selectedLocation] = useState<string>('auto');
   const [selectedPlanId, setSelectedPlanId] = useState<string>(initialPlanId || '');
   const [selectedNodeId, setSelectedNodeId] = useState<string>('auto');
 
@@ -162,7 +160,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const [couponCode, setCouponCode] = useState<string>('WELCOME20');
   const [couponDiscount, setCouponDiscount] = useState<{ type: string; value: number } | null>({ type: 'percent', value: 20 });
   const [couponMsg, setCouponMsg] = useState<string | null>('WELCOME20 applied (20% OFF)');
-  const [deployTxRef, setDeployTxRef] = useState<string>('');
+  const [deployTxRef] = useState<string>('');
 
   // Inline Quick Top-up Modal in Deploy Wizard
   const [showQuickDeposit, setShowQuickDeposit] = useState<boolean>(false);
@@ -210,13 +208,40 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     }
   };
 
-  useEffect(() => {
-    fetchDeployOptions();
-    fetchRuntimes();
-    if (selectedProductCategory === 'minecraft') {
-      loadMinecraftVersions(selectedSoftware.name);
+  const loadMinecraftVersions = async (softwareName: string) => {
+    const requestId = ++versionRequestIdRef.current;
+
+    const cached = getCachedMinecraftVersions(softwareName);
+    if (cached && cached.versions.length > 0) {
+      setDynamicVersions(cached.versions);
+      setSelectedVersion(prev => (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0] || '1.21.4'));
+      if (cached.recommendedJava) {
+        setSelectedJavaVersion(`Java ${cached.recommendedJava}`);
+      }
+      return;
     }
-  }, []);
+
+    setIsLoadingVersions(true);
+    try {
+      const data = await fetchAuthoritativeMinecraftVersions(softwareName);
+      if (requestId !== versionRequestIdRef.current) {
+        return;
+      }
+      if (data && data.versions && data.versions.length > 0) {
+        setDynamicVersions(data.versions);
+        setSelectedVersion(prev => (data.versions.includes(prev) ? prev : data.latest || data.versions[0] || '1.21.4'));
+        if (data.recommendedJava) {
+          setSelectedJavaVersion(`Java ${data.recommendedJava}`);
+        }
+      }
+    } catch (e) {
+      // Fallback
+    } finally {
+      if (requestId === versionRequestIdRef.current) {
+        setIsLoadingVersions(false);
+      }
+    }
+  };
 
   const fetchRuntimes = async () => {
     try {
@@ -262,47 +287,17 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
     }
   };
 
-  const loadMinecraftVersions = async (softwareName: string) => {
-    const requestId = ++versionRequestIdRef.current;
-
-    // Check if we already have the complete authoritative version list cached in memory
-    const cached = getCachedMinecraftVersions(softwareName);
-    if (cached && cached.versions.length > 0) {
-      setDynamicVersions(cached.versions);
-      setSelectedVersion(prev => (cached.versions.includes(prev) ? prev : cached.latest || cached.versions[0] || '1.21.4'));
-      if (cached.recommendedJava) {
-        setSelectedJavaVersion(`Java ${cached.recommendedJava}`);
-      }
-      return;
+  useEffect(() => {
+    fetchDeployOptions();
+    fetchRuntimes();
+    if (selectedProductCategory === 'minecraft') {
+      loadMinecraftVersions(selectedSoftware.name);
     }
-
-    setIsLoadingVersions(true);
-    try {
-      const data = await fetchAuthoritativeMinecraftVersions(softwareName);
-      if (requestId !== versionRequestIdRef.current) {
-        // Race condition guard: ignore if user already switched to another software engine
-        return;
-      }
-      if (data && data.versions && data.versions.length > 0) {
-        setDynamicVersions(data.versions);
-        setSelectedVersion(prev => (data.versions.includes(prev) ? prev : data.latest || data.versions[0] || '1.21.4'));
-        if (data.recommendedJava) {
-          setSelectedJavaVersion(`Java ${data.recommendedJava}`);
-        }
-      }
-    } catch (e) {
-      // Fallback
-    } finally {
-      if (requestId === versionRequestIdRef.current) {
-        setIsLoadingVersions(false);
-      }
-    }
-  };
+  }, []);
 
   const handleSelectSoftware = (software: SoftwareOption) => {
     setSelectedSoftware(software);
 
-    // Auto-map software to serverTypeId
     const nameLower = software.name.toLowerCase();
     if (nameLower.includes('node')) {
       setSelectedServerTypeId('st_nodejs');
@@ -321,32 +316,20 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       if (runtimesMap[key]) {
         setDynamicVersions(runtimesMap[key].versions);
         setSelectedVersion(runtimesMap[key].defaultVersion);
-      } else {
-        setDynamicVersions(software.versions);
-        setSelectedVersion(software.defaultVersion);
       }
-    } else {
-      setDynamicVersions(software.versions);
-      setSelectedVersion(software.defaultVersion);
-    }
-
-    // Auto-suggest server name
-    setServerName(`${software.name} Instance`);
-
-    // Match plan
-    const matchingPlan = plans.find(p => p.productId === (software.category === 'minecraft' ? 'prod_minecraft' : 'prod_bot'));
-    if (matchingPlan && !selectedPlanId) {
-      setSelectedPlanId(matchingPlan.id);
     }
   };
 
   const handleProductCategoryChange = (category: 'minecraft' | 'bot') => {
     setSelectedProductCategory(category);
-    const firstSoftware = SOFTWARE_CATALOG.find(s => s.category === category) || SOFTWARE_CATALOG[0];
-    handleSelectSoftware(firstSoftware);
+    const firstSoft = SOFTWARE_CATALOG.find(s => s.category === category);
+    if (firstSoft) {
+      handleSelectSoftware(firstSoft);
+    }
     setServerName(category === 'minecraft' ? 'Minecraft Server' : 'Discord Bot Server');
 
-    const matchingPlan = plans.find(p => p.productId === (category === 'minecraft' ? 'prod_minecraft' : 'prod_bot'));
+    const matchingCategory = category === 'bot' ? 'prod_bot' : 'prod_minecraft';
+    const matchingPlan = plans.find(p => p.productId === matchingCategory);
     if (matchingPlan) {
       setSelectedPlanId(matchingPlan.id);
     }
@@ -413,7 +396,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       { msg: `[Allocator] Reserving port and vCPU bounds on cluster...`, delay: 600 },
       { msg: `[Storage] Initializing runtime directory structure...`, delay: 700 },
       { msg: `[Installer] Configuring ${selectedSoftware.name} ${selectedVersion} runtime binaries...`, delay: 800 },
-      { msg: `[Network] Binding virtual network interfaces & Playit.gg routing...`, delay: 600 },
+      { msg: `[Network] Binding virtual network interfaces & dedicated node port allocation...`, delay: 600 },
       { msg: `[Bootloader] Spawning daemon process supervisor...`, delay: 600 }
     ];
 
@@ -450,9 +433,9 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       if (res.success && res.data && res.data.server) {
         setPipelineLogs(prev => [
           ...prev,
-          `✔ [ONLINE] Instance deployed successfully! (ID: ${res.data.server.id})`,
-          `✔ Primary Endpoint: ${res.data.server.primaryIp}:${res.data.server.primaryPort}`,
-          `✔ Status: RUNNING`
+          `[SUCCESS] [ONLINE] Instance deployed successfully! (ID: ${res.data.server.id})`,
+          `[SUCCESS] Primary Endpoint: ${res.data.server.primaryIp}:${res.data.server.primaryPort}`,
+          `[SUCCESS] Status: RUNNING`
         ]);
         setDeployedServerId(res.data.server.id);
         setPipelineStage(7);
@@ -463,7 +446,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
       }
     } catch (err: any) {
       setDeployError(err.message || 'Deployment failed. Please check balance and try again.');
-      setPipelineLogs(prev => [...prev, `✖ [ERROR] ${err.message || 'Fatal deployment failure'}`]);
+      setPipelineLogs(prev => [...prev, `[ERROR] ${err.message || 'Fatal deployment failure'}`]);
     }
   };
 
@@ -471,22 +454,22 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const isAllocationLimitReached = Boolean(allocations && !allocations.unlimited && allocations.remaining !== null && allocations.remaining <= 0);
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-line)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-amber-400" /> Server Provisioning
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-ink)] flex items-center gap-2">
+            <ServerIcon className="h-5 w-5 text-[var(--color-accent)]" /> Server Provisioning
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Deploy production-grade Minecraft servers and Discord bot environments on dedicated compute instances.
+          <p className="text-xs text-[var(--color-ink-mute)] mt-0.5">
+            Deploy Minecraft servers and Discord bot environments on dedicated compute instances.
           </p>
         </div>
 
         {/* Steps Progress Indicator */}
         {!isAllocationLimitReached && (
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-xs">
             {[
               { num: 1, label: 'Software' },
               { num: 2, label: 'Plan & Tier' },
@@ -494,16 +477,16 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
               { num: 4, label: 'Deploy' }
             ].map((s, idx) => (
               <React.Fragment key={s.num}>
-                {idx > 0 && <div className={`w-4 h-0.5 ${step >= s.num ? 'bg-amber-400' : 'bg-zinc-800'}`} />}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-medium transition ${
+                {idx > 0 && <div className={`w-3 h-[1px] ${step >= s.num ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-line)]'}`} />}
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono transition-colors ${
                   step === s.num
-                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-accent)]'
                     : step > s.num
-                    ? 'text-zinc-300 bg-zinc-900 border border-zinc-800'
-                    : 'text-zinc-500 bg-zinc-950 border border-zinc-900'
+                    ? 'text-[var(--color-ink-dim)] surface border border-[var(--color-line)]'
+                    : 'text-[var(--color-ink-mute)] surface border border-[var(--color-line-soft)]'
                 }`}>
-                  <span className="font-mono">{s.num}.</span>
-                  <span className="hidden sm:inline">{s.label}</span>
+                  <span>{s.num}.</span>
+                  <span className="hidden sm:inline font-sans">{s.label}</span>
                 </div>
               </React.Fragment>
             ))}
@@ -511,35 +494,35 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         )}
       </div>
 
-      {/* ALLOCATION LIMIT REACHED BANNER & BLOCK */}
+      {/* ALLOCATION LIMIT REACHED */}
       {isAllocationLimitReached ? (
-        <div className="p-8 sm:p-12 rounded-3xl bg-zinc-900/80 border border-zinc-800 text-center max-w-xl mx-auto space-y-6 shadow-2xl my-8 animate-in fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
-            <AlertCircle className="w-8 h-8" />
+        <div className="surface p-8 sm:p-10 rounded-lg text-center max-w-lg mx-auto space-y-4 my-8">
+          <div className="w-12 h-12 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-[var(--color-warn)] flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
           </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold text-white tracking-tight">Server Allocation Limit Reached</h2>
-            <p className="text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-[var(--color-ink)]">Server Allocation Limit Reached</h2>
+            <p className="text-xs text-[var(--color-ink-mute)] max-w-sm mx-auto">
               Your current plan does not support additional server allocations. Upgrade your plan or purchase additional allocations.
             </p>
           </div>
           
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 text-xs font-mono text-zinc-300 flex items-center justify-between">
-            <span className="text-zinc-400">Current Usage:</span>
-            <span className="font-bold text-amber-400 text-sm">{allocations?.used} / {allocations?.limit}</span>
+          <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] text-xs font-mono text-[var(--color-ink-dim)] flex items-center justify-between">
+            <span>Current Usage:</span>
+            <span className="font-bold text-[var(--color-ink)]">{allocations?.used} / {allocations?.limit}</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+          <div className="flex gap-2 justify-center pt-1">
             <button
               onClick={() => onNavigate('billing')}
-              className="px-5 py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+              className="btn btn-primary text-xs"
             >
               <span>View Plans</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => onNavigate('support')}
-              className="px-5 py-2.5 rounded-xl font-medium text-xs bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 transition"
+              className="btn btn-ghost text-xs"
             >
               Contact Administrator
             </button>
@@ -549,848 +532,790 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         <>
           {/* STEP 1: Choose Product & Software */}
           {step === 1 && (
-        <div className="space-y-6 animate-in fade-in">
-          {/* Category Toggle */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => handleProductCategoryChange('minecraft')}
-              className={`p-5 rounded-2xl border text-left transition flex items-start gap-4 ${
-                selectedProductCategory === 'minecraft'
-                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.05)]'
-                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              <div className={`p-3 rounded-xl ${selectedProductCategory === 'minecraft' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
-                <Gamepad2 className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <div className="font-extrabold text-white text-base flex items-center gap-2 tracking-tight">
-                  Minecraft Server Hosting
-                  {selectedProductCategory === 'minecraft' && <Crown className="h-4 w-4 text-amber-400" />}
-                </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  High-performance Minecraft engines with Paper, Purpur, Vanilla, Fabric & Forge support.
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleProductCategoryChange('bot')}
-              className={`p-5 rounded-2xl border text-left transition flex items-start gap-4 ${
-                selectedProductCategory === 'bot'
-                  ? 'bg-amber-500/10 border-amber-500/40 text-white ring-1 ring-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.05)]'
-                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              <div className={`p-3 rounded-xl ${selectedProductCategory === 'bot' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
-                <Bot className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <div className="font-extrabold text-white text-base flex items-center gap-2 tracking-tight">
-                  Discord Bot & App Hosting
-                  {selectedProductCategory === 'bot' && <Crown className="h-4 w-4 text-amber-400" />}
-                </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  24/7 background hosting for Node.js, Python, and Bun automation bots.
-                </p>
-              </div>
-            </button>
-          </div>
-
-          {/* Software Options Grid */}
-          <div className="space-y-3.5">
-            <h2 className="text-xs font-extrabold uppercase tracking-widest text-zinc-400">
-              Select {selectedProductCategory === 'minecraft' ? 'Server Engine' : 'Programming Runtime'}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredSoftware.map(software => {
-                const isSelected = selectedSoftware.id === software.id;
-                const Icon = software.icon;
-                return (
-                  <div
-                    key={software.id}
-                    onClick={() => handleSelectSoftware(software)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-zinc-900 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.08)] text-white'
-                        : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:border-zinc-700 hover:text-white'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`p-2 rounded-xl ${isSelected ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse' : 'bg-zinc-900 text-zinc-500'}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <span className="font-extrabold text-sm text-white tracking-tight">{software.name}</span>
-                        </div>
-                        {isSelected && <Crown className="h-4 w-4 text-amber-400" />}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
-                        {software.description}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between text-[11px] font-medium text-zinc-500">
-                      <span>Default Version</span>
-                      <span className="font-mono text-zinc-300 font-bold">{software.defaultVersion}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Version & Runtime Environment Controls */}
-          <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-amber-400" /> Runtime Version & Parameters
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Software Version {isLoadingVersions && <Loader2 className="inline h-3 w-3 animate-spin text-amber-400 ml-1" />}
-                </label>
-                <select
-                  value={selectedVersion}
-                  onChange={e => {
-                    const nextVer = e.target.value;
-                    setSelectedVersion(nextVer);
-                    // Determine java version for dynamic feedback
-                    if (selectedProductCategory === 'minecraft' && nextVer && nextVer !== 'UNKNOWN') {
-                      const clean = nextVer.replace(/^v/i, '').trim();
-                      const parts = clean.split(/[-.]/).map(p => parseInt(p, 10));
-                      const major = isNaN(parts[0]) ? 1 : parts[0];
-                      const minor = parts[1] !== undefined && !isNaN(parts[1]) ? parts[1] : 0;
-                      const patch = parts[2] !== undefined && !isNaN(parts[2]) ? parts[2] : 0;
-
-                      if (major >= 26) {
-                        setSelectedJavaVersion('Java 25');
-                      } else if (major > 1 || minor > 20 || (minor === 20 && patch >= 5)) {
-                        setSelectedJavaVersion('Java 21');
-                      } else if (minor >= 17) {
-                        setSelectedJavaVersion('Java 17');
-                      } else if (minor === 16) {
-                        setSelectedJavaVersion('Java 11');
-                      } else {
-                        setSelectedJavaVersion('Java 8');
-                      }
-                    }
-                  }}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
-                >
-                  {dynamicVersions.length === 0 ? (
-                    <option value="UNKNOWN">Upstream Version Unavailable</option>
-                  ) : (
-                    dynamicVersions.map((v, idx) => (
-                      <option key={v} value={v}>
-                        {v} {idx === 0 && v !== 'UNKNOWN' ? '(Latest)' : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {selectedProductCategory === 'minecraft' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                    Java Runtime Environment
-                  </label>
-                  <select
-                    value={selectedJavaVersion}
-                    onChange={e => setSelectedJavaVersion(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
-                  >
-                    <option value="Java 25">Java 25 (Recommended for Paper 26.1+)</option>
-                    <option value="Java 21">Java 21 (Recommended for 1.20.5+)</option>
-                    <option value="Java 17">Java 17 (Recommended for 1.18–1.20.4)</option>
-                    <option value="Java 11">Java 11</option>
-                    <option value="Java 8">Java 8 (Legacy 1.12.2 & older)</option>
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                    Default Startup Entrypoint
-                  </label>
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-400 font-mono">
-                    {selectedSoftware.id === 'python' ? 'main.py' : selectedSoftware.id === 'bun' ? 'index.ts' : selectedSoftware.id === 'golang' ? 'main.go' : selectedSoftware.id === 'rust' ? 'main.rs' : 'index.js'}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {selectedProductCategory === 'minecraft' && (
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
-                  <input
-                    type="checkbox"
-                    checked={eulaAccepted}
-                    onChange={e => setEulaAccepted(e.target.checked)}
-                    className="rounded border-zinc-700 text-amber-500 focus:ring-0 bg-zinc-950"
-                  />
-                  <span>Automatically accept the official Minecraft EULA (eula=true)</span>
-                </label>
-              </div>
-            )}
-          </div>
-
-          {/* Action Footer */}
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition"
-            >
-              <span>Next: Choose Plan & Tier</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 2: Choose Plan Tier & Resources */}
-      {step === 2 && (
-        <div className="space-y-6 animate-in fade-in">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-300">
-              Select Performance Plan Tier ({selectedProductCategory === 'minecraft' ? 'Minecraft' : 'Bot Hosting'})
-            </h2>
-            <span className="text-xs text-zinc-500 font-mono">
-              {currentProductPlans.length} Available Tiers
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {currentProductPlans.map(plan => {
-              const isSelected = selectedPlan?.id === plan.id;
-              const price = billingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
-              const isPremiumPlan = plan.name.toLowerCase().includes('pro') || plan.name.toLowerCase().includes('unlimited') || plan.priceMonthly > 10;
-
-              return (
-                <div
-                  key={plan.id}
-                  onClick={() => setSelectedPlanId(plan.id)}
-                  className={`p-5 rounded-3xl border cursor-pointer transition-all flex flex-col justify-between ${
-                    isSelected
-                      ? 'bg-zinc-900 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.08)] ring-1 ring-amber-500/20 text-white'
-                      : 'bg-zinc-950 border-zinc-850 text-zinc-400 hover:border-zinc-700 hover:text-white'
+            <div className="space-y-5">
+              {/* Category Toggle */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleProductCategoryChange('minecraft')}
+                  className={`p-4 rounded-lg border text-left transition-colors cursor-pointer flex items-start gap-3.5 ${
+                    selectedProductCategory === 'minecraft'
+                      ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                      : 'surface border-[var(--color-line)] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
                   }`}
                 >
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-extrabold text-base text-white tracking-tight flex items-center gap-1.5">
-                        {isPremiumPlan && <Crown className="w-4 h-4 text-amber-400" />}
-                        {plan.name}
-                      </span>
-                      {isSelected && <CheckCircle className="h-5 w-5 text-amber-400" />}
+                  <div className={`p-2.5 rounded-md ${selectedProductCategory === 'minecraft' ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)] border border-[var(--color-line)]' : 'surface-2 text-[var(--color-ink-mute)] border border-[var(--color-line)]'}`}>
+                    <Gamepad2 className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-sm text-[var(--color-ink)]">
+                      Minecraft Server Hosting
                     </div>
+                    <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                      Paper, Purpur, Vanilla, Fabric & Forge support.
+                    </p>
+                  </div>
+                </button>
 
-                    <div className="pb-1.5 flex items-baseline justify-between border-b border-zinc-900">
-                      {price === 0 ? (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xl font-black text-emerald-400 tracking-tight">FREE TIER</span>
-                          <span className="text-[11px] text-zinc-500 font-mono font-bold">$0.00 / mo</span>
-                        </div>
-                      ) : (
+                <button
+                  type="button"
+                  onClick={() => handleProductCategoryChange('bot')}
+                  className={`p-4 rounded-lg border text-left transition-colors cursor-pointer flex items-start gap-3.5 ${
+                    selectedProductCategory === 'bot'
+                      ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                      : 'surface border-[var(--color-line)] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
+                  }`}
+                >
+                  <div className={`p-2.5 rounded-md ${selectedProductCategory === 'bot' ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)] border border-[var(--color-line)]' : 'surface-2 text-[var(--color-ink-mute)] border border-[var(--color-line)]'}`}>
+                    <Bot className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-sm text-[var(--color-ink)]">
+                      Discord Bot & App Hosting
+                    </div>
+                    <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                      24/7 background hosting for Node.js, Python, and Bun automation.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Software Options Grid */}
+              <div className="space-y-2.5">
+                <h2 className="label">
+                  Select {selectedProductCategory === 'minecraft' ? 'Server Engine' : 'Programming Runtime'}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredSoftware.map(software => {
+                    const isSelected = selectedSoftware.id === software.id;
+                    const Icon = software.icon;
+                    return (
+                      <div
+                        key={software.id}
+                        onClick={() => handleSelectSoftware(software)}
+                        className={`p-3.5 rounded-lg border cursor-pointer transition-colors flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                            : 'surface border-[var(--color-line)] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] hover:border-[var(--color-line-soft)]'
+                        }`}
+                      >
                         <div>
-                          <span className="text-2xl font-black text-white font-mono tracking-tight tabular-nums">${price.toFixed(2)}</span>
-                          <span className="text-xs text-zinc-500 font-medium ml-1">/{billingCycle === 'yearly' ? 'yr' : 'mo'}</span>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`p-1.5 rounded-md border border-[var(--color-line)] ${isSelected ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)]' : 'surface-2 text-[var(--color-ink-mute)]'}`}>
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              <span className="font-semibold text-xs text-[var(--color-ink)]">{software.name}</span>
+                            </div>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-[var(--color-accent)]" />}
+                          </div>
+                          <p className="text-[11px] text-[var(--color-ink-mute)] line-clamp-2 leading-relaxed">
+                            {software.description}
+                          </p>
                         </div>
+
+                        <div className="mt-3 pt-2 border-t border-[var(--color-line)] flex items-center justify-between text-[10px] text-[var(--color-ink-mute)] font-mono">
+                          <span>Default Version</span>
+                          <span className="text-[var(--color-ink-dim)]">{software.defaultVersion}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Version & Runtime Environment Controls */}
+              <div className="surface p-4 rounded-lg space-y-3">
+                <h3 className="label flex items-center gap-1.5">
+                  <Terminal className="h-3.5 w-3.5 text-[var(--color-accent)]" /> Runtime Version & Parameters
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label block mb-1">
+                      Software Version {isLoadingVersions && <Loader2 className="inline h-3 w-3 animate-spin text-[var(--color-accent)] ml-1" />}
+                    </label>
+                    <select
+                      value={selectedVersion}
+                      onChange={e => {
+                        const nextVer = e.target.value;
+                        setSelectedVersion(nextVer);
+                        if (selectedProductCategory === 'minecraft' && nextVer && nextVer !== 'UNKNOWN') {
+                          const clean = nextVer.replace(/^v/i, '').trim();
+                          const parts = clean.split(/[-.]/).map(p => parseInt(p, 10));
+                          const major = isNaN(parts[0]) ? 1 : parts[0];
+                          const minor = parts[1] !== undefined && !isNaN(parts[1]) ? parts[1] : 0;
+                          const patch = parts[2] !== undefined && !isNaN(parts[2]) ? parts[2] : 0;
+
+                          if (major >= 26) {
+                            setSelectedJavaVersion('Java 25');
+                          } else if (major > 1 || minor > 20 || (minor === 20 && patch >= 5)) {
+                            setSelectedJavaVersion('Java 21');
+                          } else if (minor >= 17) {
+                            setSelectedJavaVersion('Java 17');
+                          } else if (minor === 16) {
+                            setSelectedJavaVersion('Java 11');
+                          } else {
+                            setSelectedJavaVersion('Java 8');
+                          }
+                        }
+                      }}
+                      className="field w-full px-2.5 py-1.5 text-xs font-mono rounded-md"
+                    >
+                      {dynamicVersions.length === 0 ? (
+                        <option value="UNKNOWN">Upstream Version Unavailable</option>
+                      ) : (
+                        dynamicVersions.map((v, idx) => (
+                          <option key={v} value={v}>
+                            {v} {idx === 0 && v !== 'UNKNOWN' ? '(Latest)' : ''}
+                          </option>
+                        ))
                       )}
-                    </div>
-
-                    <div className="space-y-2.5 text-xs">
-                      <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-450">
-                          <MemoryStick className="h-3.5 w-3.5 text-amber-400" /> Dedicated RAM
-                        </span>
-                        <span className="font-mono font-bold text-white">{formatMemory(plan.ramMB)}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-450">
-                          <Cpu className="h-3.5 w-3.5 text-amber-400" /> CPU Limits
-                        </span>
-                        <span className="font-mono font-bold text-white">{plan.cpuCores * 100}% vCPU</span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-zinc-300 pb-1.5 border-b border-zinc-900">
-                        <span className="flex items-center gap-2 text-zinc-450">
-                          <HardDrive className="h-3.5 w-3.5 text-amber-400" /> NVMe Storage
-                        </span>
-                        <span className="font-mono font-bold text-white">{plan.diskGB} GB SSD</span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-zinc-300">
-                        <span className="flex items-center gap-2 text-zinc-450">
-                          <ShieldCheck className="h-3.5 w-3.5 text-amber-400" /> Backups Included
-                        </span>
-                        <span className="font-mono font-bold text-white">{plan.backupLimit} Slots</span>
-                      </div>
-                    </div>
+                    </select>
                   </div>
 
-                  <div className="mt-5 pt-3">
-                    <div className={`w-full py-2.5 rounded-xl text-center text-xs font-extrabold uppercase tracking-wider transition ${
-                      isSelected
-                        ? 'bg-amber-500 text-black shadow-md'
-                        : 'bg-zinc-900 text-zinc-350 hover:bg-zinc-800'
-                    }`}>
-                      {isSelected ? 'Tier Selected' : 'Select Tier'}
+                  {selectedProductCategory === 'minecraft' ? (
+                    <div>
+                      <label className="label block mb-1">
+                        Java Runtime Environment
+                      </label>
+                      <select
+                        value={selectedJavaVersion}
+                        onChange={e => setSelectedJavaVersion(e.target.value)}
+                        className="field w-full px-2.5 py-1.5 text-xs font-mono rounded-md"
+                      >
+                        <option value="Java 25">Java 25 (Recommended for Paper 26.1+)</option>
+                        <option value="Java 21">Java 21 (Recommended for 1.20.5+)</option>
+                        <option value="Java 17">Java 17 (Recommended for 1.18–1.20.4)</option>
+                        <option value="Java 11">Java 11</option>
+                        <option value="Java 8">Java 8 (Legacy 1.12.2 & older)</option>
+                      </select>
                     </div>
+                  ) : (
+                    <div>
+                      <label className="label block mb-1">
+                        Default Startup Entrypoint
+                      </label>
+                      <div className="surface-2 border border-[var(--color-line)] rounded-md px-3 py-1.5 text-xs text-[var(--color-ink-dim)] font-mono">
+                        {selectedSoftware.id === 'python' ? 'main.py' : selectedSoftware.id === 'bun' ? 'index.ts' : selectedSoftware.id === 'golang' ? 'main.go' : selectedSoftware.id === 'rust' ? 'main.rs' : 'index.js'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedProductCategory === 'minecraft' && (
+                  <div className="pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--color-ink-dim)]">
+                      <input
+                        type="checkbox"
+                        checked={eulaAccepted}
+                        onChange={e => setEulaAccepted(e.target.checked)}
+                        className="rounded border-[var(--color-line)] text-[var(--color-accent)] focus:ring-0 bg-[var(--color-surface)]"
+                      />
+                      <span>Accept the official Minecraft EULA (eula=true)</span>
+                    </label>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between pt-4 border-t border-zinc-900">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-semibold text-xs hover:bg-zinc-800 transition"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStep(3)}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition"
-            >
-              <span>Next: Configuration & Node</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3: Server Name, Region & Billing */}
-      {step === 3 && (
-        <div className="space-y-6 animate-in fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Instance Configuration */}
-            <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-                <ServerIcon className="h-4 w-4 text-amber-400" /> Instance Identification
-              </h3>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Server Name
-                </label>
-                <input
-                  type="text"
-                  value={serverName}
-                  onChange={e => setServerName(e.target.value)}
-                  placeholder="e.g. Survival SMP or Production Bot"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Compute Node Location
-                </label>
-                <select
-                  value={selectedNodeId}
-                  onChange={e => setSelectedNodeId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="auto">Automatic (Lowest cluster load)</option>
-                  {nodes.map(node => (
-                    <option key={node.id} value={node.id}>
-                      {node.name} ({node.locationName}) - {node.ip}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-2 text-[11px] text-zinc-400 flex items-center gap-2">
-                <Globe2 className="h-4 w-4 text-emerald-400" />
-                <span>Zero-portforward Playit.gg tunnel auto-assigned upon deployment.</span>
-              </div>
-            </div>
-
-            {/* Billing & Discounts */}
-            <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-amber-400" /> Billing Cycle & Payment Method
-              </h3>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBillingCycle('monthly')}
-                  className={`p-3 rounded-xl border text-xs font-semibold transition ${
-                    billingCycle === 'monthly'
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                  }`}
-                >
-                  Monthly Cycle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillingCycle('yearly')}
-                  className={`p-3 rounded-xl border text-xs font-semibold transition ${
-                    billingCycle === 'yearly'
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                  }`}
-                >
-                  Yearly Cycle (Save ~15%)
-                </button>
-              </div>
-
-              {/* Promo Code */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Promotional Coupon
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={couponCode}
-                    onChange={e => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder="Enter coupon code"
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    className="px-4 py-2 bg-zinc-800 text-zinc-200 rounded-xl text-xs font-semibold hover:bg-zinc-700 transition"
-                  >
-                    Apply
-                  </button>
-                </div>
-                {couponMsg && (
-                  <p className="text-[11px] text-emerald-400 mt-1 font-mono">{couponMsg}</p>
                 )}
               </div>
 
-              {/* Payment Method Selector or Free Instance Callout */}
-              {calculateTotalPrice() <= 0 ? (
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 space-y-1">
-                  <div className="text-xs font-bold flex items-center gap-1.5 text-emerald-300">
-                    <Sparkles className="w-4 h-4 text-emerald-400" /> Free Instance / 100% Discount Applied ($0.00 Total)
-                  </div>
-                  <p className="text-[11px] text-zinc-300">
-                    No payment or credits are required for this deployment. Click "Review & Deploy" below to activate your server instantly!
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-zinc-300">
-                    Select Payment Method
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('balance')}
-                      className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
-                        paymentMethod === 'balance'
-                          ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
-                          : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+              {/* Action Footer */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="btn btn-primary text-xs"
+                >
+                  <span>Next: Choose Plan & Tier</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Choose Plan Tier & Resources */}
+          {step === 2 && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold text-[var(--color-ink)] label">
+                  Select Plan Tier ({selectedProductCategory === 'minecraft' ? 'Minecraft' : 'Bot Hosting'})
+                </h2>
+                <span className="text-xs text-[var(--color-ink-mute)] font-mono">
+                  {currentProductPlans.length} Available Tiers
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {currentProductPlans.map(plan => {
+                  const isSelected = selectedPlan?.id === plan.id;
+                  const price = billingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+                  const isPremiumPlan = plan.name.toLowerCase().includes('pro') || plan.name.toLowerCase().includes('unlimited') || plan.priceMonthly > 10;
+
+                  return (
+                    <div
+                      key={plan.id}
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={`p-4 rounded-lg border cursor-pointer transition-colors flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                          : 'surface border-[var(--color-line)] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
                       }`}
                     >
-                      <Coins className="h-4 w-4 text-amber-400" />
-                      <span>Credits (${user?.credits?.toFixed(2) || '0.00'})</span>
-                    </button>
-
-                    {gateways?.stripe?.enabled !== false && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('stripe')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
-                          paymentMethod === 'stripe'
-                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
-                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        <CreditCard className="h-4 w-4 text-cyan-400" />
-                        <span>Instant Card</span>
-                      </button>
-                    )}
-
-                    {gateways?.upi?.enabled !== false && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('upi')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
-                          paymentMethod === 'upi'
-                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
-                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        <QrCode className="h-4 w-4 text-violet-400" />
-                        <span>UPI / QR</span>
-                      </button>
-                    )}
-
-                    {gateways?.crypto?.enabled !== false && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('crypto')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition ${
-                          paymentMethod === 'crypto'
-                            ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
-                            : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        <Coins className="h-4 w-4 text-emerald-400" />
-                        <span>Crypto</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Account Credits Status & Quick Deposit Button */}
-                  {paymentMethod === 'balance' && (
-                    <div className="pt-2">
-                      {((user?.credits || 0) >= calculateTotalPrice()) ? (
-                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5 font-semibold">
-                            <CheckCircle2 className="h-4 w-4" /> Sufficient credits available
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-[var(--color-ink)] flex items-center gap-1.5">
+                            {isPremiumPlan && <Crown className="w-3.5 h-3.5 text-[var(--color-accent)]" />}
+                            {plan.name}
                           </span>
-                          <span className="font-mono text-[11px] text-zinc-400">
-                            Remaining: ${((user?.credits || 0) - calculateTotalPrice()).toFixed(2)}
-                          </span>
+                          {isSelected && <CheckCircle className="h-4 w-4 text-[var(--color-accent)]" />}
                         </div>
-                      ) : (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
-                          <div className="flex items-center justify-between text-amber-400">
-                            <span className="font-semibold flex items-center gap-1">
-                              <AlertCircle className="h-4 w-4" /> Shortfall: ${(calculateTotalPrice() - (user?.credits || 0)).toFixed(2)} required
+
+                        <div className="pb-1 flex items-baseline justify-between border-b border-[var(--color-line)]">
+                          {price === 0 ? (
+                            <span className="text-base font-bold text-[var(--color-ok)]">FREE TIER</span>
+                          ) : (
+                            <div>
+                              <span className="text-xl font-bold text-[var(--color-ink)] font-mono tabular-nums">${price.toFixed(2)}</span>
+                              <span className="text-xs text-[var(--color-ink-mute)] ml-1">/{billingCycle === 'yearly' ? 'yr' : 'mo'}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between text-[var(--color-ink-dim)] pb-1 border-b border-[var(--color-line)]">
+                            <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)]">
+                              <MemoryStick className="h-3 w-3 text-[var(--color-accent)]" /> RAM
                             </span>
-                            <span className="font-mono text-[11px]">Balance: ${user?.credits?.toFixed(2) || '0.00'}</span>
+                            <span className="font-mono font-medium text-[var(--color-ink)]">{formatMemory(plan.ramMB)}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleQuickDeposit(Math.ceil(calculateTotalPrice() - (user?.credits || 0)))}
-                              disabled={isProcessingQuickDeposit}
-                              className="flex-1 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-bold text-[11px] transition"
-                            >
-                              {isProcessingQuickDeposit ? 'Depositing...' : `+ Deposit Shortfall ($${Math.ceil(calculateTotalPrice() - (user?.credits || 0))})`}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setShowQuickDeposit(true)}
-                              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-semibold transition"
-                            >
-                              Custom Deposit
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Real-time Crypto Payment Processor Callout */}
-                  {paymentMethod === 'crypto' && gateways?.crypto?.enabled !== false && (
-                    <div className="pt-2">
-                      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-amber-500/20 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="space-y-0.5">
-                          <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                            <Zap className="w-4 h-4 text-amber-400" /> Real-Time Live Crypto Gateway
+                          <div className="flex items-center justify-between text-[var(--color-ink-dim)] pb-1 border-b border-[var(--color-line)]">
+                            <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)]">
+                              <Cpu className="h-3 w-3 text-[var(--color-accent)]" /> CPU
+                            </span>
+                            <span className="font-mono font-medium text-[var(--color-ink)]">{plan.cpuCores * 100}% vCPU</span>
                           </div>
-                          <p className="text-[11px] text-zinc-400">
-                            Scan QR Code for exact checkout amount (${calculateTotalPrice().toFixed(2)} USD), live exchange rates & instant server delivery.
-                          </p>
+
+                          <div className="flex items-center justify-between text-[var(--color-ink-dim)] pb-1 border-b border-[var(--color-line)]">
+                            <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)]">
+                              <HardDrive className="h-3 w-3 text-[var(--color-accent)]" /> Storage
+                            </span>
+                            <span className="font-mono font-medium text-[var(--color-ink)]">{plan.diskGB} GB SSD</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[var(--color-ink-dim)]">
+                            <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)]">
+                              <ShieldCheck className="h-3 w-3 text-[var(--color-accent)]" /> Backups
+                            </span>
+                            <span className="font-mono font-medium text-[var(--color-ink)]">{plan.backupLimit} Slots</span>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowCryptoModal(true)}
-                          className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all shrink-0 flex items-center justify-center gap-1.5"
-                        >
-                          <Coins className="w-4 h-4" />
-                          <span>Pay ${calculateTotalPrice().toFixed(2)} with Crypto & Activate</span>
-                        </button>
+                      </div>
+
+                      <div className="mt-4 pt-2">
+                        <div className={`w-full py-1.5 rounded-[4px] text-center text-xs font-medium uppercase tracking-wider transition-colors ${
+                          isSelected
+                            ? 'bg-[var(--color-accent)] text-white'
+                            : 'surface-2 text-[var(--color-ink-dim)] border border-[var(--color-line)]'
+                        }`}>
+                          {isSelected ? 'Selected' : 'Select'}
+                        </div>
                       </div>
                     </div>
-                  )}
+                  );
+                })}
+              </div>
 
-                  {/* Direct UPI Callout */}
-                  {paymentMethod === 'upi' && gateways?.upi?.enabled !== false && (
-                    <div className="pt-2">
-                      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-violet-400">
-                          <QrCode className="w-4 h-4" /> Instant UPI QR Code Payment
-                        </div>
-                        <p className="text-[11px] text-zinc-400">
-                          Scan UPI QR code for exact total <strong>${calculateTotalPrice().toFixed(2)} USD</strong> using GPay, PhonePe or Paytm. Your server auto-activates upon payment confirmation.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between pt-4 border-t border-zinc-900">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-semibold text-xs hover:bg-zinc-800 transition"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStep(4)}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition"
-            >
-              <span>Review & Deploy</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* QUICK DEPOSIT MODAL WITHIN WIZARD */}
-      {showQuickDeposit && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="h-4 w-4 text-amber-400" /> Quick Account Deposit
-              </h3>
-              <button onClick={() => setShowQuickDeposit(false)} className="text-xs text-zinc-400 hover:text-white">✕</button>
-            </div>
-
-            <p className="text-xs text-zinc-400">
-              Instant credit deposit so you can proceed immediately with deploying your server without reconfiguring.
-            </p>
-
-            <div className="grid grid-cols-4 gap-2">
-              {[5, 10, 25, 50].map((amt) => (
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between pt-3 border-t border-[var(--color-line)]">
                 <button
-                  key={amt}
                   type="button"
-                  onClick={() => setQuickDepositAmount(amt)}
-                  className={`p-2.5 rounded-xl font-mono text-xs font-bold border transition ${
-                    quickDepositAmount === amt
-                      ? 'bg-amber-400 text-black border-amber-300'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                  }`}
+                  onClick={() => setStep(1)}
+                  className="btn btn-ghost text-xs"
                 >
-                  ${amt}
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back</span>
                 </button>
-              ))}
-            </div>
 
-            {quickDepositMsg && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                {quickDepositMsg}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowQuickDeposit(false)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 text-xs text-zinc-300"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickDeposit(quickDepositAmount)}
-                disabled={isProcessingQuickDeposit}
-                className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs disabled:opacity-50 transition"
-              >
-                {isProcessingQuickDeposit ? 'Depositing...' : `Deposit $${quickDepositAmount}.00`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 4: Review & Deploy Pipeline */}
-      {step === 4 && (
-        <div className="space-y-6 animate-in fade-in">
-          {!isDeploying ? (
-            <div className="space-y-6">
-              <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-5">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-amber-400" /> Final Deployment Verification
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500">Instance Name</span>
-                    <div className="font-bold text-white text-sm truncate">{serverName}</div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500">Software & Version</span>
-                    <div className="font-bold text-amber-400 text-sm">{selectedSoftware.name} {selectedVersion}</div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500">Allocated RAM & CPU</span>
-                    <div className="font-bold text-white text-sm font-mono">
-                      {formatMemory(selectedPlan?.ramMB || (selectedProductCategory === 'bot' ? 512 : 1024))} / {((selectedPlan?.cpuCores || (selectedProductCategory === 'bot' ? 0.5 : 1)) * 100)}% vCPU
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500">Total Price ({billingCycle})</span>
-                    <div className="font-bold text-emerald-400 text-sm font-mono flex items-center gap-1">
-                      {calculateTotalPrice() <= 0 ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider">
-                          FREE ($0.00)
-                        </span>
-                      ) : (
-                        `$${calculateTotalPrice().toFixed(2)}`
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs text-zinc-400 flex items-start gap-3">
-                  <Activity className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-white">Live Execution Notice:</span> Upon clicking "Authorize & Deploy Instance", our cluster scheduler will allocate dedicated port allocations, write production configuration files, and spawn the server supervisor process.
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
                   onClick={() => setStep(3)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-semibold text-xs hover:bg-zinc-800 transition"
+                  className="btn btn-primary text-xs"
                 >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Back to Settings</span>
+                  <span>Next: Configuration & Node</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Server Name, Region & Billing */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Instance Configuration */}
+                <div className="surface p-4 rounded-lg space-y-3">
+                  <h3 className="label flex items-center gap-1.5">
+                    <ServerIcon className="h-3.5 w-3.5 text-[var(--color-accent)]" /> Instance Identification
+                  </h3>
+
+                  <div>
+                    <label className="label block mb-1">Server Name</label>
+                    <input
+                      type="text"
+                      value={serverName}
+                      onChange={e => setServerName(e.target.value)}
+                      placeholder="e.g. Survival SMP"
+                      className="field w-full px-3 py-1.5 text-xs rounded-md"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label block mb-1">Compute Node</label>
+                    <select
+                      value={selectedNodeId}
+                      onChange={e => setSelectedNodeId(e.target.value)}
+                      className="field w-full px-2.5 py-1.5 text-xs rounded-md"
+                    >
+                      <option value="auto">Automatic (Lowest cluster load)</option>
+                      {nodes.map(node => (
+                        <option key={node.id} value={node.id}>
+                          {node.name} ({node.locationName}) - {node.ip}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="pt-1 text-[11px] text-[var(--color-ink-mute)] flex items-center gap-1.5">
+                    <Globe2 className="h-3.5 w-3.5 text-[var(--color-ok)]" />
+                    <span>Dedicated node port allocation assigned upon deployment.</span>
+                  </div>
+                </div>
+
+                {/* Billing & Discounts */}
+                <div className="surface p-4 rounded-lg space-y-3">
+                  <h3 className="label flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-[var(--color-accent)]" /> Billing Cycle & Payment
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBillingCycle('monthly')}
+                      className={`p-2 rounded-md border text-xs font-medium transition-colors cursor-pointer ${
+                        billingCycle === 'monthly'
+                          ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                          : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillingCycle('yearly')}
+                      className={`p-2 rounded-md border text-xs font-medium transition-colors cursor-pointer ${
+                        billingCycle === 'yearly'
+                          ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                          : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                      }`}
+                    >
+                      Yearly (-15%)
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="label block mb-1">Promotional Coupon</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                        placeholder="COUPON CODE"
+                        className="field flex-1 px-3 py-1.5 text-xs uppercase font-mono rounded-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyCoupon}
+                        className="btn btn-ghost text-xs py-1.5"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    {couponMsg && (
+                      <p className="text-[10px] text-[var(--color-ok)] mt-1 font-mono">{couponMsg}</p>
+                    )}
+                  </div>
+
+                  {calculateTotalPrice() <= 0 ? (
+                    <div className="p-3 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-[var(--color-ok)] text-xs space-y-0.5">
+                      <div className="font-semibold">Free Instance / 100% Discount</div>
+                      <p className="text-[11px] text-[var(--color-ink-dim)]">No payment required. Proceed directly to deploy.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="label block">Payment Method</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('balance')}
+                          className={`p-2 rounded-md border text-xs font-medium flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                            paymentMethod === 'balance'
+                              ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                              : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                          }`}
+                        >
+                          <Coins className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                          <span className="text-[10px] truncate">Credits (${user?.credits?.toFixed(2) || '0.00'})</span>
+                        </button>
+
+                        {gateways?.stripe?.enabled !== false && (
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMethod('stripe')}
+                            className={`p-2 rounded-md border text-xs font-medium flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                              paymentMethod === 'stripe'
+                                ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                                : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                            }`}
+                          >
+                            <CreditCard className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                            <span className="text-[10px]">Card</span>
+                          </button>
+                        )}
+
+                        {gateways?.upi?.enabled !== false && (
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMethod('upi')}
+                            className={`p-2 rounded-md border text-xs font-medium flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                              paymentMethod === 'upi'
+                                ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                                : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                            }`}
+                          >
+                            <QrCode className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                            <span className="text-[10px]">UPI / QR</span>
+                          </button>
+                        )}
+
+                        {gateways?.crypto?.enabled !== false && (
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMethod('crypto')}
+                            className={`p-2 rounded-md border text-xs font-medium flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                              paymentMethod === 'crypto'
+                                ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)] text-[var(--color-ink)]'
+                                : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                            }`}
+                          >
+                            <Coins className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                            <span className="text-[10px]">Crypto</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {paymentMethod === 'balance' && (
+                        <div className="pt-1.5">
+                          {((user?.credits || 0) >= calculateTotalPrice()) ? (
+                            <div className="p-2.5 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-xs text-[var(--color-ok)] flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Sufficient balance
+                              </span>
+                              <span className="font-mono text-[10px] text-[var(--color-ink-mute)]">
+                                Rem: ${((user?.credits || 0) - calculateTotalPrice()).toFixed(2)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="p-2.5 rounded-md bg-[var(--color-warn)]/10 border border-[var(--color-warn)]/30 text-xs space-y-1.5">
+                              <div className="flex items-center justify-between text-[var(--color-warn)]">
+                                <span className="flex items-center gap-1">
+                                  <AlertCircle className="h-3.5 w-3.5" /> Shortfall: ${(calculateTotalPrice() - (user?.credits || 0)).toFixed(2)}
+                                </span>
+                                <span className="font-mono text-[10px]">Bal: ${user?.credits?.toFixed(2) || '0.00'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickDeposit(Math.ceil(calculateTotalPrice() - (user?.credits || 0)))}
+                                  disabled={isProcessingQuickDeposit}
+                                  className="btn btn-primary text-xs py-1 flex-1"
+                                >
+                                  {isProcessingQuickDeposit ? 'Depositing...' : `Deposit Shortfall ($${Math.ceil(calculateTotalPrice() - (user?.credits || 0))})`}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowQuickDeposit(true)}
+                                  className="btn btn-ghost text-xs py-1"
+                                >
+                                  Custom
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between pt-3 border-t border-[var(--color-line)]">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="btn btn-ghost text-xs"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={startDeploymentPipeline}
-                  className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-amber-500 text-black font-black text-sm hover:bg-amber-400 shadow-xl transition"
+                  onClick={() => setStep(4)}
+                  className="btn btn-primary text-xs"
                 >
-                  <Sparkles className="h-4 w-4" />
-                  <span>Authorize & Deploy Instance</span>
+                  <span>Review & Deploy</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-          ) : (
-            /* Live Deployment Progress Terminal */
-            <div className="space-y-5">
-              <div className="rounded-3xl border border-zinc-800 bg-zinc-950 overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/80">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-3 w-3 rounded-full bg-rose-500/80" />
-                    <div className="h-3 w-3 rounded-full bg-amber-500/80" />
-                    <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
-                    <span className="text-xs font-mono text-zinc-400 ml-2">deployment_pipeline.log</span>
-                  </div>
+          )}
 
-                  <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
-                    {pipelineStage < 7 && !deployError ? (
-                      <span className="flex items-center gap-1.5 text-amber-400">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Provisioning Stage {pipelineStage}/6
-                      </span>
-                    ) : deployError ? (
-                      <span className="text-rose-400 flex items-center gap-1">
-                        <AlertCircle className="h-3.5 w-3.5" /> Deployment Failed
-                      </span>
-                    ) : (
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Provision Completed
-                      </span>
-                    )}
-                  </div>
+          {/* QUICK DEPOSIT MODAL WITHIN WIZARD */}
+          {showQuickDeposit && (
+            <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 anim-fade-in">
+              <div className="w-full max-w-sm surface p-5 rounded-lg space-y-3 anim-scale-in">
+                <div className="flex justify-between items-center border-b border-[var(--color-line)] pb-2.5">
+                  <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-1.5">
+                    <Plus className="h-4 w-4 text-[var(--color-accent)]" /> Quick Account Deposit
+                  </h3>
+                  <button onClick={() => setShowQuickDeposit(false)} className="btn-icon">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
 
-                <div className="p-5 font-mono text-xs text-zinc-300 space-y-2 min-h-64 bg-zinc-950">
-                  {pipelineLogs.map((log, idx) => (
-                    <div
-                      key={idx}
-                      className={
-                        log.startsWith('✔')
-                          ? 'text-emerald-400'
-                          : log.startsWith('✖')
-                          ? 'text-rose-400 font-bold'
-                          : 'text-zinc-300'
-                      }
+                <p className="text-xs text-[var(--color-ink-mute)]">
+                  Instant credit deposit to proceed with your deployment.
+                </p>
+
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 25, 50].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setQuickDepositAmount(amt)}
+                      className={`p-2 rounded-md font-mono text-xs font-semibold border transition-colors cursor-pointer ${
+                        quickDepositAmount === amt
+                          ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border-[var(--color-accent)]'
+                          : 'surface-2 border-[var(--color-line)] text-[var(--color-ink-dim)]'
+                      }`}
                     >
-                      {log}
-                    </div>
+                      ${amt}
+                    </button>
                   ))}
-                  {pipelineStage < 7 && !deployError && (
-                    <div className="text-amber-400/80 animate-pulse flex items-center gap-2 pt-2">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Executing cluster provisioning tasks...</span>
-                    </div>
-                  )}
+                </div>
+
+                {quickDepositMsg && (
+                  <div className="p-2 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-[var(--color-ok)] text-xs">
+                    {quickDepositMsg}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickDeposit(false)}
+                    className="btn btn-ghost text-xs py-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDeposit(quickDepositAmount)}
+                    disabled={isProcessingQuickDeposit}
+                    className="btn btn-primary text-xs py-1"
+                  >
+                    {isProcessingQuickDeposit ? 'Depositing...' : `Deposit $${quickDepositAmount}.00`}
+                  </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Complete & Navigate Action */}
-              {pipelineStage >= 7 && deployedServerId && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('billing')}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition"
-                  >
-                    <FileText className="h-4 w-4 text-amber-400" />
-                    <span>View Invoices & Receipts</span>
-                  </button>
+          {/* STEP 4: Review & Deploy Pipeline */}
+          {step === 4 && (
+            <div className="space-y-5">
+              {!isDeploying ? (
+                <div className="space-y-4">
+                  <div className="surface p-5 rounded-lg space-y-4">
+                    <h2 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[var(--color-accent)]" /> Final Deployment Verification
+                    </h2>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onSelectServer) {
-                        onSelectServer(deployedServerId);
-                      }
-                      onNavigate('server-manage');
-                    }}
-                    className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-emerald-500 text-black font-black text-sm hover:bg-emerald-400 shadow-xl transition"
-                  >
-                    <span>Manage Server Instance</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+                        <span className="label">Instance Name</span>
+                        <div className="font-semibold text-[var(--color-ink)] text-sm truncate">{serverName}</div>
+                      </div>
+
+                      <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+                        <span className="label">Software & Version</span>
+                        <div className="font-semibold text-[var(--color-accent)] text-sm">{selectedSoftware.name} {selectedVersion}</div>
+                      </div>
+
+                      <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+                        <span className="label">RAM & CPU</span>
+                        <div className="font-semibold text-[var(--color-ink)] text-sm font-mono">
+                          {formatMemory(selectedPlan?.ramMB || (selectedProductCategory === 'bot' ? 512 : 1024))} / {((selectedPlan?.cpuCores || (selectedProductCategory === 'bot' ? 0.5 : 1)) * 100)}% vCPU
+                        </div>
+                      </div>
+
+                      <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+                        <span className="label">Total Price ({billingCycle})</span>
+                        <div className="font-bold text-[var(--color-ok)] text-sm font-mono flex items-center gap-1">
+                          {calculateTotalPrice() <= 0 ? (
+                            <span className="text-xs font-semibold text-[var(--color-ok)]">
+                              FREE ($0.00)
+                            </span>
+                          ) : (
+                            `$${calculateTotalPrice().toFixed(2)}`
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] text-xs text-[var(--color-ink-dim)] flex items-start gap-2.5">
+                      <Activity className="h-4 w-4 text-[var(--color-accent)] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-[var(--color-ink)]">Live Execution Notice:</span> Our cluster scheduler will reserve hardware allocations, write config files, and spawn the server supervisor process.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setStep(3)}
+                      className="btn btn-ghost text-xs"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      <span>Back to Settings</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={startDeploymentPipeline}
+                      className="btn btn-primary text-xs py-2 px-5"
+                    >
+                      <span>Authorize & Deploy Instance</span>
+                    </button>
+                  </div>
                 </div>
-              )}
+              ) : (
+                /* Live Deployment Progress Terminal */
+                <div className="space-y-4">
+                  <div className="surface rounded-lg overflow-hidden border border-[var(--color-line)]">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--color-line)] surface-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-err)]/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-warn)]/70" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-ok)]/70" />
+                        <span className="text-[11px] font-mono text-[var(--color-ink-mute)] ml-1">deployment_pipeline.log</span>
+                      </div>
 
-              {deployError && (
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsDeploying(false);
-                      setStep(3);
-                    }}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-zinc-800 text-white text-xs font-semibold hover:bg-zinc-700 transition"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span>Modify Configuration & Retry</span>
-                  </button>
+                      <div className="flex items-center gap-1.5 text-xs font-mono text-[var(--color-ink-dim)]">
+                        {pipelineStage < 7 && !deployError ? (
+                          <span className="flex items-center gap-1 text-[var(--color-accent)]">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Provisioning Stage {pipelineStage}/6
+                          </span>
+                        ) : deployError ? (
+                          <span className="text-[var(--color-err)] flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Deployment Failed
+                          </span>
+                        ) : (
+                          <span className="text-[var(--color-ok)] flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Provision Completed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-4 font-mono text-xs text-[var(--color-ink-dim)] space-y-1.5 min-h-60 bg-[var(--color-bg)]">
+                      {pipelineLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className={
+                            log.startsWith('[SUCCESS]')
+                              ? 'text-[var(--color-ok)] font-medium'
+                              : log.startsWith('[ERROR]')
+                              ? 'text-[var(--color-err)] font-medium'
+                              : 'text-[var(--color-ink-dim)]'
+                          }
+                        >
+                          {log}
+                        </div>
+                      ))}
+                      {pipelineStage < 7 && !deployError && (
+                        <div className="text-[var(--color-accent)] flex items-center gap-1.5 pt-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Executing cluster tasks...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Complete & Navigate Action */}
+                  {pipelineStage >= 7 && deployedServerId && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('billing')}
+                        className="btn btn-ghost text-xs"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                        <span>View Invoices & Receipts</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSelectServer) {
+                            onSelectServer(deployedServerId);
+                          }
+                          onNavigate('server-manage');
+                        }}
+                        className="btn btn-primary text-xs py-2 px-5"
+                      >
+                        <span>Manage Server Instance</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {deployError && (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDeploying(false);
+                          setStep(3);
+                        }}
+                        className="btn btn-ghost text-xs"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Modify Configuration & Retry</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-        </div>
+        </>
       )}
-    </>
-  )}
 
       {/* Real-time Crypto Payment Processor Modal */}
       <CryptoPaymentModal
@@ -1421,10 +1346,10 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
             setIsDeploying(true);
             setPipelineStage(7);
             setPipelineLogs([
-              `✔ [CryptoProcessor] Real-time blockchain payment confirmed!`,
-              `✔ Instance deployed successfully! (ID: ${serverActivation.server.id})`,
-              `✔ Primary Endpoint: ${serverActivation.server.primaryIp}:${serverActivation.server.primaryPort}`,
-              `✔ Status: RUNNING`
+              `[SUCCESS] [CryptoProcessor] Real-time blockchain payment confirmed!`,
+              `[SUCCESS] Instance deployed successfully! (ID: ${serverActivation.server.id})`,
+              `[SUCCESS] Primary Endpoint: ${serverActivation.server.primaryIp}:${serverActivation.server.primaryPort}`,
+              `[SUCCESS] Status: RUNNING`
             ]);
             await refreshUser();
             if (onRefreshServers) onRefreshServers();
@@ -1432,7 +1357,7 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
         }}
       />
 
-</div>
+    </div>
   );
 };
 

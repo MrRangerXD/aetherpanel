@@ -27,7 +27,6 @@ export interface DetailedEnvironmentReport {
   isSandbox: boolean;
   systemd: boolean;
   tunAvailable: boolean;
-  playitBinaryProbe: BinaryProbeResult;
   sftpCapability: {
     supported: boolean;
     configuredPort: number;
@@ -40,14 +39,12 @@ export interface EnvironmentCapabilities {
   detachedProcesses: 'Available' | 'Unavailable';
   persistentBackgroundProcesses: 'Available' | 'Limited' | 'Unavailable';
   executableDownload: 'Available' | 'Unavailable';
-  playitAgentExecution: 'Available' | 'Restricted' | 'Unavailable';
   portBinding: 'Available' | 'Restricted';
   processSupervision: 'Native' | 'Fallback' | 'Limited';
   environmentLifetime: 'Persistent' | 'Ephemeral';
   environmentName: string;
   architecture: string;
   gvisorDetected: boolean;
-  playitBlockReason?: string;
 }
 
 export function detectNormalizedArch(): NormalizedArchitecture {
@@ -103,59 +100,6 @@ export function checkTunAvailable(): boolean {
     return fs.existsSync('/dev/net/tun');
   } catch {
     return false;
-  }
-}
-
-export function probePlayitBinaryExecution(): BinaryProbeResult {
-  const binPath = path.join(process.cwd(), 'bin', 'playit');
-  if (!fs.existsSync(binPath)) {
-    return {
-      runnable: false,
-      reason: 'Playit binary does not exist in bin/playit'
-    };
-  }
-
-  // Ensure executable permissions
-  try {
-    fs.chmodSync(binPath, '755');
-  } catch {}
-
-  const isGvisor = checkGvisor();
-
-  try {
-    const out = execSync(`"${binPath}" --help 2>&1`, { timeout: 3500, encoding: 'utf-8' });
-    return {
-      runnable: true,
-      version: '1.0.10',
-      exitCode: 0
-    };
-  } catch (err: any) {
-    const errMsg = String(err.stderr || err.stdout || err.message || err);
-    const code = err.status ?? (err.code || 1);
-
-    const isBlocked = 
-      isGvisor ||
-      code === 126 ||
-      errMsg.includes('Bad address') ||
-      errMsg.includes('Operation not permitted') ||
-      errMsg.includes('cannot execute') ||
-      errMsg.includes('exec format error') ||
-      errMsg.includes('Permission denied');
-
-    let specificReason = `Binary exit code ${code}: ${errMsg.trim()}`;
-    if (isGvisor || errMsg.includes('Bad address') || code === 126) {
-      specificReason = 'Restricted container sandbox (gVisor syscall barrier: Bad address / code 126). Binary cannot execute in current sandbox kernel.';
-    } else if (errMsg.includes('exec format error')) {
-      specificReason = `Architecture execution mismatch (Arch: ${os.arch()}).`;
-    }
-
-    return {
-      runnable: false,
-      exitCode: code,
-      error: errMsg.trim(),
-      reason: specificReason,
-      isBlockedBySandbox: isBlocked
-    };
   }
 }
 
@@ -235,7 +179,6 @@ export function detectHostEnvironment(): DetailedEnvironmentReport {
     } catch {}
   }
 
-  const playitProbe = probePlayitBinaryExecution();
   const sftpPort = parseInt(process.env.SFTP_PORT || '2022', 10);
   const hostKeyPresent = fs.existsSync(path.join(process.cwd(), 'data', 'ssh_host_rsa_key'));
 
@@ -252,7 +195,6 @@ export function detectHostEnvironment(): DetailedEnvironmentReport {
     isSandbox,
     systemd: hasSys,
     tunAvailable: hasTun,
-    playitBinaryProbe: playitProbe,
     sftpCapability: {
       supported: true,
       configuredPort: sftpPort,
@@ -265,32 +207,16 @@ export function detectEnvironmentCapabilities(): EnvironmentCapabilities {
   const env = detectHostEnvironment();
   const hasSystemd = env.systemd;
 
-  let playitAgentExecution: 'Available' | 'Restricted' | 'Unavailable' = 'Available';
-  let playitBlockReason: string | undefined = undefined;
-
-  if (env.isGvisor || env.playitBinaryProbe.isBlockedBySandbox) {
-    playitAgentExecution = 'Unavailable';
-    playitBlockReason = env.playitBinaryProbe.reason || 'Restricted container sandbox prevents Playit agent execution.';
-  } else if (env.normalizedArch === 'unknown' || env.normalizedArch === 'armv6' || env.normalizedArch === 'i386') {
-    playitAgentExecution = 'Unavailable';
-    playitBlockReason = `Unsupported CPU architecture: ${env.arch}`;
-  } else if (!env.playitBinaryProbe.runnable) {
-    playitAgentExecution = 'Restricted';
-    playitBlockReason = env.playitBinaryProbe.reason;
-  }
-
   return {
     systemd: hasSystemd ? 'Available' : 'Unavailable',
     detachedProcesses: 'Available',
     persistentBackgroundProcesses: env.isSandbox ? 'Limited' : 'Available',
     executableDownload: 'Available',
-    playitAgentExecution,
     portBinding: (env.isDocker || env.isSandbox) ? 'Restricted' : 'Available',
     processSupervision: hasSystemd ? 'Native' : 'Fallback',
     environmentLifetime: env.isSandbox ? 'Ephemeral' : 'Persistent',
     environmentName: env.virtualization,
     architecture: env.arch,
-    gvisorDetected: env.isGvisor,
-    playitBlockReason
+    gvisorDetected: env.isGvisor
   };
 }

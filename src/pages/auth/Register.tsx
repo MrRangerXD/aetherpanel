@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Cpu, Lock, Mail, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import { Lock, Mail, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
-import { useTheme } from '../../lib/ThemeContext';
 import { useBranding } from '../../lib/BrandingContext';
 
 interface RegisterProps {
@@ -11,8 +9,7 @@ interface RegisterProps {
 
 export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const { register, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
-  const { accentClasses, activePreset, themeAssets } = useTheme();
-  const { pageAnimationsEnabled, brandName } = useBranding();
+  const { brandName } = useBranding();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -23,20 +20,6 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [discordLoading, setDiscordLoading] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [logoFailed, setLogoFailed] = useState(false);
-
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [themeAssets?.logoUrl]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
 
   const handleRedirect = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -131,111 +114,40 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
   const hasSocialAuth = authConfig.googleEnabled || authConfig.discordEnabled;
   const isEmailEnabled = authConfig.emailPasswordEnabled;
 
-  const animate = pageAnimationsEnabled && !prefersReducedMotion;
-
-  const containerVariants = {
-    hidden: { opacity: 1, y: 4 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.2
-      }
-    }
-  };
-
-  const motionDivProps = animate ? {
-    variants: containerVariants,
-    initial: "hidden",
-    animate: "visible"
-  } : {};
-
   return (
-    <motion.div {...motionDivProps} className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      {/* Dynamic Ambient Glow Layers */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-        {/* Primary warm luminous sphere behind register card */}
-        <div
-          className="absolute -top-16 left-1/2 -translate-x-1/2 w-[550px] sm:w-[720px] h-[450px] rounded-full opacity-70 blur-[120px] pointer-events-none"
-          style={{
-            background: `radial-gradient(circle, ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.4)'} 0%, rgba(245, 158, 11, 0.15) 45%, rgba(0, 0, 0, 0) 75%)`
-          }}
-        />
-        {/* Secondary subtle contrast bloom for spatial depth */}
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[380px] rounded-full opacity-40 blur-[140px] pointer-events-none"
-          style={{
-            background: `radial-gradient(circle, ${activePreset?.accent || '#f59e0b'} 0%, rgba(0, 0, 0, 0) 70%)`
-          }}
-        />
-      </div>
-
-      <div className="w-full max-w-md space-y-8 relative z-10">
+    <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center py-12 px-4 sm:px-6">
+      <div className="w-full max-w-sm space-y-5">
         
-        {/* Header with Glowing Brand Icon / Logo */}
-        <div className="text-center space-y-2">
-          <div
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-400 transition-all overflow-hidden p-2"
-            style={{
-              boxShadow: `0 0 35px -5px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.45)'}`
-            }}
-          >
-            {themeAssets?.logoUrl?.trim() && !logoFailed ? (
-              <img
-                src={themeAssets.logoUrl.trim()}
-                alt={brandName || 'Logo'}
-                onError={() => setLogoFailed(true)}
-                className="w-full h-full object-contain rounded-xl"
-              />
-            ) : (
-              <svg className="w-8 h-8" viewBox="0 0 60 60" fill="none">
-                <defs>
-                  <linearGradient id="regLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#fef08a" />
-                    <stop offset="40%" stopColor="#fbbf24" />
-                    <stop offset="80%" stopColor="#f59e0b" />
-                    <stop offset="100%" stopColor="#d97706" />
-                  </linearGradient>
-                </defs>
-                <path d="M30 10 L50 21 V43 L30 54 L10 43 V21 Z" fill="none" stroke="url(#regLogoGrad)" strokeWidth="3" strokeLinejoin="round" />
-                <path d="M30 17 L42 28 L37 46 L30 40 L23 46 L18 28 Z" fill="url(#regLogoGrad)" />
-                <circle cx="30" cy="30" r="4" fill="#09090b" />
-              </svg>
-            )}
+        {/* Header */}
+        <div className="text-center space-y-1">
+          <div className="label">
+            REGISTRATION
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans drop-shadow-md">
-            Create {brandName || 'AetherPanel'} Account
-          </h2>
-          <p className="text-xs text-zinc-400">
-            Get started with $10 free account welcome credit automatically applied.
+          <h1 className="text-xl font-bold tracking-tight text-[var(--color-ink)] font-mono">
+            Create Account
+          </h1>
+          <p className="text-xs text-[var(--color-ink-mute)]">
+            Deploy servers and manage cloud resources on {brandName || 'AetherPanel'}.
           </p>
         </div>
 
-        {/* Register Form Container with Radiant Border Glow */}
-        <div
-          className="relative rounded-3xl border border-zinc-800/90 bg-zinc-900/90 backdrop-blur-2xl p-8 space-y-6 overflow-hidden transition-all"
-          style={{
-            boxShadow: `0 0 60px -15px ${activePreset?.glowColor || 'rgba(245, 158, 11, 0.25)'}, 0 25px 50px -12px rgba(0,0,0,0.85)`
-          }}
-        >
-          {/* Top ambient glowing highlight beam */}
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
-
+        {/* Card */}
+        <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] p-6 space-y-4">
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium flex flex-col gap-2 shadow-sm">
-              <div className="flex items-start gap-2.5">
+            <div className="p-3 rounded-md bg-[var(--color-err)]/10 border border-[var(--color-err)]/30 text-xs text-[var(--color-err)] flex flex-col gap-1.5" role="alert">
+              <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
               {(error.toLowerCase().includes('too many') || error.toLowerCase().includes('rate limit')) && (
-                <div className="pt-1 flex items-center justify-between border-t border-rose-500/20">
-                  <span className="text-[11px] text-zinc-400">Rate limit triggered?</span>
+                <div className="pt-1 flex items-center justify-between border-t border-[var(--color-err)]/20">
+                  <span className="text-[10px] text-[var(--color-ink-mute)]">Rate limit triggered?</span>
                   <button
                     type="button"
                     onClick={handleResetRateLimits}
-                    className="px-2.5 py-1 text-[11px] font-semibold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 rounded-lg transition-all"
+                    className="text-[10px] font-mono text-[var(--color-err)] hover:underline"
                   >
-                    Reset Rate Limits
+                    Reset Limits
                   </button>
                 </div>
               )}
@@ -244,26 +156,26 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
 
           {/* Social Sign Up */}
           {hasSocialAuth && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {authConfig.googleEnabled && (
                 <button
                   type="button"
                   id="btn_google_signup"
                   onClick={handleGoogleSignIn}
                   disabled={googleLoading || discordLoading || loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 text-xs font-semibold text-zinc-200 transition-all shadow-sm hover:shadow-md active:scale-[0.99] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2.5 px-3 h-9 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] hover:bg-[var(--color-surface-3)] text-xs font-medium text-[var(--color-ink)] transition-colors active:scale-[0.985] disabled:opacity-50 cursor-pointer"
                 >
                   {googleLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-ink-mute)]" />
                   ) : (
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                     </svg>
                   )}
-                  <span>{googleLoading ? 'Connecting with Google...' : 'Sign Up with Google'}</span>
+                  <span>{googleLoading ? 'Connecting...' : 'Google'}</span>
                 </button>
               )}
 
@@ -273,100 +185,103 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                   id="btn_discord_signup"
                   onClick={handleDiscordSignIn}
                   disabled={discordLoading || googleLoading || loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#5865F2]/10 border border-[#5865F2]/30 hover:bg-[#5865F2]/20 hover:border-[#5865F2]/50 text-xs font-semibold text-[#8ea1e1] hover:text-white transition-all shadow-sm hover:shadow-[0_0_20px_rgba(88,101,242,0.25)] active:scale-[0.99] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2.5 px-3 h-9 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] hover:bg-[var(--color-surface-3)] text-xs font-medium text-[var(--color-ink)] transition-colors active:scale-[0.985] disabled:opacity-50 cursor-pointer"
                 >
                   {discordLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-[#5865F2]" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-ink-mute)]" />
                   ) : (
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 127.14 96.36">
+                    <svg className="w-3.5 h-3.5 fill-current text-[var(--color-accent)]" viewBox="0 0 127.14 96.36">
                       <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
                     </svg>
                   )}
-                  <span>{discordLoading ? 'Authorizing Discord...' : 'Sign Up with Discord'}</span>
+                  <span>{discordLoading ? 'Connecting...' : 'Discord'}</span>
                 </button>
               )}
             </div>
           )}
 
           {hasSocialAuth && isEmailEnabled && (
-            <div className="relative my-4">
+            <div className="relative my-3">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-800" />
+                <div className="w-full border-t border-[var(--color-line)]" />
               </div>
-              <div className="relative flex justify-center text-[10px] uppercase font-semibold">
-                <span className="bg-zinc-900 px-3 text-zinc-500">Or register with email</span>
+              <div className="relative flex justify-center text-[10px] uppercase font-mono">
+                <span className="bg-[var(--color-surface)] px-2 text-[var(--color-ink-mute)]">or email</span>
               </div>
             </div>
           )}
 
           {isEmailEnabled ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label className="label block mb-1">
                   Username
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
+                  <User className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
                   <input
                     type="text"
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="minecraft_owner"
-                    className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
+                    placeholder="user_name"
+                    aria-invalid={Boolean(error && error.toLowerCase().includes('username'))}
+                    className="field w-full pl-9 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label className="label block mb-1">
                   Display Name (Optional)
                 </label>
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Alex Rivers"
-                  className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
+                  placeholder="Your Name"
+                  className="field w-full text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label className="label block mb-1">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
+                  <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="alex@example.com"
-                    className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
+                    placeholder="user@domain.com"
+                    aria-invalid={Boolean(error && error.toLowerCase().includes('email'))}
+                    className="field w-full pl-9 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label className="label block mb-1">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
+                  <Lock className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
+                    aria-invalid={Boolean(error && error.toLowerCase().includes('password'))}
+                    className="field w-full pl-9 text-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label className="label block mb-1">
                   Confirm Password
                 </label>
                 <input
@@ -375,30 +290,31 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl bg-zinc-950/90 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 focus:ring-2 focus:ring-amber-500/25 focus:shadow-[0_0_16px_rgba(245,158,11,0.2)] transition-all"
+                  aria-invalid={Boolean(error && error.toLowerCase().includes('match'))}
+                  className="field w-full text-xs"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading || googleLoading || discordLoading}
-                className={`w-full py-3 rounded-xl font-semibold text-xs text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg shadow-amber-500/25 hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+                className="btn btn-primary w-full h-9 mt-1 text-xs"
               >
                 <span>{loading ? 'Creating Account...' : 'Create Account'}</span>
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </button>
             </form>
           ) : (
-            <div className="text-center text-xs text-zinc-400 py-2">
-              Email registration is disabled. Please sign up using one of the available providers above.
+            <div className="text-center text-xs text-[var(--color-ink-mute)] py-2">
+              Email registration disabled.
             </div>
           )}
 
-          <div className="text-center pt-2 text-xs text-zinc-400">
+          <div className="text-center pt-2 text-xs text-[var(--color-ink-mute)] border-t border-[var(--color-line)]">
             Already have an account?{' '}
             <button
               onClick={() => onNavigate('login')}
-              className="text-amber-400 hover:text-amber-300 hover:underline font-semibold transition-colors"
+              className="text-[var(--color-accent)] hover:underline font-medium cursor-pointer"
             >
               Sign In
             </button>
@@ -406,6 +322,6 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
         </div>
 
       </div>
-    </motion.div>
+    </div>
   );
 };

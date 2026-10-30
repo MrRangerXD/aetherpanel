@@ -17,18 +17,18 @@ export interface ThemePreset {
 export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'golden',
-    name: 'Aether Gold (Default)',
-    description: 'The signature dark gold obsidian luxury palette with high-contrast amber highlights.',
-    accent: '#f59e0b',
-    accentHover: '#d97706',
-    bgBase: '#09090b',
-    bgCard: '#18181b',
-    borderColor: 'rgba(245, 158, 11, 0.25)',
-    badgeBg: 'rgba(245, 158, 11, 0.15)',
-    badgeText: '#fbbf24',
-    gradient: 'from-amber-500 via-yellow-500 to-amber-600',
-    glowColor: 'rgba(245, 158, 11, 0.3)',
-    previewColors: ['#09090b', '#18181b', '#f59e0b', '#fbbf24']
+    name: 'Solar Orange & Yellow (Default)',
+    description: 'Aesthetic deep obsidian palette with crisp warm orange and radiant solar yellow highlights.',
+    accent: '#f97316',
+    accentHover: '#ea580c',
+    bgBase: '#090a0f',
+    bgCard: '#12141c',
+    borderColor: 'rgba(249, 115, 22, 0.20)',
+    badgeBg: 'rgba(249, 115, 22, 0.12)',
+    badgeText: '#fde047',
+    gradient: 'from-orange-500 via-amber-500 to-yellow-400',
+    glowColor: 'rgba(249, 115, 22, 0.08)',
+    previewColors: ['#090a0f', '#12141c', '#f97316', '#facc15']
   },
   {
     id: 'emerald',
@@ -42,7 +42,7 @@ export const THEME_PRESETS: ThemePreset[] = [
     badgeBg: 'rgba(16, 185, 129, 0.15)',
     badgeText: '#34d399',
     gradient: 'from-emerald-500 via-teal-500 to-emerald-600',
-    glowColor: 'rgba(16, 185, 129, 0.3)',
+    glowColor: 'rgba(16, 185, 129, 0.1)',
     previewColors: ['#06110d', '#0f231c', '#10b981', '#34d399']
   },
   {
@@ -53,11 +53,11 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentHover: '#c026d3',
     bgBase: '#0a0512',
     bgCard: '#180d28',
-    borderColor: 'rgba(217, 70, 239, 0.3)',
-    badgeBg: 'rgba(217, 70, 239, 0.15)',
+    borderColor: 'rgba(217, 70, 239, 0.25)',
+    badgeBg: 'rgba(217, 70, 239, 0.12)',
     badgeText: '#f0abfc',
     gradient: 'from-fuchsia-500 via-purple-600 to-pink-500',
-    glowColor: 'rgba(217, 70, 239, 0.35)',
+    glowColor: 'rgba(217, 70, 239, 0.12)',
     previewColors: ['#0a0512', '#180d28', '#d946ef', '#f0abfc']
   },
   {
@@ -68,11 +68,11 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentHover: '#0891b2',
     bgBase: '#040d1a',
     bgCard: '#0b1b30',
-    borderColor: 'rgba(6, 182, 212, 0.25)',
-    badgeBg: 'rgba(6, 182, 212, 0.15)',
+    borderColor: 'rgba(6, 182, 212, 0.2)',
+    badgeBg: 'rgba(6, 182, 212, 0.12)',
     badgeText: '#67e8f9',
     gradient: 'from-cyan-500 via-blue-600 to-cyan-600',
-    glowColor: 'rgba(6, 182, 212, 0.3)',
+    glowColor: 'rgba(6, 182, 212, 0.1)',
     previewColors: ['#040d1a', '#0b1b30', '#06b6d4', '#67e8f9']
   },
   {
@@ -83,11 +83,11 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentHover: '#dc2626',
     bgBase: '#120505',
     bgCard: '#220b0b',
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    badgeBg: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+    badgeBg: 'rgba(239, 68, 68, 0.12)',
     badgeText: '#f87171',
     gradient: 'from-rose-500 via-red-600 to-amber-600',
-    glowColor: 'rgba(239, 68, 68, 0.3)',
+    glowColor: 'rgba(239, 68, 68, 0.1)',
     previewColors: ['#120505', '#220b0b', '#ef4444', '#f87171']
   },
   {
@@ -98,11 +98,11 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentHover: '#2563eb',
     bgBase: '#080c18',
     bgCard: '#111827',
-    borderColor: 'rgba(59, 130, 246, 0.25)',
-    badgeBg: 'rgba(59, 130, 246, 0.15)',
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    badgeBg: 'rgba(59, 130, 246, 0.12)',
     badgeText: '#93c5fd',
     gradient: 'from-blue-500 via-indigo-600 to-blue-700',
-    glowColor: 'rgba(59, 130, 246, 0.3)',
+    glowColor: 'rgba(59, 130, 246, 0.1)',
     previewColors: ['#080c18', '#111827', '#3b82f6', '#93c5fd']
   }
 ];

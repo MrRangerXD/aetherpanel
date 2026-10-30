@@ -5,9 +5,6 @@ import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
 import { User, Product, Plan, Server, Node, Allocation, Coupon, Announcement, SystemSettings, DatabaseHost } from '../../src/types';
 import { ensureLocalNode } from '../nodeAgent';
-import {
-  getNodePlayitStatus, installNodePlayitAgent, toggleNodePlayitAgent, restartNodePlayitAgent, provisionNodePlayitSecret, claimNodePlayitAgent
-} from '../playitService';
 import { resolveNodeSftpMode } from '../sftpResolver';
 import { runNetworkDiagnostics } from '../network/networkDetection';
 import { stopServer, startServer, restartServer, getServerDir } from '../provider';
@@ -657,7 +654,7 @@ router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
   const {
     name, description, hostname, ip, publicIpv4, publicIpv6, fqdn,
     daemonPort, daemonListenIp, daemonScheme, daemonSslEnabled,
-    sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    sftpPort, sftpFqdn,
     location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB,
     ramOverallocatePercent, cpuOverallocatePercent, diskOverallocatePercent,
@@ -686,8 +683,6 @@ router.post('/nodes', async (req: AuthenticatedRequest, res: Response) => {
     publicIpv6: publicIpv6 ? publicIpv6.trim() : undefined,
     fqdn: rawFqdn,
     sftpFqdn: sftpFqdn ? sftpFqdn.trim() : (rawFqdn ? `sftp.${rawFqdn}` : undefined),
-    playitSftpAddress: playitSftpAddress ? playitSftpAddress.trim() : undefined,
-    playitSftpPort: playitSftpPort ? parseInt(playitSftpPort) : undefined,
     daemonPort: parseInt(daemonPort) || 8080,
     daemonListenIp: daemonListenIp ? daemonListenIp.trim() : '0.0.0.0',
     daemonScheme: daemonScheme === 'https' ? 'https' : 'http',
@@ -819,7 +814,7 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   const {
     name, description, hostname, ip, publicIpv4, publicIpv6, fqdn,
     daemonPort, daemonListenIp, daemonScheme, daemonSslEnabled,
-    sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort,
+    sftpPort, sftpFqdn,
     location, locationName, flagCode,
     totalRamMB, totalCpuCores, totalDiskGB, ramOverallocatePercent, cpuOverallocatePercent,
     diskOverallocatePercent, maxServers, allowedProducts, tags, isMaintenanceMode, status
@@ -833,8 +828,6 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   if (publicIpv6 !== undefined) node.publicIpv6 = publicIpv6 ? publicIpv6.trim() : undefined;
   if (fqdn !== undefined) node.fqdn = fqdn ? fqdn.trim() : undefined;
   if (sftpFqdn !== undefined) node.sftpFqdn = sftpFqdn ? sftpFqdn.trim() : undefined;
-  if (playitSftpAddress !== undefined) node.playitSftpAddress = playitSftpAddress ? playitSftpAddress.trim() : undefined;
-  if (playitSftpPort !== undefined) node.playitSftpPort = playitSftpPort ? parseInt(playitSftpPort) : undefined;
   if (daemonPort !== undefined) node.daemonPort = parseInt(daemonPort);
   if (daemonListenIp !== undefined) node.daemonListenIp = daemonListenIp.trim();
   if (daemonScheme !== undefined) node.daemonScheme = daemonScheme === 'https' ? 'https' : 'http';
@@ -867,72 +860,6 @@ router.put('/nodes/:id', async (req: AuthenticatedRequest, res: Response) => {
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_NODE', node.id, `Updated node configuration for '${node.name}'`);
 
   res.json({ success: true, data: node, message: `Node '${node.name}' updated successfully.` });
-});
-
-// GET /api/v1/admin/nodes/:id/playit - Get node-level Playit tunnel status
-router.get('/nodes/:id/playit', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const status = await getNodePlayitStatus(req.params.id);
-    res.json({ success: true, data: status });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_ERROR', message: err.message } });
-  }
-});
-
-// POST /api/v1/admin/nodes/:id/playit/install - Install node-level Playit tunnel (zero port-forward SFTP)
-router.post('/nodes/:id/playit/install', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const status = await installNodePlayitAgent(req.params.id);
-    res.json({ success: true, message: 'Playit tunnel configured for node SFTP.', data: status });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_INSTALL_FAILED', message: err.message } });
-  }
-});
-
-// POST /api/v1/admin/nodes/:id/playit/toggle - Toggle node-level Playit agent
-router.post('/nodes/:id/playit/toggle', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { enable } = req.body;
-    const status = await toggleNodePlayitAgent(req.params.id, Boolean(enable));
-    res.json({ success: true, message: `Node Playit agent ${enable ? 'started' : 'stopped'}.`, data: status });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_TOGGLE_FAILED', message: err.message } });
-  }
-});
-
-// POST /api/v1/admin/nodes/:id/playit/restart - Restart node-level Playit agent
-router.post('/nodes/:id/playit/restart', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const status = await restartNodePlayitAgent(req.params.id);
-    res.json({ success: true, message: 'Node Playit agent restarted successfully.', data: status });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_RESTART_FAILED', message: err.message } });
-  }
-});
-
-// POST /api/v1/admin/nodes/:id/playit/secret - Provision node-level Playit secret key
-router.post('/nodes/:id/playit/secret', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { secretKey } = req.body;
-    if (!secretKey || !secretKey.trim()) {
-      res.status(400).json({ success: false, error: { code: 'INVALID_SECRET', message: 'Secret key is required' } });
-      return;
-    }
-    const status = await provisionNodePlayitSecret(req.params.id, secretKey);
-    res.json({ success: true, message: 'Node Playit secret provisioned successfully.', data: status });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_SECRET_FAILED', message: err.message } });
-  }
-});
-
-// POST /api/v1/admin/nodes/:id/playit/claim - Initiate node Playit claim action
-router.post('/nodes/:id/playit/claim', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const claimRes = await claimNodePlayitAgent(req.params.id);
-    res.json({ success: true, data: claimRes });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { code: 'PLAYIT_CLAIM_FAILED', message: err.message } });
-  }
 });
 
 // DELETE /api/v1/admin/nodes/:id - Delete node safety check
@@ -1414,6 +1341,104 @@ router.delete('/servers/:id', async (req: AuthenticatedRequest, res: Response) =
   }, server.userId).catch(() => {});
 
   res.json({ success: true, message: `Server '${server.name}' deleted successfully.` });
+});
+
+// POST /api/v1/admin/servers/bulk-start - Bulk start selected servers
+router.post('/servers/bulk-start', async (req: AuthenticatedRequest, res: Response) => {
+  const { serverIds } = req.body;
+  if (!Array.isArray(serverIds) || serverIds.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'serverIds array is required.' } });
+  }
+
+  const db = await getDb();
+  const results: Array<{ serverId: string; name: string; success: boolean; error?: string }> = [];
+
+  for (const id of serverIds) {
+    const server = db.servers.find(s => s.id === id);
+    if (!server) {
+      results.push({ serverId: id, name: id, success: false, error: 'Server not found' });
+      continue;
+    }
+
+    try {
+      const ok = await startServer(server.id);
+      results.push({ serverId: server.id, name: server.name, success: ok, error: ok ? undefined : 'Failed to start process' });
+    } catch (err: any) {
+      results.push({ serverId: server.id, name: server.name, success: false, error: err.message || 'Start error' });
+    }
+  }
+
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.length - succeeded;
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_BULK_START_SERVERS',
+    'bulk_start',
+    `Bulk started ${serverIds.length} servers (${succeeded} succeeded, ${failed} failed)`
+  );
+
+  res.json({
+    success: true,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+    message: failed === 0
+      ? `${succeeded} server(s) started successfully.`
+      : `${succeeded} started successfully, ${failed} failed.`
+  });
+});
+
+// POST /api/v1/admin/servers/bulk-start - Bulk start selected servers
+router.post('/servers/bulk-start', async (req: AuthenticatedRequest, res: Response) => {
+  const { serverIds } = req.body;
+  if (!Array.isArray(serverIds) || serverIds.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'serverIds array is required.' } });
+  }
+
+  const db = await getDb();
+  const results: Array<{ serverId: string; name: string; success: boolean; error?: string }> = [];
+
+  for (const id of serverIds) {
+    const server = db.servers.find(s => s.id === id);
+    if (!server) {
+      results.push({ serverId: id, name: id, success: false, error: 'Server not found' });
+      continue;
+    }
+
+    try {
+      const ok = await startServer(server.id);
+      results.push({ serverId: server.id, name: server.name, success: ok, error: ok ? undefined : 'Failed to start process' });
+    } catch (err: any) {
+      results.push({ serverId: server.id, name: server.name, success: false, error: err.message || 'Start error' });
+    }
+  }
+
+  const succeeded = results.filter(r => r.success).length;
+  const failed = results.length - succeeded;
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_BULK_START_SERVERS',
+    'bulk_start',
+    `Bulk started ${serverIds.length} servers (${succeeded} succeeded, ${failed} failed)`
+  );
+
+  res.json({
+    success: true,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+    message: failed === 0
+      ? `${succeeded} server(s) started successfully.`
+      : `${succeeded} started successfully, ${failed} failed.`
+  });
 });
 
 // POST /api/v1/admin/servers/bulk-restart - Bulk restart selected servers
@@ -1923,6 +1948,27 @@ router.get('/backups', async (req: AuthenticatedRequest, res: Response) => {
       },
       settings: db.settings.backupSettings || defaultBackupSettings
     }
+  });
+});
+
+// GET /api/v1/admin/backup-settings
+router.get('/backup-settings', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const defaultBackupSettings = {
+    storageDriver: 'local' as const,
+    retentionDays: 14,
+    maxBackupsPerServer: 5,
+    autoBackupEnabled: true,
+    autoBackupFrequencyHours: 24,
+    s3Endpoint: '',
+    s3Region: 'us-east-1',
+    s3Bucket: '',
+    s3AccessKey: '',
+    s3SecretKey: ''
+  };
+  res.json({
+    success: true,
+    data: db.settings.backupSettings || defaultBackupSettings
   });
 });
 
@@ -2444,7 +2490,7 @@ router.get('/sftp/status', async (req: AuthenticatedRequest, res: Response) => {
       configuredPort: sftpPort,
       activeConnections: 0,
       filesystemIsolation: 'ENFORCED_SERVER_ROOT',
-      externalReachability: details.mode === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : (details.mode === 'playit' ? 'PLAYIT TUNNEL ACTIVE' : 'UNREACHABLE / DEGRADED'),
+      externalReachability: details.mode === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : 'NODE NETWORK (PUBLICLY REACHABLE)',
       requiredConfig: [
         `SFTP_HOST=<public-ip-or-domain>`,
         `SFTP_PORT=${sftpPort}`
@@ -2473,15 +2519,13 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
   const botToken = process.env.DISCORD_BOT_TOKEN || (db.settings as any).discordBot?.botToken || '';
   const isBotConfigured = Boolean(botToken);
 
-  // 3. SFTP & Playit diagnostics
+  // 3. SFTP & Network diagnostics
   const sftpPort = parseInt(process.env.SFTP_PORT || '2022', 10);
   const details = await resolveNodeSftpMode('node_local');
   const netDiag = await runNetworkDiagnostics(sftpPort);
-  const playitStatus = await getNodePlayitStatus('node_local');
   const localNode = db.nodes?.find(n => n.id === 'node_local');
 
   const modeLower = details.mode.toLowerCase();
-  const statusLower = playitStatus.status.toLowerCase();
 
   const timestamp = new Date().toISOString();
   const uiStats = await getUiDiagnosticStats();
@@ -2528,19 +2572,13 @@ router.get('/diagnostics', async (req: AuthenticatedRequest, res: Response) => {
         configuredPort: sftpPort,
         activeConnections: 0,
         filesystemIsolation: 'ENFORCED_SERVER_ROOT',
-        externalReachability: modeLower === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : (modeLower === 'playit' || modeLower === 'tunneled' ? 'PLAYIT TUNNEL ACTIVE' : 'UNREACHABLE / DEGRADED'),
+        externalReachability: modeLower === 'direct' ? 'DIRECT (PUBLICLY REACHABLE)' : 'NODE NETWORK (PUBLICLY REACHABLE)',
         requiredConfig: [`SFTP_HOST=<public-ip-or-domain>`, `SFTP_PORT=${sftpPort}`],
         networkMode: details.mode,
         publicIpv4: netDiag.publicIp || 'UNAVAILABLE',
         isBehindNat: netDiag.isBehindNat,
         ipv4Reachability: netDiag.isPublicIpReachable ? 'ONLINE' : 'UNREACHABLE',
-        playitBinary: playitStatus.isInstalled ? 'ONLINE' : 'NOT_INSTALLED',
-        playitAgent: playitStatus.isRunning ? 'ONLINE' : 'OFFLINE',
-        playitClaim: playitStatus.isClaimed ? 'CLAIMED' : 'UNCLAIMED',
-        playitConnection: playitStatus.isRunning ? (playitStatus.isClaimed ? 'CONNECTED' : 'UNCLAIMED') : 'DISCONNECTED',
-        playitTunnel: playitStatus.isClaimed ? 'MANAGED_EXTERNALLY' : 'NOT_ACTIVE',
-        playitEndpoint: localNode?.playitSftpAddress ? `${localNode.playitSftpAddress}:${localNode.playitSftpPort || sftpPort}` : 'MANAGED_ON_PLAYIT_GG'
-      },
+              },
       runtime: {
         database: { status: 'ONLINE', type: 'JSON DB / File State', userCount: db.users.length, serverCount: db.servers.length },
         sessions: { status: 'ONLINE', type: 'JWT Bearer + TokenVersion Invalidation' },
@@ -2837,6 +2875,19 @@ router.delete('/database-hosts/:id', async (req: AuthenticatedRequest, res: Resp
   res.json({ success: true, message: 'Database host removed successfully.' });
 });
 
+// GET /api/v1/admin/settings/appearance - Retrieve animation settings
+router.get('/settings/appearance', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const defaultAnimationSettings = {
+    enabled: true,
+    pageTransitions: true,
+    initialPanelAnimation: true,
+    intensity: 'normal' as const
+  };
+  const settings = db.settings.animationSettings || defaultAnimationSettings;
+  res.json({ success: true, data: settings });
+});
+
 // PUT /api/v1/admin/settings/appearance - Update animation settings
 router.put('/settings/appearance', async (req: AuthenticatedRequest, res: Response) => {
   if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
@@ -2868,6 +2919,51 @@ router.put('/settings/appearance', async (req: AuthenticatedRequest, res: Respon
     success: true,
     message: 'Animation settings updated successfully.',
     data: db.settings.animationSettings
+  });
+});
+
+// GET /api/v1/admin/settings/homepage - Retrieve homepage builder config
+router.get('/settings/homepage', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  res.json({
+    success: true,
+    data: db.settings.homepageConfig || {}
+  });
+});
+
+// PUT /api/v1/admin/settings/homepage - Save homepage builder config
+router.put('/settings/homepage', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const { homepageConfig, heroDescription, footerDescription } = req.body;
+
+  if (homepageConfig && typeof homepageConfig === 'object') {
+    db.settings.homepageConfig = {
+      ...(db.settings.homepageConfig || {}),
+      ...homepageConfig
+    };
+  }
+  if (typeof heroDescription === 'string') {
+    db.settings.heroDescription = heroDescription;
+  }
+  if (typeof footerDescription === 'string') {
+    db.settings.footerDescription = footerDescription;
+  }
+
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'ADMIN_UPDATE_HOMEPAGE_CONFIG',
+    'HOMEPAGE',
+    'Updated homepage sections and hero configuration'
+  );
+
+  res.json({
+    success: true,
+    message: 'Homepage configuration updated successfully.',
+    data: db.settings.homepageConfig
   });
 });
 

@@ -1,23 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Server as ServerIcon, PlusCircle, Activity, Search } from 'lucide-react';
+import { Server as ServerIcon, PlusCircle, RefreshCw, Search } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Server } from '../../types';
-import { useAuth } from '../../lib/AuthContext';
-import { useTheme } from '../../lib/ThemeContext';
 import { ServerCard } from '../../components/server/ServerCard';
 import { normalizeServer } from '../../lib/serverNormalize';
+import { PanelScrollReveal } from '../../components/PanelScrollReveal';
 
 interface ServersListProps {
   onNavigate: (page: string, params?: any) => void;
 }
 
 export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
-  const { accentClasses } = useTheme();
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'minecraft' | 'bot'>('all');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchServers = async () => {
     const res = await apiRequest('/servers');
@@ -43,13 +40,6 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
     fetchServers();
   };
 
-  const handleCopy = (e: React.MouseEvent, text: string, id: string) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
   const filteredServers = servers.filter((s) => {
     const name = typeof s.name === 'string' ? s.name.toLowerCase() : '';
     const software = typeof s.software === 'string' ? s.software.toLowerCase() : '';
@@ -63,75 +53,89 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
   });
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Your Servers</h1>
-          <p className="text-xs text-zinc-400 mt-1">Manage and monitor your running Minecraft instances and Discord bot containers.</p>
-        </div>
+      <PanelScrollReveal delayMs={0}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-line)] pb-5">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-ink)] tracking-tight">Your Servers</h1>
+            <p className="text-xs text-[var(--color-ink-mute)] mt-1">Manage and monitor your running Minecraft instances and Discord bot containers.</p>
+          </div>
 
-        <button
-          onClick={() => onNavigate('deploy')}
-          className={`px-5 py-2.5 rounded-xl font-semibold text-xs text-white bg-gradient-to-r ${accentClasses.gradient} shadow-md flex items-center gap-2 hover:opacity-95 transition-all`}
-        >
-          <PlusCircle className="h-4 w-4" /> Deploy New Server
-        </button>
-      </div>
+          <button
+            onClick={() => onNavigate('deploy')}
+            className="btn btn-primary"
+          >
+            <PlusCircle className="h-4 w-4" />
+            <span>Deploy New Server</span>
+          </button>
+        </div>
+      </PanelScrollReveal>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search servers by name, software, location..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-          />
-        </div>
+      <PanelScrollReveal delayMs={40}>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 surface p-3 rounded-lg">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search servers by name, software, location..."
+              className="field w-full pl-8 pr-3 py-1.5 text-xs rounded-md"
+            />
+          </div>
 
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          {(['all', 'minecraft', 'bot'] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${
-                filterType === type ? 'bg-violet-600 text-white' : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            {(['all', 'minecraft', 'bot'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors cursor-pointer ${
+                  filterType === type 
+                    ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-line)]' 
+                    : 'bg-transparent text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] border border-transparent'
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </PanelScrollReveal>
 
       {/* Servers List */}
       {loading ? (
-        <div className="p-12 text-center text-xs text-zinc-400 space-y-2">
-          <Activity className="h-6 w-6 animate-spin text-violet-400 mx-auto" />
-          <p>Loading server inventory...</p>
+        <div className="surface p-10 text-center rounded-lg space-y-2">
+          <RefreshCw className="h-5 w-5 animate-spin text-[var(--color-accent)] mx-auto" />
+          <p className="text-xs text-[var(--color-ink-dim)]">Loading server inventory...</p>
         </div>
       ) : filteredServers.length === 0 ? (
-        <div className="p-12 text-center bg-zinc-900/60 border border-zinc-800 rounded-3xl space-y-4">
-          <ServerIcon className="h-10 w-10 text-zinc-600 mx-auto" />
-          <div>
-            <h3 className="text-base font-bold text-white">No servers found</h3>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1">
-              You don't have any deployed servers matching this filter yet. Deploy a high-performance server in seconds.
-            </p>
+        <PanelScrollReveal delayMs={80}>
+          <div className="surface p-10 text-center rounded-lg space-y-3">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
+              <ServerIcon className="h-5 w-5 text-[var(--color-ink-mute)]" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">No servers found</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] max-w-sm mx-auto mt-0.5">
+                No servers match the selected criteria. Deploy a container in seconds.
+              </p>
+            </div>
+            <div className="pt-1">
+              <button
+                onClick={() => onNavigate('deploy')}
+                className="btn btn-primary"
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span>Deploy Server</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => onNavigate('deploy')}
-            className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs inline-flex items-center gap-2"
-          >
-            <PlusCircle className="h-4 w-4" /> Deploy Server
-          </button>
-        </div>
+        </PanelScrollReveal>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredServers.map((s) => (
             <ServerCard
               key={s.id}

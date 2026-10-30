@@ -4,7 +4,7 @@ import {
   XCircle, Clock, AlertCircle, RefreshCw, GitBranch, ArrowUpCircle,
   Terminal, ShieldCheck, Cpu, HardDrive, Sparkles, Loader2, CheckCircle,
   AlertTriangle, HelpCircle, Key, Lock, Shield, Globe, ExternalLink, Copy,
-  Database, Plus, Trash2, Edit3, X, Disc as DiscordIcon, Twitter, Github, Share2, Coins
+  Database, Plus, Trash2, Edit3, X, Disc as DiscordIcon, Twitter, Github, Share2, Coins, Mail
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
@@ -75,8 +75,6 @@ export const AdminSettings: React.FC = () => {
   const [currencySymbol, setCurrencySymbol] = useState('$');
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [enablePlayit, setEnablePlayit] = useState(true);
-  const [togglingGlobalPlayit, setTogglingGlobalPlayit] = useState(false);
   const [pageAnimationsEnabled, setPageAnimationsEnabled] = useState(true);
 
   // Homepage Content Settings
@@ -239,7 +237,6 @@ export const AdminSettings: React.FC = () => {
       setCurrencySymbol(res.data.currencySymbol || '$');
       setRegistrationEnabled(res.data.registrationEnabled ?? true);
       setMaintenanceMode(res.data.maintenanceMode ?? false);
-      setEnablePlayit(res.data.enablePlayit ?? true);
       setPageAnimationsEnabled(res.data.pageAnimationsEnabled ?? true);
       if (res.data.heroDescription) {
         setHeroDescription(res.data.heroDescription);
@@ -471,7 +468,7 @@ export const AdminSettings: React.FC = () => {
     };
   }, [updateJob?.status]);
 
-  const { updateBrandNameLocally, refreshBranding, setEnablePlayitLocally, setPageAnimationsEnabledLocally, setSocialLinksLocally, setHomepageDescriptionsLocally } = useBranding();
+  const { updateBrandNameLocally, refreshBranding, setPageAnimationsEnabledLocally, setSocialLinksLocally, setHomepageDescriptionsLocally } = useBranding();
 
   const handleSaveHomepageContent = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -577,7 +574,6 @@ export const AdminSettings: React.FC = () => {
         currencySymbol,
         registrationEnabled,
         maintenanceMode,
-        enablePlayit,
         pageAnimationsEnabled,
         socialLinks,
         heroDescription,
@@ -586,7 +582,6 @@ export const AdminSettings: React.FC = () => {
     });
     if (res.success) {
       updateBrandNameLocally(brandName);
-      setEnablePlayitLocally(enablePlayit);
       setPageAnimationsEnabledLocally(pageAnimationsEnabled);
       setSocialLinksLocally(socialLinks);
       setHomepageDescriptionsLocally(heroDescription, footerDescription);
@@ -595,35 +590,6 @@ export const AdminSettings: React.FC = () => {
       setTimeout(() => setSaved(false), 3000);
     } else {
       setActionMsg(res.error?.message || 'Failed to save settings');
-    }
-  };
-
-  const handleToggleGlobalPlayit = async (enabled: boolean) => {
-    setTogglingGlobalPlayit(true);
-    setEnablePlayit(enabled);
-    const res = await apiRequest('/admin/settings', {
-      method: 'PUT',
-      body: JSON.stringify({
-        brandName,
-        brandTagline,
-        supportEmail,
-        currencySymbol,
-        registrationEnabled,
-        maintenanceMode,
-        enablePlayit: enabled,
-        pageAnimationsEnabled
-      })
-    });
-    setTogglingGlobalPlayit(false);
-    if (res.success) {
-      setEnablePlayitLocally(enabled);
-      setPageAnimationsEnabledLocally(pageAnimationsEnabled);
-      await refreshBranding();
-      setActionMsg(enabled ? 'Playit.GG has been enabled globally.' : 'Playit.GG has been disabled globally.');
-      setTimeout(() => setActionMsg(null), 4000);
-    } else {
-      setEnablePlayit(!enabled); // revert state on error
-      alert(res.error?.message || 'Failed to update Playit setting');
     }
   };
 
@@ -782,13 +748,18 @@ export const AdminSettings: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Support Email</label>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 text-orange-400" />
+                <span>Support Email Address</span>
+              </label>
               <input
                 type="email"
                 value={supportEmail}
                 onChange={(e) => setSupportEmail(e.target.value)}
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+                placeholder="support@orihost.com"
+                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/50"
               />
+              <span className="text-[10px] text-zinc-500 mt-1 block">Displayed on public /contact page, invoices, and system tickets.</span>
             </div>
           </div>
 
@@ -828,46 +799,6 @@ export const AdminSettings: React.FC = () => {
             />
           </div>
 
-          {/* Playit.GG Global Integration Toggle */}
-          <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                    <Globe className="w-3.5 h-3.5" />
-                  </div>
-                  <h3 className="text-xs font-bold text-white">Playit.GG Integration</h3>
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                    enablePlayit
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${enablePlayit ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
-                    {enablePlayit ? 'Enabled' : 'Disabled'}
-                  </span>
-                </div>
-                <div className="text-xs font-semibold text-zinc-200">Enable Playit.GG</div>
-                <p className="text-[11px] text-zinc-400">
-                  Allow customers and servers to use Playit.GG agent connectivity and claiming features.
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  {enablePlayit
-                    ? 'Playit.GG features are available throughout the panel.'
-                    : 'Playit.GG features are hidden from customers.'}
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                <input
-                  type="checkbox"
-                  disabled={togglingGlobalPlayit}
-                  checked={enablePlayit}
-                  onChange={(e) => handleToggleGlobalPlayit(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-              </label>
-            </div>
-          </div>
 
           {/* Appearance & Experience — Page Animations */}
           <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
@@ -1903,12 +1834,12 @@ export const AdminSettings: React.FC = () => {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-bold uppercase">
-                          {step.status === 'SUCCESS' && '✓ SUCCESS'}
-                          {step.status === 'RUNNING' && '⚡ RUNNING'}
-                          {step.status === 'FAILED' && '❌ FAILED'}
-                          {step.status === 'PENDING' && '⌛ PENDING'}
-                          {step.status === 'SKIPPED' && '⏭ SKIPPED'}
+                        <span className="text-[10px] font-mono font-bold uppercase flex items-center gap-1.5">
+                          {step.status === 'SUCCESS' && <><CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" /> <span className="text-emerald-400">SUCCESS</span></>}
+                          {step.status === 'RUNNING' && <><RefreshCw className="w-3 h-3 text-amber-400 animate-spin shrink-0" /> <span className="text-amber-400">RUNNING</span></>}
+                          {step.status === 'FAILED' && <><AlertCircle className="w-3 h-3 text-rose-400 shrink-0" /> <span className="text-rose-400">FAILED</span></>}
+                          {step.status === 'PENDING' && <><Clock className="w-3 h-3 text-zinc-400 shrink-0" /> <span className="text-zinc-400">QUEUED</span></>}
+                          {step.status === 'SKIPPED' && <span className="text-zinc-500">SKIPPED</span>}
                         </span>
                       </div>
                       <div className="font-semibold text-[11px] leading-tight" title={step.name}>
@@ -1928,7 +1859,7 @@ export const AdminSettings: React.FC = () => {
                   <div className="text-zinc-600">Initializing pipeline...</div>
                 ) : (
                   updateJob.logs.map((l, i) => (
-                    <div key={i} className={`${l.includes('❌') || l.includes('ERROR') ? 'text-rose-400 font-bold' : l.includes('✓') || l.includes('SUCCESS') ? 'text-emerald-400' : ''}`}>
+                    <div key={i} className={`${l.includes('[ERROR]') || l.includes('FAILED') ? 'text-rose-400 font-bold' : l.includes('[SUCCESS]') || l.includes('SUCCESS') ? 'text-emerald-400' : ''}`}>
                       {l}
                     </div>
                   ))
@@ -1945,7 +1876,7 @@ export const AdminSettings: React.FC = () => {
           {fetchingNetwork ? (
             <div className="flex flex-col items-center justify-center p-12 bg-zinc-900 border border-zinc-800 rounded-3xl space-y-3">
               <Loader2 className="h-8 w-8 text-amber-500 animate-spin" />
-              <p className="text-xs text-zinc-400">Performing real-time network diagnostics and checking Playit agent...</p>
+              <p className="text-xs text-zinc-400">Performing real-time network and SFTP daemon diagnostics...</p>
             </div>
           ) : (
             <>
@@ -1956,7 +1887,7 @@ export const AdminSettings: React.FC = () => {
                     <h2 className="text-base font-bold text-white flex items-center gap-2">
                       <Globe className="h-4 w-4 text-amber-400" /> Network Connectivity & Routing Mode
                     </h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">Autorouting selects direct high-speed SFTP if publicly reachable, with seamless Playit.GG tunnel fallback.</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">High-speed node allocation routing with native SFTP daemon on port 2022.</p>
                   </div>
                   <button
                     type="button"
@@ -1973,15 +1904,10 @@ export const AdminSettings: React.FC = () => {
                   <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
                     <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">Active Routing Mode</div>
                     <div className="text-base font-bold text-white flex items-center gap-2">
-                      {networkSftpDetails?.mode === 'direct' ? (
+                      {networkSftpDetails?.status === 'online' || networkSftpDetails?.mode === 'direct' ? (
                         <>
-                          <span className="text-emerald-400 font-bold uppercase tracking-wide">Direct SFTP</span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">DIRECT</span>
-                        </>
-                      ) : networkSftpDetails?.mode === 'playit' ? (
-                        <>
-                          <span className="text-cyan-400 font-bold uppercase tracking-wide">Playit.GG Tunnel</span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">TUNNELED</span>
+                          <span className="text-emerald-400 font-bold uppercase tracking-wide">Direct Node SFTP</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PORT 2022</span>
                         </>
                       ) : (
                         <>

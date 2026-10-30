@@ -302,7 +302,9 @@ export const AdminMonitoring: React.FC = () => {
           toast.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
         }`}>
           <span>{toast.message}</span>
-          <button onClick={() => setToast(null)} className="text-zinc-400 hover:text-white">✕</button>
+          <button onClick={() => setToast(null)} className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -911,7 +913,9 @@ export const AdminMonitoring: React.FC = () => {
               <h3 className="text-base font-bold text-white">
                 {editingRule.id ? 'Edit Alert Rule' : 'New Alert Rule'}
               </h3>
-              <button onClick={() => setShowRuleModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+              <button onClick={() => setShowRuleModal(false)} className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveRule} className="space-y-4 text-xs">
@@ -1047,7 +1051,9 @@ export const AdminMonitoring: React.FC = () => {
           <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-base font-bold text-white">Declare Infrastructure Incident</h3>
-              <button onClick={() => setShowIncidentModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+              <button onClick={() => setShowIncidentModal(false)} className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <form onSubmit={handleCreateIncident} className="space-y-4 text-xs">
@@ -1130,7 +1136,9 @@ export const AdminMonitoring: React.FC = () => {
           <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-base font-bold text-white">Add Timeline Update</h3>
-              <button onClick={() => setSelectedIncidentForUpdate(null)} className="text-zinc-400 hover:text-white">✕</button>
+              <button onClick={() => setSelectedIncidentForUpdate(null)} className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <form onSubmit={handleAddTimelineUpdate} className="space-y-4 text-xs">
@@ -1186,7 +1194,9 @@ export const AdminMonitoring: React.FC = () => {
           <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-base font-bold text-white">Schedule Maintenance Window</h3>
-              <button onClick={() => setShowMaintenanceModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+              <button onClick={() => setShowMaintenanceModal(false)} className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <form onSubmit={handleScheduleMaintenance} className="space-y-4 text-xs">

@@ -75,7 +75,7 @@ export const AdminAppearance: React.FC = () => {
     };
 
     const loadAnimations = async () => {
-      const res = await apiRequest('/settings/appearance');
+      const res = await apiRequest('/admin/settings/appearance');
       if (res.success && res.data) {
         const d = res.data;
         setAnimationsEnabledState(d.enabled ?? true);
@@ -598,8 +598,11 @@ export const AdminAppearance: React.FC = () => {
                   placeholder="https://i.imgur.com/... or https://...gif"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">
+                <p className="text-[10px] text-zinc-400 mt-1">
                   Supports Imgur links, direct PNG/JPEG, and loop animated GIFs.
+                </p>
+                <p className="text-[10px] text-amber-400/90 font-mono mt-0.5">
+                  Applied exclusively to internal panel views (Dashboard, AFK Rewards, Billing, Admin Panel, User Settings). Public pages remain clean with high-contrast hero layouts.
                 </p>
               </div>
 

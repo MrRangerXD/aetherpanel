@@ -33,7 +33,11 @@ export async function apiRequest<T = any>(
   }
 
   try {
-    const res = await fetch(`/api/v1${endpoint}`, {
+    const cleanEndpoint = endpoint.startsWith('/api/v1')
+      ? endpoint
+      : `/api/v1${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+
+    const res = await fetch(cleanEndpoint, {
       ...options,
       headers
     });

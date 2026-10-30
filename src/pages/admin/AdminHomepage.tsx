@@ -35,6 +35,16 @@ export const AdminHomepage: React.FC<AdminHomepageProps> = ({ onNavigate }) => {
   const [heroBullet2, setHeroBullet2] = useState<string>(homepageConfig.heroBullet2 || 'No setup fees');
   const [heroBullet3, setHeroBullet3] = useState<string>(homepageConfig.heroBullet3 || 'Cancel anytime');
 
+  const [heroBackgroundImagesText, setHeroBackgroundImagesText] = useState<string>(
+    (homepageConfig.heroBackgroundImages || [
+      '/src/assets/images/hero_minecraft_landscape_1791889746896.jpg',
+      '/src/assets/images/hero_datacenter_servers_1791889746971.jpg'
+    ]).join('\n')
+  );
+  const [heroSlideDelaySeconds, setHeroSlideDelaySeconds] = useState<number>(
+    homepageConfig.heroSlideDelaySeconds || 5.5
+  );
+
   // Section Toggles
   const [showTrustBar, setShowTrustBar] = useState<boolean>(homepageConfig.showTrustBar ?? true);
   const [showMinecraftSection, setShowMinecraftSection] = useState<boolean>(homepageConfig.showMinecraftSection ?? true);
@@ -117,6 +127,12 @@ export const AdminHomepage: React.FC<AdminHomepageProps> = ({ onNavigate }) => {
       if (homepageConfig.heroBullet1) setHeroBullet1(homepageConfig.heroBullet1);
       if (homepageConfig.heroBullet2) setHeroBullet2(homepageConfig.heroBullet2);
       if (homepageConfig.heroBullet3) setHeroBullet3(homepageConfig.heroBullet3);
+      if (homepageConfig.heroBackgroundImages && Array.isArray(homepageConfig.heroBackgroundImages)) {
+        setHeroBackgroundImagesText(homepageConfig.heroBackgroundImages.join('\n'));
+      }
+      if (homepageConfig.heroSlideDelaySeconds) {
+        setHeroSlideDelaySeconds(homepageConfig.heroSlideDelaySeconds);
+      }
 
       if (homepageConfig.showTrustBar !== undefined) setShowTrustBar(homepageConfig.showTrustBar);
       if (homepageConfig.trustBarItem1) setTrustBarItem1(homepageConfig.trustBarItem1);
@@ -192,6 +208,11 @@ export const AdminHomepage: React.FC<AdminHomepageProps> = ({ onNavigate }) => {
       heroBullet1: heroBullet1.trim(),
       heroBullet2: heroBullet2.trim(),
       heroBullet3: heroBullet3.trim(),
+      heroBackgroundImages: heroBackgroundImagesText
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean),
+      heroSlideDelaySeconds: Number(heroSlideDelaySeconds) || 5.5,
 
       showTrustBar,
       trustBarItem1: trustBarItem1.trim(),
@@ -543,6 +564,95 @@ export const AdminHomepage: React.FC<AdminHomepageProps> = ({ onNavigate }) => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Hero Background Wallpaper Slideshow */}
+          <div className="p-6 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  Hero Background Wallpapers (Cross-Fade Slideshow)
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Images smoothly cross-fade behind the hero section with an aesthetic dark vignette.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeroBackgroundImagesText([
+                      '/src/assets/images/hero_minecraft_landscape_1791889746896.jpg',
+                      '/src/assets/images/hero_datacenter_servers_1791889746971.jpg'
+                    ].join('\n'));
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] font-mono text-amber-400 border border-amber-500/20 transition-colors cursor-pointer"
+                >
+                  Load Default Wallpapers
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div className="lg:col-span-8 space-y-2">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Background Image URLs (One URL per line)
+                </label>
+                <textarea
+                  rows={4}
+                  value={heroBackgroundImagesText}
+                  onChange={(e) => setHeroBackgroundImagesText(e.target.value)}
+                  placeholder="/src/assets/images/hero_minecraft_landscape_1791889746896.jpg&#10;/src/assets/images/hero_datacenter_servers_1791889746971.jpg"
+                  className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500 font-mono resize-y leading-relaxed"
+                />
+                <p className="text-[11px] text-zinc-500">
+                  Enter local paths (e.g. <code className="text-zinc-400">/src/assets/images/...</code>) or hosted HTTPS image URLs.
+                </p>
+              </div>
+
+              <div className="lg:col-span-4 space-y-3 p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Slideshow Delay
+                  </label>
+                  <select
+                    value={heroSlideDelaySeconds}
+                    onChange={(e) => setHeroSlideDelaySeconds(parseFloat(e.target.value))}
+                    className="w-full h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  >
+                    <option value={4}>4 Seconds (Fast)</option>
+                    <option value={5.5}>5.5 Seconds (Recommended / Smooth)</option>
+                    <option value={7}>7 Seconds (Relaxed)</option>
+                    <option value={10}>10 Seconds (Slow)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] text-zinc-400 mb-1.5 font-mono">
+                    Active Images ({heroBackgroundImagesText.split('\n').filter(s => s.trim()).length}):
+                  </span>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {heroBackgroundImagesText.split('\n').filter(s => s.trim()).map((imgUrl, i) => (
+                      <div key={i} className="h-12 w-20 rounded-lg overflow-hidden border border-white/[0.1] bg-black shrink-0 relative group">
+                        <img
+                          src={imgUrl.trim()}
+                          alt={`Hero wallpaper ${i + 1}`}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <span className="absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[9px] bg-black/80 text-zinc-300 font-mono">
+                          #{i + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Main Headline & Description */}

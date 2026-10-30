@@ -20,9 +20,6 @@ import {
   installServerDependencies, clearConsoleBuffer, getConsoleBuffer
 } from '../provider';
 import { closeServerConsoleClients, closeUserConsoleClient } from '../consoleWs';
-import {
-  getPlayitStatus, installPlayitAgent, togglePlayitAgent, restartPlayitAgent, provisionPlayitSecret, claimPlayitAgent, uninstallPlayitAgent, repairPlayitAgent, getPlayitLogs, PlayitConflictError
-} from '../playitService';
 import { searchRealPlugins, downloadPluginJar } from '../pluginProviders';
 import { createRealBackupProcess, restoreRealBackupProcess, deleteRealBackupProcess, getBackupFilePath } from '../backups';
 import { calculateNextRunAt } from '../scheduler';
@@ -36,7 +33,6 @@ import { resolveServerSftpInfo } from '../sftpResolver';
 import { getActiveSftpSessions, terminateSftpSession, terminateServerSftpSessions } from '../sftpServer';
 import { removeServerPortRule } from '../services/networkProtectionService';
 import { resolveServerPublicEndpoint } from '../network/endpointResolver';
-import { getNodePlayitStatus } from '../playit/playitService';
 import { resolveServerType } from './serverTypes';
 import { startRemoteDownload, getDownloadJob, listServerDownloadJobs } from '../services/remoteDownloadService';
 import {
@@ -176,10 +172,8 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
   const node = db.nodes.find(n => n.id === server.nodeId);
   const product = db.products.find(p => p.id === server.productId);
   const plan = db.plans.find(p => p.id === server.planId);
-  const sftp = await resolveServerSftpInfo(server.id, req.get('host'));
-
-  const playitStatus = node ? await getNodePlayitStatus(node.id).catch(() => null) : null;
-  const publicEndpoint = resolveServerPublicEndpoint(server, node, playitStatus);
+  const sftp = await resolveServerSftpInfo(server.id, req.get('host'), req.user?.id);
+  const publicEndpoint = resolveServerPublicEndpoint(server, node);
 
   const isSubuser = server.userId !== req.user!.id;
   const subuserEntry = isSubuser ? (db.subusers || []).find(sub => sub.serverId === server.id && sub.userId === req.user!.id) : null;
@@ -2060,226 +2054,193 @@ router.post('/:id/install-dependencies', authMiddleware, async (req: Authenticat
   }
 });
 
-// Helper to check if Playit is globally enabled
-async function checkPlayitEnabled(req: AuthenticatedRequest, res: Response): Promise<boolean> {
-  const db = await getDb();
-  if (db.settings.enablePlayit === false && req.user?.role !== 'admin') {
-    res.status(403).json({
-      success: false,
-      error: {
-        code: 'PLAYIT_DISABLED',
-        message: 'Playit.GG is currently disabled by the administrator.'
-      }
-    });
-    return false;
-  }
-  return true;
-}
+// --- PTERODACTYL-STYLE SERVER NETWORK & ALLOCATION MANAGEMENT ---
 
-// Helper error response for server playit routes
-function handleServerPlayitError(res: Response, err: any, defaultCode = 'PLAYIT_ERROR') {
-  if (err instanceof PlayitConflictError || err?.name === 'PlayitConflictError') {
-    return res.status(409).json({
-      success: false,
-      error: { code: 'OPERATION_IN_PROGRESS', message: err.message }
-    });
-  }
-  return res.status(400).json({
-    success: false,
-    error: { code: defaultCode, message: err.message || 'Playit operation failed.' }
-  });
-}
-
-// GET /api/v1/servers/:id/playit - Get Playit agent & tunnel status
-router.get('/:id/playit', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.view');
+// GET /api/v1/servers/:id/network/allocations - List all server allocations & node available pool
+router.get('/:id/network/allocations', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id);
   if (!access) return;
 
-  const status = await getPlayitStatus(req.params.id);
-  res.json({ success: true, data: status });
-});
+  const { server, db } = access;
+  const node = db.nodes.find(n => n.id === server.nodeId) || db.nodes[0];
 
-// POST /api/v1/servers/:id/playit/install - Install Playit agent
-router.post('/:id/playit/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
+  const assignedAllocations = (db.allocations || []).filter(a => a.serverId === server.id);
+  const availableAllocations = (db.allocations || []).filter(a => a.nodeId === node.id && !a.isAssigned);
 
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  try {
-    const status = await installPlayitAgent(req.params.id);
-    res.json({ success: true, message: 'Playit agent configured and tunnel created.', data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_INSTALL_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/start - Start Playit agent
-router.post('/:id/playit/start', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  try {
-    const status = await togglePlayitAgent(req.params.id, true);
-    res.json({ success: true, message: 'Playit agent started.', data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_START_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/stop - Stop Playit agent
-router.post('/:id/playit/stop', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  try {
-    const status = await togglePlayitAgent(req.params.id, false);
-    res.json({ success: true, message: 'Playit agent stopped.', data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_STOP_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/toggle - Toggle Playit agent
-router.post('/:id/playit/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  let enable = req.body?.enable;
-  if (enable === undefined) {
-    const currentStatus = await getPlayitStatus(req.params.id);
-    enable = !currentStatus.isRunning;
-  }
-
-  try {
-    const status = await togglePlayitAgent(req.params.id, Boolean(enable));
-    res.json({ success: true, message: `Playit agent ${enable ? 'started' : 'stopped'}.`, data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_TOGGLE_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/restart - Restart Playit agent
-router.post('/:id/playit/restart', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  try {
-    const status = await restartPlayitAgent(req.params.id);
-    res.json({ success: true, message: 'Playit agent restarted successfully.', data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_RESTART_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/secret - Provision Playit secret key
-router.post('/:id/playit/secret', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  const { secretKey } = req.body;
-  if (!secretKey || !secretKey.trim()) {
-    res.status(400).json({ success: false, error: { code: 'INVALID_SECRET', message: 'Secret key is required' } });
-    return;
-  }
-
-  try {
-    const status = await provisionPlayitSecret(req.params.id, secretKey);
-    res.json({ success: true, message: 'Playit secret provisioned successfully.', data: status });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_SECRET_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/claim - Explicitly initiate Playit claim action
-router.post('/:id/playit/claim', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
-  if (!access) return;
-
-  try {
-    const claimRes = await claimPlayitAgent(req.params.id);
-    if (!claimRes.success) {
-      return res.status(400).json({
-        success: false,
-        code: 'PLAYIT_CLAIM_UNAVAILABLE',
-        message: claimRes.message || 'The Playit agent started, but a verified claim URL could not be obtained.'
-      });
+  if (assignedAllocations.length === 0) {
+    const port = (server as any).port || server.primaryPort || 25565;
+    const existing = (db.allocations || []).find(a => a.nodeId === node.id && a.port === port);
+    if (existing) {
+      existing.isAssigned = true;
+      existing.serverId = server.id;
+      assignedAllocations.push(existing);
+    } else {
+      const newAlloc = {
+        id: `alloc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        nodeId: node.id,
+        ip: node.ip || '127.0.0.1',
+        port,
+        isAssigned: true,
+        serverId: server.id,
+        createdAt: new Date().toISOString()
+      };
+      db.allocations.push(newAlloc);
+      assignedAllocations.push(newAlloc);
     }
-    res.json({ success: true, data: claimRes });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_CLAIM_FAILED');
+    saveDbSync();
   }
+
+  const primaryAlloc = assignedAllocations.find(a => a.id === (server as any).allocationId || a.port === (server as any).port) || assignedAllocations[0];
+
+  res.json({
+    success: true,
+    data: {
+      allocations: assignedAllocations,
+      primaryAllocationId: primaryAlloc?.id,
+      availableAllocations,
+      node: {
+        id: node.id,
+        name: node.name,
+        ip: node.ip,
+        fqdn: node.fqdn,
+        publicIpv4: node.publicIpv4,
+        sftpPort: node.sftpPort || 2022
+      }
+    }
+  });
 });
 
-// GET /api/v1/servers/:id/playit/logs - Retrieve Playit agent logs
-router.get('/:id/playit/logs', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
-  const access = await checkServerAccess(req, res, req.params.id, 'network.view');
-  if (!access) return;
-
-  try {
-    const lines = parseInt(req.query.lines as string) || 100;
-    const logs = getPlayitLogs(req.params.id, false, lines);
-    res.json({ success: true, data: { serverId: req.params.id, logs } });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_LOGS_FAILED');
-  }
-});
-
-// POST /api/v1/servers/:id/playit/repair - Run Playit agent repair
-router.post('/:id/playit/repair', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
+// POST /api/v1/servers/:id/network/allocations - Assign an additional allocation to server
+router.post('/:id/network/allocations', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
-  try {
-    const repairRes = await repairPlayitAgent(req.params.id);
-    res.json({ success: true, data: repairRes });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_REPAIR_FAILED');
+  const { server, db } = access;
+  const { allocationId } = req.body;
+
+  let targetAlloc = allocationId 
+    ? (db.allocations || []).find(a => a.id === allocationId && !a.isAssigned)
+    : (db.allocations || []).find(a => a.nodeId === server.nodeId && !a.isAssigned);
+
+  if (!targetAlloc) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NO_ALLOCATIONS_AVAILABLE', message: 'No unassigned port allocations available on this node.' }
+    });
   }
+
+  targetAlloc.isAssigned = true;
+  targetAlloc.serverId = server.id;
+  targetAlloc.notes = req.body.notes || 'Additional Port';
+  saveDbSync();
+
+  await recordServerActivity(
+    server.id,
+    req.user!.id,
+    req.user!.username || 'user',
+    'SERVER_ALLOCATION_ASSIGNED',
+    `Assigned port ${targetAlloc.port} (${targetAlloc.ip}) to server`
+  );
+
+  res.json({
+    success: true,
+    message: `Port ${targetAlloc.port} assigned successfully.`,
+    data: targetAlloc
+  });
 });
 
-// POST /api/v1/servers/:id/playit/uninstall - Remove Playit agent
-router.post('/:id/playit/uninstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const isEnabled = await checkPlayitEnabled(req, res);
-  if (!isEnabled) return;
-
+// POST /api/v1/servers/:id/network/allocations/:allocId/primary - Set primary allocation
+router.post('/:id/network/allocations/:allocId/primary', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
   if (!access) return;
 
-  try {
-    await uninstallPlayitAgent(req.params.id);
-    res.json({ success: true, message: 'Playit agent uninstalled.' });
-  } catch (err: any) {
-    handleServerPlayitError(res, err, 'PLAYIT_UNINSTALL_FAILED');
+  const { server, db } = access;
+  const alloc = (db.allocations || []).find(a => a.id === req.params.allocId && a.serverId === server.id);
+
+  if (!alloc) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Allocation not found for this server.' } });
   }
+
+  (server as any).allocationId = alloc.id;
+  (server as any).port = alloc.port;
+  server.primaryPort = alloc.port;
+  server.primaryIp = alloc.ip;
+
+  saveDbSync();
+
+  await recordServerActivity(
+    server.id,
+    req.user!.id,
+    req.user!.username || 'user',
+    'SERVER_PRIMARY_ALLOCATION_UPDATED',
+    `Set port ${alloc.port} as primary connection allocation`
+  );
+
+  res.json({
+    success: true,
+    message: `Port ${alloc.port} set as primary allocation.`,
+    data: alloc
+  });
+});
+
+// PATCH /api/v1/servers/:id/network/allocations/:allocId - Update allocation notes / alias
+router.patch('/:id/network/allocations/:allocId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
+  if (!access) return;
+
+  const { server, db } = access;
+  const alloc = (db.allocations || []).find(a => a.id === req.params.allocId && a.serverId === server.id);
+
+  if (!alloc) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Allocation not found for this server.' } });
+  }
+
+  if (typeof req.body.notes === 'string') alloc.notes = req.body.notes.trim();
+  if (typeof req.body.alias === 'string') alloc.alias = req.body.alias.trim();
+
+  saveDbSync();
+
+  res.json({ success: true, message: 'Allocation notes updated.', data: alloc });
+});
+
+// DELETE /api/v1/servers/:id/network/allocations/:allocId - Release secondary allocation
+router.delete('/:id/network/allocations/:allocId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const access = await checkServerAccess(req, res, req.params.id, 'network.manage');
+  if (!access) return;
+
+  const { server, db } = access;
+  const alloc = (db.allocations || []).find(a => a.id === req.params.allocId && a.serverId === server.id);
+
+  if (!alloc) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Allocation not found for this server.' } });
+  }
+
+  if (alloc.id === (server as any).allocationId || alloc.port === (server as any).port) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'CANNOT_DELETE_PRIMARY', message: 'Cannot delete the primary allocation of a server. Set another allocation as primary first.' }
+    });
+  }
+
+  alloc.isAssigned = false;
+  delete alloc.serverId;
+  delete alloc.notes;
+  delete alloc.alias;
+
+  saveDbSync();
+
+  await recordServerActivity(
+    server.id,
+    req.user!.id,
+    req.user!.username || 'user',
+    'SERVER_ALLOCATION_REMOVED',
+    `Released port ${alloc.port} back to available node pool`
+  );
+
+  res.json({
+    success: true,
+    message: `Port ${alloc.port} released back to node pool.`
+  });
 });
 
 // POST /api/v1/servers/:id/sftp/reset-password - Generate fresh SFTP password

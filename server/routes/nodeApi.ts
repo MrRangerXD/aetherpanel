@@ -294,12 +294,6 @@ router.get('/config', async (req: Request, res: Response) => {
       sftpFqdn: node.sftpFqdn,
       sftpPort: node.sftpPort || 2022,
       daemonPort: node.daemonPort || 8080,
-      playitSftpAddress: node.playitSftpAddress,
-      playitSftpPort: node.playitSftpPort,
-      playitAgentInstalled: node.playitAgentInstalled,
-      playitAgentRunning: node.playitAgentRunning,
-      playitClaimCode: node.playitClaimCode,
-      playitClaimUrl: node.playitClaimUrl,
       limits: {
         totalRamMB: node.totalRamMB,
         totalCpuCores: node.totalCpuCores,
@@ -310,7 +304,7 @@ router.get('/config', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/v1/node/sftp-status - Remote daemon syncs its local SFTP listener & public tunnel info
+// POST /api/v1/node/sftp-status - Remote daemon syncs its local SFTP listener info
 router.post('/sftp-status', async (req: Request, res: Response) => {
   const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
   if (!daemonToken) {
@@ -323,46 +317,15 @@ router.post('/sftp-status', async (req: Request, res: Response) => {
     return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
   }
 
-  const { sftpPort, sftpFqdn, playitSftpAddress, playitSftpPort } = req.body;
+  const { sftpPort, sftpFqdn } = req.body;
   if (sftpPort) node.sftpPort = parseInt(sftpPort);
   if (sftpFqdn) node.sftpFqdn = sftpFqdn.trim();
-  if (playitSftpAddress) node.playitSftpAddress = playitSftpAddress.trim();
-  if (playitSftpPort) node.playitSftpPort = parseInt(playitSftpPort);
 
   saveDbSync();
 
   res.json({
     success: true,
     message: 'SFTP networking status synchronized with Panel.'
-  });
-});
-
-// POST /api/v1/node/playit/sync - Remote daemon syncs Playit agent daemon state
-router.post('/playit/sync', async (req: Request, res: Response) => {
-  const daemonToken = (req.headers['x-daemon-token'] || req.headers['authorization'])?.toString().replace(/^Bearer\s+/i, '').trim();
-  if (!daemonToken) {
-    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing daemon token' } });
-  }
-
-  const db = await getDb();
-  const node = db.nodes.find(n => n.daemonToken === daemonToken);
-  if (!node) {
-    return res.status(401).json({ success: false, error: { code: 'INVALID_TOKEN', message: 'Invalid daemon token' } });
-  }
-
-  const { isInstalled, isRunning, claimCode, claimUrl, sftpTunnelAddress, sftpTunnelPort } = req.body;
-  if (typeof isInstalled === 'boolean') node.playitAgentInstalled = isInstalled;
-  if (typeof isRunning === 'boolean') node.playitAgentRunning = isRunning;
-  if (claimCode) node.playitClaimCode = claimCode;
-  if (claimUrl) node.playitClaimUrl = claimUrl;
-  if (sftpTunnelAddress) node.playitSftpAddress = sftpTunnelAddress;
-  if (sftpTunnelPort) node.playitSftpPort = parseInt(sftpTunnelPort);
-
-  saveDbSync();
-
-  res.json({
-    success: true,
-    message: 'Node Playit tunnel status synchronized.'
   });
 });
 

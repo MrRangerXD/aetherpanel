@@ -15,7 +15,6 @@ import billingRoutes from './server/routes/billing';
 import supportRoutes from './server/routes/support';
 import adminRoutes from './server/routes/admin';
 import nodeApiRoutes, { startHeartbeatMonitor } from './server/routes/nodeApi';
-import nodePlayitRoutes from './server/routes/nodePlayit';
 import adsRoutes from './server/routes/ads';
 import afkRoutes from './server/routes/afk';
 import discordRoutes from './server/routes/discord';
@@ -32,7 +31,6 @@ import { startLocalNodeAgent } from './server/nodeAgent';
 import { setupConsoleWebSocket } from './server/consoleWs';
 import { startSftpDaemon } from './server/sftpServer';
 import { reconcileServerStatesOnBoot } from './server/provider';
-import { initializePlayitOnBoot } from './server/playitService';
 import { initializeRuntime } from './server/init';
 import { initializeNetworkProtectionOnBoot } from './server/services/networkProtectionService';
 import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
@@ -259,7 +257,6 @@ async function startServer() {
   app.use('/api/v1/support', supportRoutes);
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/node', nodeApiRoutes);
-  app.use('/api/v1/nodes', nodePlayitRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/afk', afkRoutes);
   app.use('/api/v1/discord', discordRoutes);
@@ -270,7 +267,16 @@ async function startServer() {
   app.use('/api/v1/server-types', serverTypesRoutes);
   app.use('/api/v1/runtimes', runtimesRoutes);
   app.use('/api/v1/diagnostics', diagnosticsRoutes);
-  app.use('/api/v1/public/diagnostics', diagnosticsRoutes);
+  // Public / Admin settings route convenience aliases
+  app.use('/api/v1/settings/appearance', (req, res, next) => {
+    req.url = '/settings/appearance';
+    adminRoutes(req, res, next);
+  });
+  app.use('/api/v1/settings/homepage', (req, res, next) => {
+    req.url = '/settings/homepage';
+    adminRoutes(req, res, next);
+  });
+
   app.use('/api/v1', importerRoutes);
 
   // Catch-all for missing API routes - must return JSON, not HTML
@@ -353,12 +359,6 @@ async function startServer() {
       reconcileServerStatesOnBoot();
     } catch (e) {
       console.warn('[AetherPanel] Lifecycle boot reconciliation init notice:', e);
-    }
-
-    try {
-      initializePlayitOnBoot();
-    } catch (e) {
-      console.warn('[AetherPanel] Playit auto-recovery boot notice:', e);
     }
 
     try {

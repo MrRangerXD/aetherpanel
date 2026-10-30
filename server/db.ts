@@ -1085,8 +1085,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
             maintenanceMode: false,
             maintenanceMessage: 'Under maintenance',
             defaultTheme: 'dark',
-            accentColor: '#8b5cf6',
-            enablePlayit: true
+            accentColor: '#8b5cf6'
           };
         }
         if (!dbCache.settings.heroDescription) {
@@ -1094,9 +1093,6 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         }
         if (!dbCache.settings.footerDescription) {
           dbCache.settings.footerDescription = 'Premium Minecraft & Discord Bot hosting infrastructure built on high-clock AMD Ryzen 9 nodes and NVMe enterprise storage.';
-        }
-        if (dbCache.settings.enablePlayit === undefined) {
-          dbCache.settings.enablePlayit = true;
         }
         if (!dbCache.settings.platformName) {
           dbCache.settings.platformName = dbCache.settings.brandName || 'AetherPanel';
@@ -1824,7 +1820,6 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     maintenanceMessage: 'AetherPanel is currently performing scheduled system upgrades. We will be back online shortly.',
     defaultTheme: 'dark',
     accentColor: '#8b5cf6', // Violet
-    enablePlayit: true,
     paymentGateways: {
       upi: {
         enabled: true,

@@ -16,7 +16,7 @@ export const AdminServers: React.FC = () => {
 
   // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkActionLoading, setBulkActionLoading] = useState<'restart' | 'stop' | 'delete' | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState<'start' | 'restart' | 'stop' | 'delete' | null>(null);
 
   // Modals state
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -207,6 +207,33 @@ export const AdminServers: React.FC = () => {
     }
   };
 
+  // Bulk Start
+  const handleBulkStart = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkActionLoading('start');
+    try {
+      const res = await apiRequest('/admin/servers/bulk-start', {
+        method: 'POST',
+        body: JSON.stringify({ serverIds: selectedIds })
+      });
+
+      if (res.success) {
+        if (res.failed === 0) {
+          toast.success(res.message || `${res.succeeded} servers started successfully.`);
+        } else {
+          toast.warning(`${res.succeeded} started successfully, ${res.failed} failed.`);
+        }
+        fetchAllServers();
+      } else {
+        toast.error(res.error?.message || 'Failed to execute bulk start.');
+      }
+    } catch (err: any) {
+      toast.error(`Bulk start failed: ${err.message}`);
+    } finally {
+      setBulkActionLoading(null);
+    }
+  };
+
   // Bulk Restart
   const handleBulkRestart = async () => {
     if (selectedIds.length === 0) return;
@@ -343,6 +370,19 @@ export const AdminServers: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkStart}
+              disabled={bulkActionLoading !== null}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {bulkActionLoading === 'start' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5 fill-current" />
+              )}
+              <span>Bulk Start</span>
+            </button>
+
             <button
               onClick={handleBulkRestart}
               disabled={bulkActionLoading !== null}

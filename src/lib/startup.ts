@@ -51,6 +51,7 @@ export function buildBotStartupCommand(
   const customFileRaw = config?.startupFile || startupConfig?.entryFile;
   const customFileClean = cleanEntryPath(customFileRaw);
 
+  const allocatedRamMB = server.limits?.ramMB || 512;
   let executable = runtime === 'python' ? 'python3' : runtime === 'bun' ? 'bun' : 'node';
   let args: string[] = [];
   let startupFile = customFileClean || (runtime === 'python' ? 'main.py' : runtime === 'bun' ? 'index.ts' : 'index.js');
@@ -108,10 +109,25 @@ export function buildBotStartupCommand(
             executable = 'bun';
             args = ['run', 'start'];
           } else {
-            executable = 'npm';
-            args = ['start'];
+            executable = 'node';
+            args = [`--max-old-space-size=${allocatedRamMB}`];
+            if (startupConfig?.nodeOptions) {
+              const cleanOpts = sanitizeFlags(startupConfig.nodeOptions);
+              if (cleanOpts) args.push(...cleanOpts.split(/\s+/).filter(Boolean));
+            }
+            const customArgs = config?.startupArguments || startupConfig?.customFlags || '';
+            if (customArgs) {
+              const cleanArgs = sanitizeFlags(customArgs);
+              if (cleanArgs) args.push(...cleanArgs.split(/\s+/).filter(Boolean));
+            }
+            const rawStart = (pkg.scripts.start || '').trim();
+            let entry = 'index.js';
+            if (rawStart.startsWith('node ')) {
+              entry = rawStart.replace(/^node\s+/, '').trim();
+            }
+            args.push(entry);
           }
-          startupFile = 'package.json (start script)';
+          startupFile = args[args.length - 1];
           const compiledCommand = `${executable} ${args.join(' ')}`;
           return { executable, args, compiledCommand, runtime, startupFile, hasEntryFile: true };
         }
@@ -152,7 +168,6 @@ export function buildBotStartupCommand(
   }
 
   // Build default arguments for runtime
-  const allocatedRamMB = server.limits?.ramMB || 512;
   if (runtime === 'python') {
     executable = 'python3';
     args = ['-u'];

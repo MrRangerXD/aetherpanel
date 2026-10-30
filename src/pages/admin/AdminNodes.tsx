@@ -589,8 +589,8 @@ export const AdminNodes: React.FC = () => {
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg" title={n.locationName}>
-                            {n.isLocalNode || n.id === 'node_local' ? '🖥️' : n.flagCode === 'US' ? '🇺🇸' : n.flagCode === 'DE' ? '🇩🇪' : n.flagCode === 'SG' ? '🇸🇬' : n.flagCode === 'IN' ? '🇮🇳' : '🌐'}
+                          <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs font-mono font-bold text-cyan-400 shrink-0" title={n.locationName}>
+                            {n.isLocalNode || n.id === 'node_local' ? <Server className="w-3.5 h-3.5 text-violet-400" /> : (n.flagCode || 'GL')}
                           </span>
                           <h3 className="text-base font-bold text-white">{n.name}</h3>
                           {(n.isLocalNode || n.id === 'node_local') && (
@@ -789,7 +789,9 @@ export const AdminNodes: React.FC = () => {
               <div key={loc.id} className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3 shadow-lg">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">{loc.flagCode === 'IN' ? '🇮🇳' : loc.flagCode === 'DE' ? '🇩🇪' : loc.flagCode === 'SG' ? '🇸🇬' : '🇺🇸'}</span>
+                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 text-xs font-mono font-bold text-cyan-400 shrink-0">
+                      {loc.flagCode || 'LOC'}
+                    </span>
                     <div>
                       <h3 className="font-bold text-white text-sm">{loc.name}</h3>
                       <span className="text-xs font-mono text-cyan-400">{loc.code}</span>
@@ -1211,20 +1213,6 @@ export const AdminNodes: React.FC = () => {
                         value={editingNode.sftpFqdn || ''}
                         onChange={e => setEditingNode({ ...editingNode, sftpFqdn: e.target.value })}
                         placeholder="sftp.node1.mydomain.com"
-                        className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-violet-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-zinc-400 mb-1 block flex items-center justify-between">
-                        <span>Playit SFTP Tunnel Address</span>
-                        <span className="text-[10px] text-amber-400/80 font-normal">Zero Port-Forwarding</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={editingNode.playitSftpAddress || ''}
-                        onChange={e => setEditingNode({ ...editingNode, playitSftpAddress: e.target.value })}
-                        placeholder="sftp-node.auto.playit.gg"
                         className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono focus:outline-none focus:border-violet-500"
                       />
                     </div>

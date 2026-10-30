@@ -189,203 +189,198 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-xs text-zinc-400 animate-pulse">
+      <div className="surface rounded-lg p-8 text-center text-xs font-mono text-ink-mute anim-shimmer">
         Loading Discord integration configuration...
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      
+    <div className="space-y-6">
       {/* Header Banner */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="surface rounded-lg p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-indigo-400" /> Discord Integration & Alerts
+            <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-accent" /> Discord Alerts & Webhook Bridge
             </h2>
 
             {/* Webhook Status Badge */}
             {!enabled ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 border border-zinc-700 text-zinc-400">
-                ○ Webhook Disabled
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-2 border border-line text-ink-mute">
+                Inactive
               </span>
             ) : !webhookUrl ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                ⚠️ Webhook Unconfigured
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-warn/10 border border-warn/25 text-warn flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-warn" /> Unconfigured
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                ● Webhook Active
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-ok/10 border border-ok/25 text-ok">
+                Active
               </span>
             )}
 
             {/* Global Bot Status Badge */}
             {botGatewayStatus && (
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
                 botGatewayStatus.status === 'CONNECTED'
-                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                  ? 'bg-ok/10 border-ok/25 text-ok'
                   : botGatewayStatus.status === 'CONNECTING'
-                  ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                  : botGatewayStatus.status === 'CONFIGURED'
-                  ? 'bg-slate-500/10 border border-slate-500/20 text-slate-300'
-                  : botGatewayStatus.status === 'NOT_CONFIGURED'
-                  ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
-                  : 'bg-zinc-800 border border-zinc-700 text-zinc-400'
+                  ? 'bg-accent/10 border-accent/25 text-accent'
+                  : 'bg-surface-2 border-line text-ink-mute'
               }`}>
-                {botGatewayStatus.status === 'CONNECTED' ? `● Bot: ${botGatewayStatus.botUsername || 'Online'}` : `○ Bot: ${botGatewayStatus.status}`}
+                {botGatewayStatus.status === 'CONNECTED' ? `Bot: ${botGatewayStatus.botUsername || 'Online'}` : `Bot: ${botGatewayStatus.status}`}
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
-            Link server alerts to Discord channels via Webhooks and grant command permissions to authorized users.
+          <p className="text-xs text-ink-mute mt-1">
+            Dispatch real-time server lifecycle and hardware events directly into Discord channels.
           </p>
         </div>
 
         <button
           onClick={handleSaveSettings}
           disabled={saving}
-          className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-1.5 shrink-0"
+          className="btn btn-primary"
         >
           {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          <span>Save Integration</span>
+          <span>Save Changes</span>
         </button>
       </div>
 
       {savedSuccess && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400 flex items-center gap-2">
-          <Check className="h-4 w-4" /> Discord server integration settings updated successfully!
+        <div className="p-3 rounded-lg bg-ok/10 border border-ok/25 text-xs text-ok flex items-center gap-2">
+          <Check className="h-4 w-4" /> Discord server integration settings updated successfully.
         </div>
       )}
 
       {/* Webhook & Channel Link Form */}
-      <form onSubmit={handleSaveSettings} className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-6">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Radio className="h-4 w-4 text-violet-400" /> Webhook Channel Link Configuration
+      <form onSubmit={handleSaveSettings} className="surface rounded-lg p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+            <Radio className="h-3.5 w-3.5 text-accent" /> Channel Link Configuration
           </h3>
 
-          <label className="flex items-center gap-2 text-xs font-semibold text-zinc-300 cursor-pointer">
-            <span>Enable Discord Alerts</span>
+          <label className="flex items-center gap-2 text-xs font-medium text-ink cursor-pointer">
             <input
               type="checkbox"
               checked={enabled}
               onChange={e => setEnabled(e.target.checked)}
-              className="w-4 h-4 accent-indigo-600 rounded"
+              className="w-3.5 h-3.5 accent-accent rounded"
             />
+            <span>Enable Discord Alerts</span>
           </label>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Discord Webhook URL</label>
+            <label className="label mb-1">Discord Webhook URL</label>
             <input
               type="url"
               value={webhookUrl}
               onChange={e => setWebhookUrl(e.target.value)}
               placeholder="https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-indigo-300 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              className="field w-full font-mono text-xs"
             />
-            <p className="text-[11px] text-zinc-500 mt-1">
+            <p className="text-[11px] text-ink-mute mt-1">
               Create a webhook in your Discord server under Channel Settings → Integrations → Webhooks.
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Target Channel Name</label>
+            <label className="label mb-1">Target Channel Name</label>
             <input
               type="text"
               value={channelName}
               onChange={e => setChannelName(e.target.value)}
               placeholder="#server-alerts"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+              className="field w-full text-xs"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Anti-Spam Cooldown (Seconds)</label>
+            <label className="label mb-1">Anti-Spam Cooldown (Seconds)</label>
             <input
               type="number"
               min="10"
               max="600"
               value={cooldownSeconds}
               onChange={e => setCooldownSeconds(Number(e.target.value))}
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs text-white"
+              className="field w-full font-mono text-xs"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Mention Role ID (Optional)</label>
+            <label className="label mb-1">Mention Role ID (Optional)</label>
             <input
               type="text"
               value={mentionRoleId}
               onChange={e => setMentionRoleId(e.target.value)}
               placeholder="e.g. 109283749281729384"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs font-mono text-zinc-300 placeholder:text-zinc-600"
+              className="field w-full font-mono text-xs"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Mention User ID (Optional)</label>
+            <label className="label mb-1">Mention User ID (Optional)</label>
             <input
               type="text"
               value={mentionUserId}
               onChange={e => setMentionUserId(e.target.value)}
               placeholder="e.g. 987654321012345678"
-              className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-xs font-mono text-zinc-300 placeholder:text-zinc-600"
+              className="field w-full font-mono text-xs"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
+        <div className="flex items-center justify-between p-3 rounded-lg bg-surface-2 border border-line">
           <div>
-            <span className="text-xs font-bold text-white block">Allow Interactive Slash Commands</span>
-            <span className="text-[11px] text-zinc-400 block mt-0.5">
-              Allow linked Discord accounts with server access to execute `/server start`, `/server stop`, `/server backup`.
+            <span className="text-xs font-medium text-ink block">Allow Interactive Slash Commands</span>
+            <span className="text-[11px] text-ink-mute block mt-0.5">
+              Allow authorized Discord subusers to trigger `/server start`, `/server stop`, and `/server backup`.
             </span>
           </div>
           <input
             type="checkbox"
             checked={allowServerCommands}
             onChange={e => setAllowServerCommands(e.target.checked)}
-            className="w-4 h-4 accent-indigo-600 rounded"
+            className="w-3.5 h-3.5 accent-accent rounded"
           />
         </div>
       </form>
 
       {/* Event Notification Subscriptions */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <Bell className="h-4 w-4 text-amber-400" /> Event Notification Subscriptions
+      <div className="surface rounded-lg p-5 space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+          <Bell className="h-3.5 w-3.5 text-accent" /> Event Notification Subscriptions
         </h3>
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-ink-mute">
           Select which automated server lifecycle events trigger rich embed notifications on Discord.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
           {ALL_EVENTS.map(ev => {
             const isChecked = enabledEvents.includes(ev.id);
             return (
               <div
                 key={ev.id}
                 onClick={() => toggleEvent(ev.id)}
-                className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                   isChecked
-                    ? 'bg-indigo-950/30 border-indigo-500/40 text-white'
-                    : 'bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-700'
+                    ? 'bg-accent/10 border-accent/40'
+                    : 'bg-surface-2 border-line hover:border-line-soft'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold">{ev.label}</span>
+                  <span className={`text-xs font-medium ${isChecked ? 'text-accent' : 'text-ink'}`}>{ev.label}</span>
                   <input
                     type="checkbox"
                     checked={isChecked}
-                    onChange={() => {}} // handled by parent div
-                    className="w-4 h-4 accent-indigo-500 rounded"
+                    onChange={() => {}}
+                    className="w-3.5 h-3.5 accent-accent rounded pointer-events-none"
                   />
                 </div>
-                <p className="text-[11px] text-zinc-500 mt-1 line-clamp-2">{ev.description}</p>
+                <p className="text-[10px] text-ink-mute mt-1 leading-snug">{ev.description}</p>
               </div>
             );
           })}
@@ -393,24 +388,23 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
       </div>
 
       {/* Webhook Tester & Interactive Command Simulator */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Webhook Tester */}
-        <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Send className="h-4 w-4 text-emerald-400" /> Test Notification Dispatcher
+        <div className="surface rounded-lg p-5 space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+            <Send className="h-3.5 w-3.5 text-accent" /> Test Notification Dispatcher
           </h3>
-          <p className="text-xs text-zinc-400">
-            Dispatch a real test notification embed to verify Discord webhook delivery and embed formatting.
+          <p className="text-xs text-ink-mute">
+            Dispatch a test notification embed to verify Discord webhook delivery and payload formatting.
           </p>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">Select Event Type</label>
+              <label className="label mb-1">Select Event Type</label>
               <select
                 value={testEvent}
                 onChange={e => setTestEvent(e.target.value as DiscordNotificationEvent)}
-                className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-white"
+                className="field w-full text-xs"
               >
                 {ALL_EVENTS.map(ev => (
                   <option key={ev.id} value={ev.id}>{ev.label} ({ev.category})</option>
@@ -419,14 +413,14 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
             </div>
 
             {testNotice && (
-              <div className={`p-3 rounded-xl border text-xs font-medium ${
-                testNotice.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-red-500/10 border-red-500/20 text-red-300'
+              <div className={`p-2.5 rounded-lg border text-xs font-mono ${
+                testNotice.success ? 'bg-ok/10 border-ok/25 text-ok' : 'bg-err/10 border-err/25 text-err'
               }`}>
                 {testNotice.message}
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -434,9 +428,9 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
                   handleTestWebhook();
                 }}
                 disabled={testingWebhook}
-                className="py-2 px-3 rounded-xl bg-red-950/40 hover:bg-red-950/60 border border-red-800/40 text-[11px] font-semibold text-red-300 flex items-center justify-center gap-1.5"
+                className="btn btn-ghost border-line text-xs font-mono justify-center"
               >
-                <Flame className="h-3.5 w-3.5 text-red-400" />
+                <Flame className="h-3.5 w-3.5 text-err" />
                 <span>Simulate Crash</span>
               </button>
 
@@ -447,9 +441,9 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
                   handleTestWebhook();
                 }}
                 disabled={testingWebhook}
-                className="py-2 px-3 rounded-xl bg-purple-950/40 hover:bg-purple-950/60 border border-purple-800/40 text-[11px] font-semibold text-purple-300 flex items-center justify-center gap-1.5"
+                className="btn btn-ghost border-line text-xs font-mono justify-center"
               >
-                <Check className="h-3.5 w-3.5 text-purple-400" />
+                <Check className="h-3.5 w-3.5 text-ok" />
                 <span>Simulate Backup</span>
               </button>
             </div>
@@ -457,25 +451,25 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
             <button
               onClick={handleTestWebhook}
               disabled={testingWebhook}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-semibold text-white flex items-center justify-center gap-2"
+              className="btn btn-primary w-full justify-center"
             >
               {testingWebhook ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              <span>{testingWebhook ? 'Dispatching Webhook...' : 'Dispatch Test Notification'}</span>
+              <span>{testingWebhook ? 'Dispatching...' : 'Dispatch Test Notification'}</span>
             </button>
           </div>
         </div>
 
         {/* Interactive Discord Command Console */}
-        <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-cyan-400" /> Discord Slash Command Console
+        <div className="surface rounded-lg p-5 space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+            <Terminal className="h-3.5 w-3.5 text-accent" /> Discord Command Console
           </h3>
-          <p className="text-xs text-zinc-400">
-            Simulate Discord slash command execution with real authorization and server state updates.
+          <p className="text-xs text-ink-mute">
+            Simulate Discord slash command execution with authorization and live state updates.
           </p>
 
           {/* Quick Action Pills */}
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {[
               { cmd: '/server status', label: 'Status', icon: Terminal },
               { cmd: '/server list', label: 'List All', icon: Terminal },
@@ -486,7 +480,6 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
               { cmd: '/server stats', label: 'Telemetry', icon: Radio },
               { cmd: '/server backup', label: 'Backup', icon: Database },
               { cmd: '/user info', label: 'Profile', icon: Shield },
-              { cmd: '/help', label: 'Help', icon: Zap },
               { cmd: '/ping', label: 'Ping', icon: Radio }
             ].map(item => (
               <button
@@ -495,9 +488,9 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
                   setCmdInput(item.cmd);
                   handleRunCommand(item.cmd);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] font-mono text-cyan-300 flex items-center gap-1"
+                className="px-2 py-0.5 rounded bg-surface-2 hover:bg-surface-3 border border-line text-[10px] font-mono text-ink-dim hover:text-ink flex items-center gap-1 transition-colors"
               >
-                <item.icon className="h-3 w-3" />
+                <item.icon className="h-2.5 w-2.5 text-ink-mute" />
                 <span>{item.cmd}</span>
               </button>
             ))}
@@ -509,92 +502,90 @@ export const ServerDiscordTab: React.FC<ServerDiscordTabProps> = ({ serverId, se
               value={cmdInput}
               onChange={e => setCmdInput(e.target.value)}
               placeholder="/server status"
-              className="flex-1 rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+              className="field flex-1 font-mono text-xs"
             />
             <button
               onClick={() => handleRunCommand()}
               disabled={executingCmd}
-              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-xs font-semibold text-white flex items-center gap-1.5"
+              className="btn btn-primary"
             >
               {executingCmd ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              <span>Execute</span>
+              <span>Run</span>
             </button>
           </div>
 
           {/* Formatted Discord Embed Preview Card */}
           {cmdResult && (
-            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                <span className="text-[10px] font-mono uppercase text-zinc-500">Discord Bot Response Preview</span>
-                <span className={`text-[10px] font-bold ${cmdResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {cmdResult.success ? '200 OK' : '403 Forbidden / Error'}
+            <div className="p-3.5 rounded-lg bg-surface-2 border border-line space-y-2">
+              <div className="flex items-center justify-between border-b border-line pb-1.5">
+                <span className="text-[10px] font-mono uppercase text-ink-mute">Bot Response Preview</span>
+                <span className={`text-[10px] font-mono font-semibold ${cmdResult.success ? 'text-ok' : 'text-err'}`}>
+                  {cmdResult.success ? '200 OK' : 'Error'}
                 </span>
               </div>
 
               {cmdResult.embed ? (
-                <div className="p-3.5 rounded-xl bg-[#2b2d31] border-l-4 border-indigo-500 text-white space-y-2 font-sans">
-                  <h4 className="text-xs font-bold flex items-center gap-1.5 text-white">
+                <div className="p-3 rounded-lg bg-surface-3 border-l-2 border-accent text-ink space-y-2">
+                  <h4 className="text-xs font-semibold text-ink">
                     {cmdResult.embed.title}
                   </h4>
-                  <p className="text-xs text-zinc-300 whitespace-pre-line">{cmdResult.embed.description}</p>
+                  <p className="text-xs text-ink-dim whitespace-pre-line leading-relaxed">{cmdResult.embed.description}</p>
 
                   {cmdResult.embed.fields && cmdResult.embed.fields.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60 text-[11px]">
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line text-[11px]">
                       {cmdResult.embed.fields.map((f: any, idx: number) => (
                         <div key={idx} className={f.inline === false ? 'col-span-2' : ''}>
-                          <span className="font-bold text-zinc-400 block text-[10px]">{f.name}</span>
-                          <span className="text-zinc-200 font-mono whitespace-pre-line">{f.value}</span>
+                          <span className="font-mono text-ink-mute block text-[10px] uppercase">{f.name}</span>
+                          <span className="text-ink font-mono whitespace-pre-line">{f.value}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <div className="text-[9px] text-zinc-400 pt-1 flex items-center justify-between border-t border-zinc-700/40">
+                  <div className="text-[10px] font-mono text-ink-mute pt-1 flex items-center justify-between border-t border-line">
                     <span>{cmdResult.embed.footer?.text || 'AetherPanel Bot'}</span>
                     <span>{new Date(cmdResult.embed.timestamp).toLocaleTimeString()}</span>
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-red-400">{cmdResult.message}</p>
+                <p className="text-xs font-mono text-err">{cmdResult.message}</p>
               )}
             </div>
           )}
         </div>
-
       </div>
 
       {/* Discord Command Reference Card */}
-      <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-4 shadow-xl">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <Zap className="h-4 w-4 text-violet-400" /> AetherPanel Discord Command Reference
+      <div className="surface rounded-lg p-5 space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute flex items-center gap-2">
+          <Zap className="h-3.5 w-3.5 text-accent" /> Command Reference
         </h3>
-        <p className="text-xs text-zinc-400">
-          Once your Discord account is linked, you can execute these commands in any channel your bot has access to, or directly via DM:
+        <p className="text-xs text-ink-mute">
+          When your Discord user is linked and has subuser permissions, these commands can be executed in any guild channel:
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
           {[
-            { cmd: '/server list', desc: 'Lists all your game servers with live status and ports' },
-            { cmd: '/server status [id]', desc: 'Displays CPU %, RAM usage bar, Uptime, and IP address' },
-            { cmd: '/server start <id>', desc: 'Powers on a stopped container instance' },
-            { cmd: '/server stop <id>', desc: 'Gracefully sends shutdown signal to server' },
-            { cmd: '/server restart <id>', desc: 'Reboots server with automated restart sequence' },
-            { cmd: '/server kill <id>', desc: 'Forcefully terminates unresponsive container' },
-            { cmd: '/server command <id> <text>', desc: 'Executes live console commands (say, op, whitelist)' },
-            { cmd: '/server console <id>', desc: 'Fetches recent server stdout log stream' },
-            { cmd: '/server backup <id>', desc: 'Creates an instantaneous filesystem archive backup' },
-            { cmd: '/server stats <id>', desc: 'High-resolution hardware metrics and telemetry graphs' },
-            { cmd: '/user info', desc: 'Shows credits balance, active tier, and server quotas' },
-            { cmd: '/ping', desc: 'Tests bot gateway latency and websocket heartbeat' }
+            { cmd: '/server list', desc: 'Lists all servers with runtime status and assigned ports' },
+            { cmd: '/server status [id]', desc: 'Displays CPU %, RAM usage, uptime, and primary IP' },
+            { cmd: '/server start <id>', desc: 'Initiates container boot sequence' },
+            { cmd: '/server stop <id>', desc: 'Sends SIGTERM graceful shutdown signal' },
+            { cmd: '/server restart <id>', desc: 'Reboots server container with health checks' },
+            { cmd: '/server kill <id>', desc: 'Forcefully terminates unresponsive process (SIGKILL)' },
+            { cmd: '/server command <id> <text>', desc: 'Dispatches command to live console stdin' },
+            { cmd: '/server console <id>', desc: 'Fetches recent stdout/stderr log stream' },
+            { cmd: '/server backup <id>', desc: 'Triggers filesystem snapshot and tarball creation' },
+            { cmd: '/server stats <id>', desc: 'Real-time telemetry and resource quotas' },
+            { cmd: '/user info', desc: 'Shows credits balance and active resource allocations' },
+            { cmd: '/ping', desc: 'Tests bot gateway latency and socket heartbeat' }
           ].map(c => (
-            <div key={c.cmd} className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1">
-              <span className="font-mono text-xs font-bold text-violet-300 block">{c.cmd}</span>
-              <p className="text-[11px] text-zinc-400">{c.desc}</p>
+            <div key={c.cmd} className="p-2.5 rounded-lg bg-surface-2 border border-line space-y-0.5">
+              <span className="font-mono text-xs font-semibold text-accent block">{c.cmd}</span>
+              <p className="text-[10px] text-ink-mute leading-snug">{c.desc}</p>
             </div>
           ))}
         </div>
       </div>
-
     </div>
   );
 };

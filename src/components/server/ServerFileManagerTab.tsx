@@ -815,14 +815,14 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       />
 
       {/* Action Bar & Breadcrumbs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[var(--color-surface)] border border-[var(--color-line)] p-2.5 rounded-lg">
         {/* Breadcrumb Path */}
-        <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono py-1 max-w-full">
+        <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono py-0.5 max-w-full">
           {currentPath !== '/' && (
             <button
               id="file-manager-nav-up"
               onClick={navigateUp}
-              className="p-1.5 text-zinc-400 hover:text-white bg-zinc-800 rounded-lg mr-1 cursor-pointer transition-colors"
+              className="p-1 text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] bg-[var(--color-surface-2)] rounded-md mr-1 cursor-pointer transition-colors"
               title="Go up one folder"
             >
               <CornerLeftUp className="h-3.5 w-3.5" />
@@ -831,13 +831,13 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
 
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={crumb.path}>
-              {idx > 0 && <ChevronRight className="h-3 w-3 text-zinc-600 shrink-0" />}
+              {idx > 0 && <ChevronRight className="h-3 w-3 text-[var(--color-ink-mute)] shrink-0" />}
               <button
                 onClick={() => setCurrentPath(crumb.path)}
-                className={`px-2 py-1 rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                className={`px-2 py-0.5 rounded-md transition-colors whitespace-nowrap cursor-pointer text-xs ${
                   idx === breadcrumbs.length - 1
-                    ? 'text-amber-400 font-bold bg-amber-400/10'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    ? 'text-[var(--color-accent)] font-semibold bg-[var(--color-accent)]/10'
+                    : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
                 }`}
               >
                 {crumb.name}
@@ -847,12 +847,12 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
         </div>
 
         {/* Global Toolbar Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             id="file-manager-refresh-btn"
             onClick={() => fetchFiles(currentPath)}
             disabled={loading}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] border border-[var(--color-line)] text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             title="Refresh Directory"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -861,7 +861,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
           <button
             id="file-manager-upload-btn"
             onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/20 transition-colors cursor-pointer"
+            className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
           >
             <Upload className="h-3.5 w-3.5" />
             <span>Upload</span>
@@ -877,34 +877,34 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
               setIsStartingRemoteDownload(false);
               setShowRemoteDownloadModal(true);
             }}
-            className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5"
           >
-            <DownloadCloud className="h-3.5 w-3.5 text-cyan-400" />
+            <DownloadCloud className="h-3.5 w-3.5 text-[var(--color-accent)]" />
             <span>Remote URL</span>
           </button>
 
           <button
             id="file-manager-new-file-btn"
             onClick={() => setShowNewFileModal(true)}
-            className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5"
           >
-            <FilePlus className="h-3.5 w-3.5 text-zinc-400" />
+            <FilePlus className="h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
             <span>New File</span>
           </button>
 
           <button
             id="file-manager-new-folder-btn"
             onClick={() => setShowNewFolderModal(true)}
-            className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5"
           >
-            <FolderPlus className="h-3.5 w-3.5 text-amber-400" />
+            <FolderPlus className="h-3.5 w-3.5 text-[var(--color-accent)]" />
             <span>New Folder</span>
           </button>
 
           {uploadTasks.length > 0 && (
             <button
               onClick={() => setShowUploadDrawer(prev => !prev)}
-              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium flex items-center gap-1.5 relative transition-colors cursor-pointer"
+              className="btn btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5"
             >
               <Upload className="h-3.5 w-3.5" />
               <span>Transfers ({uploadTasks.length})</span>
@@ -917,30 +917,30 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       {selectedPaths.length > 0 && (
         <div
           id="file-manager-bulk-toolbar"
-          className="p-3 sm:p-4 rounded-2xl bg-zinc-900 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-amber-950/10 animate-in fade-in"
+          className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-accent)]/40 flex flex-wrap items-center justify-between gap-3 anim-fade-in"
         >
-          <div className="flex items-center gap-2.5 text-xs text-zinc-200">
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-mono font-bold">
+          <div className="flex items-center gap-2.5 text-xs text-[var(--color-ink)]">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium text-[var(--color-accent)] border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10">
               {selectedPaths.length}
             </span>
             <span>{selectedPaths.length === 1 ? 'item selected' : 'items selected'}</span>
             <button
               onClick={() => setSelectedPaths([])}
-              className="text-zinc-400 hover:text-white underline ml-1 cursor-pointer text-xs"
+              className="text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] underline ml-1 cursor-pointer text-xs"
             >
               Clear
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => {
                 setMoveCopyAction({ mode: 'move', sources: selectedPaths });
                 setDestDir(currentPath);
               }}
-              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="btn btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
             >
-              <ArrowRightLeft className="h-3.5 w-3.5 text-amber-400" />
+              <ArrowRightLeft className="h-3.5 w-3.5 text-[var(--color-accent)]" />
               <span>Move</span>
             </button>
 
@@ -949,9 +949,9 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
                 setMoveCopyAction({ mode: 'copy', sources: selectedPaths });
                 setDestDir(currentPath);
               }}
-              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="btn btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
             >
-              <Copy className="h-3.5 w-3.5 text-violet-400" />
+              <Copy className="h-3.5 w-3.5 text-[var(--color-accent)]" />
               <span>Copy</span>
             </button>
 
@@ -960,15 +960,15 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
                 setCompressTargets(selectedPaths);
                 setArchiveName(`archive_${Date.now()}.zip`);
               }}
-              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="btn btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5"
             >
-              <Archive className="h-3.5 w-3.5 text-emerald-400" />
+              <Archive className="h-3.5 w-3.5 text-[var(--color-ok)]" />
               <span>Compress ZIP</span>
             </button>
 
             <button
               onClick={() => setDeleteTargets(selectedFilesList)}
-              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-rose-950/20 transition-colors cursor-pointer"
+              className="btn btn-danger text-xs py-1 px-2.5 flex items-center gap-1.5"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
@@ -978,7 +978,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
       )}
 
       {/* Main File Table / List */}
-      <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+      <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] overflow-hidden">
         {loading ? (
           <div className="p-16 text-center text-xs text-zinc-400 flex flex-col items-center justify-center gap-3">
             <Loader2 className="h-7 w-7 animate-spin text-amber-400" />

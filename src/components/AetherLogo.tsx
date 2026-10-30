@@ -46,7 +46,7 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
 
   // Square logo icon container
   const iconContainer = (
-    <div className="relative flex items-center justify-center p-1 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all shrink-0 w-9 h-9 overflow-hidden">
+    <div className="relative flex items-center justify-center p-1 rounded-xl bg-zinc-900 border border-orange-500/25 group-hover:border-orange-400/50 shadow-sm transition-all shrink-0 w-9 h-9 overflow-hidden">
       {showCustomLogo ? (
         <img
           src={customLogoUrl}
@@ -58,10 +58,9 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
         <svg className="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 60 60" fill="none">
           <defs>
             <linearGradient id="aetherLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fef08a" />
-              <stop offset="40%" stopColor="#fbbf24" />
-              <stop offset="80%" stopColor="#f59e0b" />
-              <stop offset="100%" stopColor="#d97706" />
+              <stop offset="0%" stopColor="#fde047" />
+              <stop offset="45%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#ea580c" />
             </linearGradient>
           </defs>
           <path d="M30 10 L50 21 V43 L30 54 L10 43 V21 Z" fill="none" stroke="url(#aetherLogoGrad)" strokeWidth="3" strokeLinejoin="round" />
@@ -94,7 +93,7 @@ export const AetherLogo: React.FC<AetherLogoProps> = ({
         <span className="text-base sm:text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-0.5">
           {prefix}
           {suffix && (
-            <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 bg-clip-text text-transparent">
               {suffix}
             </span>
           )}

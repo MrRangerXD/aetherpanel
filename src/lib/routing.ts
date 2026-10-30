@@ -20,6 +20,8 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
 
   // Public pages
   if (first === 'home') return { page: 'home', params: queryObj };
+  if (first === 'about') return { page: 'about', params: queryObj };
+  if (first === 'contact') return { page: 'contact', params: queryObj };
   if (first === 'minecraft') return { page: 'minecraft', params: queryObj };
   if (first === 'bot') return { page: 'bot', params: queryObj };
   if (first === 'pricing') return { page: 'pricing', params: queryObj };
@@ -113,6 +115,8 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
 
   switch (page) {
     case 'home': return `/${formatQuery(params)}`;
+    case 'about': return `/about${formatQuery(params)}`;
+    case 'contact': return `/contact${formatQuery(params)}`;
     case 'minecraft': return `/minecraft${formatQuery(params)}`;
     case 'bot': return `/bot${formatQuery(params)}`;
     case 'pricing': return `/pricing${formatQuery(params)}`;

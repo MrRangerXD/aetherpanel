@@ -48,7 +48,7 @@ export const AdminBackups: React.FC<AdminBackupsProps> = ({ onNavigate }) => {
         schedulesCount: number;
         stats: { totalBackups: number; totalStorageMB: number; totalFailed: number; totalActiveJobs: number };
         settings: BackupSettings;
-      }>('/api/v1/admin/backups');
+      }>('/admin/backups');
 
       if (res.success && res.data) {
         setBackups(res.data.backups || []);
@@ -93,7 +93,7 @@ export const AdminBackups: React.FC<AdminBackupsProps> = ({ onNavigate }) => {
     setCleaningUp(true);
     setCleanupMessage(null);
     try {
-      const res = await apiRequest<{ message: string }>('/api/v1/admin/backups/cleanup', {
+      const res = await apiRequest<{ message: string }>('/admin/backups/cleanup', {
         method: 'POST'
       });
       if (res.success) {

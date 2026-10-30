@@ -91,21 +91,5 @@ export async function initializeRuntime() {
     }
   }
 
-  // 4. Verify Playit Binary
-  const playitPath = path.join(BIN_DIR, 'playit');
-  if (fs.existsSync(playitPath)) {
-    try {
-      fs.accessSync(playitPath, fs.constants.X_OK);
-      console.log('[Init] Playit binary detected and executable permission confirmed.');
-    } catch {
-      console.log('[Init] Setting executable permission on playit binary...');
-      try {
-        fs.chmodSync(playitPath, 0o755);
-      } catch (err) {
-        console.error('[Init] Failed to set executable permission on playit binary:', err);
-      }
-    }
-  }
-
   console.log('[Init] Runtime filesystem and data integrity check complete.');
 }

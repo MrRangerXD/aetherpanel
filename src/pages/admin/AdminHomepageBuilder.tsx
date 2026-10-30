@@ -1041,20 +1041,20 @@ export const AdminHomepageBuilder: React.FC<AdminHomepageBuilderProps> = ({ onNa
               </div>
 
               <div className="flex items-center justify-center gap-4 text-[11px] text-zinc-500 pt-2">
-                <span>✓ {config.heroBullet1 || 'Instant activation'}</span>
-                <span>✓ {config.heroBullet2 || 'No setup fees'}</span>
-                <span>✓ {config.heroBullet3 || 'Cancel anytime'}</span>
+                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> {config.heroBullet1 || 'Instant activation'}</span>
+                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> {config.heroBullet2 || 'No setup fees'}</span>
+                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> {config.heroBullet3 || 'Cancel anytime'}</span>
               </div>
             </div>
 
             {/* Trust Bar Preview */}
             {config.showTrustBar !== false && (
-              <div className="border-y border-white/[0.08] py-3 text-[11px] text-zinc-300 font-medium flex flex-wrap items-center justify-between gap-2">
-                <span>🛡️ {config.trustBarItem1 || '99.99% Uptime SLA'}</span>
-                <span>⚡ {config.trustBarItem2 || 'PCIe Gen4 NVMe'}</span>
-                <span>🔒 {config.trustBarItem3 || '3.2 Tbps DDoS'}</span>
-                <span>🚀 {config.trustBarItem4 || '<30s Deploy'}</span>
-                <span>⏱️ {config.trustBarItem5 || '24/7 Telemetry'}</span>
+              <div className="border-y border-white/[0.08] py-3 text-[11px] text-zinc-300 font-medium flex flex-wrap items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> {config.trustBarItem1 || '99.99% Uptime SLA'}</span>
+                <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-amber-400" /> {config.trustBarItem2 || 'PCIe Gen4 NVMe'}</span>
+                <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 text-amber-400" /> {config.trustBarItem3 || '3.2 Tbps DDoS'}</span>
+                <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-amber-400" /> {config.trustBarItem4 || '<30s Deploy'}</span>
+                <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-amber-400" /> {config.trustBarItem5 || '24/7 Telemetry'}</span>
               </div>
             )}
 

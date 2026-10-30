@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Activity, CheckCircle2, AlertTriangle, XCircle, RefreshCw, Server,
-  Cpu, Database, HardDrive, MessageSquare, Bell, Shield, Clock,
-  ChevronDown, ChevronRight, ExternalLink, Globe, Wifi, Send, Check,
-  Info, Calendar, AlertOctagon, ArrowUpRight
+  Cpu, Bell, Shield, Clock,
+  ChevronDown, ChevronRight, Wifi, Send, Check,
+  Calendar, AlertOctagon, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { StatusComponent, Incident, ScheduledMaintenance, DayUptime, StatusComponentState } from '../../types';
@@ -28,7 +28,7 @@ interface StatusPayload {
 export const Status: React.FC = () => {
   const [data, setData] = useState<StatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh] = useState(true);
   const [hoveredDay, setHoveredDay] = useState<{ compId: string; day: DayUptime } | null>(null);
 
   // Subscribe modal
@@ -90,51 +90,49 @@ export const Status: React.FC = () => {
   const getStatusColor = (status: StatusComponentState) => {
     switch (status) {
       case 'operational':
-        return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+        return 'text-[var(--color-ok)] bg-[var(--color-ok)]/10 border-[var(--color-ok)]/30';
       case 'degraded':
-        return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+        return 'text-[var(--color-warn)] bg-[var(--color-warn)]/10 border-[var(--color-warn)]/30';
       case 'partial_outage':
-        return 'text-orange-400 bg-orange-500/10 border-orange-500/20';
       case 'major_outage':
-        return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+        return 'text-[var(--color-err)] bg-[var(--color-err)]/10 border-[var(--color-err)]/30';
       case 'maintenance':
-        return 'text-sky-400 bg-sky-500/10 border-sky-500/20';
+        return 'text-[var(--color-accent)] bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30';
       default:
-        return 'text-zinc-400 bg-zinc-800 border-zinc-700';
+        return 'text-[var(--color-ink-dim)] surface-2 border-[var(--color-line)]';
     }
   };
 
   const getStatusIcon = (status: StatusComponentState) => {
     switch (status) {
       case 'operational':
-        return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
+        return <CheckCircle2 className="h-4 w-4 text-[var(--color-ok)]" />;
       case 'degraded':
-        return <AlertTriangle className="h-4 w-4 text-amber-400" />;
+        return <AlertTriangle className="h-4 w-4 text-[var(--color-warn)]" />;
       case 'partial_outage':
-        return <AlertOctagon className="h-4 w-4 text-orange-400" />;
+        return <AlertOctagon className="h-4 w-4 text-[var(--color-err)]" />;
       case 'major_outage':
-        return <XCircle className="h-4 w-4 text-rose-400" />;
+        return <XCircle className="h-4 w-4 text-[var(--color-err)]" />;
       case 'maintenance':
-        return <Clock className="h-4 w-4 text-sky-400" />;
+        return <Clock className="h-4 w-4 text-[var(--color-accent)]" />;
       default:
-        return <Activity className="h-4 w-4 text-zinc-400" />;
+        return <Activity className="h-4 w-4 text-[var(--color-ink-mute)]" />;
     }
   };
 
   const getDayColor = (state: StatusComponentState) => {
     switch (state) {
       case 'operational':
-        return 'bg-emerald-500 hover:bg-emerald-400';
+        return 'bg-[var(--color-ok)] hover:opacity-80';
       case 'degraded':
-        return 'bg-amber-400 hover:bg-amber-300';
+        return 'bg-[var(--color-warn)] hover:opacity-80';
       case 'partial_outage':
-        return 'bg-orange-500 hover:bg-orange-400';
       case 'major_outage':
-        return 'bg-rose-500 hover:bg-rose-400';
+        return 'bg-[var(--color-err)] hover:opacity-80';
       case 'maintenance':
-        return 'bg-sky-400 hover:bg-sky-300';
+        return 'bg-[var(--color-accent)] hover:opacity-80';
       default:
-        return 'bg-zinc-700';
+        return 'bg-[var(--color-line)]';
     }
   };
 
@@ -149,105 +147,86 @@ export const Status: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl space-y-8">
+    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl space-y-6">
         
-        {/* Top Branding & Action Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-[var(--color-line)]">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
-              <Activity className="h-5 w-5" />
+            <div className="h-9 w-9 rounded-md surface-2 border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+              <Activity className="h-4 w-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-white tracking-tight">AetherPanel Status</h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Pulse
+                <h1 className="text-xl font-bold text-[var(--color-ink)] tracking-tight">System Status</h1>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-[var(--color-ok)]/10 text-[var(--color-ok)] border border-[var(--color-ok)]/30">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" /> Live Pulse
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5">Real-time infrastructure health, telemetry, and uptime verification.</p>
+              <p className="text-xs text-[var(--color-ink-mute)] mt-0.5">Real-time infrastructure health and uptime verification.</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
             <button
               onClick={() => setShowSubscribeModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 text-xs font-medium transition-all"
+              className="btn btn-ghost text-xs py-1.5"
             >
-              <Bell className="h-3.5 w-3.5" />
-              <span>Subscribe to Updates</span>
+              <Bell className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+              <span>Subscribe to Alerts</span>
             </button>
 
             <button
               onClick={() => fetchStatus(true)}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors"
+              className="btn btn-ghost text-xs py-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[var(--color-accent)]' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
         </div>
 
         {/* Hero Overall Status Banner */}
-        <div className={`p-6 rounded-2xl border transition-all ${
-          data?.overallStatus === 'operational'
-            ? 'bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-zinc-900 border-emerald-500/30'
-            : data?.overallStatus === 'maintenance'
-            ? 'bg-gradient-to-r from-sky-950/40 via-zinc-900 to-zinc-900 border-sky-500/30'
-            : 'bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-900 border-amber-500/30'
-        }`}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center border shadow-lg ${
-                data?.overallStatus === 'operational'
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                  : data?.overallStatus === 'maintenance'
-                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-              }`}>
-                {data ? getStatusIcon(data.overallStatus) : <Activity className="h-6 w-6" />}
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-white tracking-tight">
-                  {data?.overallStatusMessage || 'Connecting to Infrastructure Telemetry...'}
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Last verified: {data?.lastUpdated ? new Date(data.lastUpdated).toLocaleTimeString() : 'Checking...'} (Auto-refresh every 30s)
-                </p>
-              </div>
+        <div className="surface p-5 rounded-lg border border-[var(--color-line)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-md surface-2 border border-[var(--color-line)] flex items-center justify-center">
+              {data ? getStatusIcon(data.overallStatus) : <Activity className="h-5 w-5 text-[var(--color-ink-mute)]" />}
             </div>
+            <div>
+              <h2 className="text-base font-bold text-[var(--color-ink)] tracking-tight">
+                {data?.overallStatusMessage || 'Connecting to Telemetry...'}
+              </h2>
+              <p className="text-xs text-[var(--color-ink-mute)] mt-0.5">
+                Last checked: {data?.lastUpdated ? new Date(data.lastUpdated).toLocaleTimeString() : 'Checking...'} (Auto-refreshes every 30s)
+              </p>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <div className="px-3.5 py-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-right">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono block">90-Day SLA Uptime</span>
-                <span className="text-sm font-bold font-mono text-emerald-400">{data?.avgSla || '99.99%'}</span>
-              </div>
-            </div>
+          <div className="px-3 py-1.5 rounded-md surface-2 border border-[var(--color-line)] text-right">
+            <span className="label block">90-Day SLA Uptime</span>
+            <span className="text-sm font-bold font-mono text-[var(--color-ok)]">{data?.avgSla || '99.99%'}</span>
           </div>
         </div>
 
-        {/* Scheduled Maintenance Announcement (if any) */}
+        {/* Scheduled Maintenance Announcement */}
         {data?.scheduledMaintenances && data.scheduledMaintenances.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {data.scheduledMaintenances.map(maint => (
-              <div key={maint.id} className="p-4 rounded-xl bg-sky-950/20 border border-sky-500/30 flex items-start gap-3.5">
-                <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400 mt-0.5">
-                  <Calendar className="h-4 w-4" />
+              <div key={maint.id} className="surface p-4 rounded-lg border border-[var(--color-accent)]/30 flex items-start gap-3">
+                <div className="p-1.5 rounded-md surface-2 text-[var(--color-accent)] mt-0.5 border border-[var(--color-line)]">
+                  <Calendar className="h-3.5 w-3.5" />
                 </div>
                 <div className="flex-1 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white text-sm">{maint.title}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase bg-sky-500/20 text-sky-300 font-medium">
-                      {maint.status === 'in_progress' ? 'Active Now' : 'Scheduled'}
+                    <span className="font-semibold text-[var(--color-ink)]">{maint.title}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/30">
+                      {maint.status === 'in_progress' ? 'Active' : 'Scheduled'}
                     </span>
                   </div>
-                  <p className="text-zinc-300 mt-1">{maint.description}</p>
-                  <div className="flex flex-wrap items-center gap-4 text-zinc-400 mt-2 font-mono text-[11px]">
+                  <p className="text-[var(--color-ink-dim)] mt-1">{maint.description}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-[var(--color-ink-mute)] mt-1.5 font-mono text-[11px]">
                     <span>Window: {new Date(maint.scheduledStartTime).toUTCString()} — {new Date(maint.scheduledEndTime).toUTCString()}</span>
-                    {maint.affectedComponents.length > 0 && (
-                      <span>Affected: {maint.affectedComponents.join(', ')}</span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -255,42 +234,41 @@ export const Status: React.FC = () => {
           </div>
         )}
 
-        {/* Active Incidents Banner (if any) */}
+        {/* Active Incidents Banner */}
         {data?.activeIncidents && data.activeIncidents.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-400 font-mono flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" /> Active Incident Investigation
+          <div className="space-y-2.5">
+            <h3 className="label flex items-center gap-1.5 text-[var(--color-warn)]">
+              <AlertTriangle className="h-3.5 w-3.5" /> Active Incidents
             </h3>
             {data.activeIncidents.map(inc => (
-              <div key={inc.id} className="p-5 rounded-2xl bg-amber-950/20 border border-amber-500/30 space-y-3">
+              <div key={inc.id} className="surface p-4 rounded-lg border border-[var(--color-warn)]/40 space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">{inc.title}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-mono bg-amber-500/20 text-amber-300 font-semibold">
+                      <span className="text-sm font-semibold text-[var(--color-ink)]">{inc.title}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-[var(--color-warn)]/10 text-[var(--color-warn)] border border-[var(--color-warn)]/30 font-medium">
                         {inc.status}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-300 mt-1">{inc.description}</p>
+                    <p className="text-xs text-[var(--color-ink-dim)] mt-0.5">{inc.description}</p>
                   </div>
-                  <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap">
+                  <span className="text-[11px] font-mono text-[var(--color-ink-mute)] whitespace-nowrap">
                     Started {new Date(inc.startedAt).toLocaleTimeString()}
                   </span>
                 </div>
 
-                {/* Timeline */}
-                <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                <div className="space-y-1.5 pt-2 border-t border-[var(--color-line)]">
                   {inc.timeline.map((item, idx) => (
-                    <div key={item.id || idx} className="text-xs flex items-start gap-2.5">
-                      <span className="h-2 w-2 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
+                    <div key={item.id || idx} className="text-xs flex items-start gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warn)] mt-1.5 shrink-0" />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white capitalize">{item.status}</span>
-                          <span className="text-[10px] text-zinc-400 font-mono">
+                          <span className="font-medium text-[var(--color-ink)] capitalize">{item.status}</span>
+                          <span className="text-[10px] text-[var(--color-ink-mute)] font-mono">
                             {new Date(item.timestamp).toLocaleTimeString()}
                           </span>
                         </div>
-                        <p className="text-zinc-300 mt-0.5">{item.message}</p>
+                        <p className="text-[var(--color-ink-dim)] mt-0.5">{item.message}</p>
                       </div>
                     </div>
                   ))}
@@ -300,81 +278,81 @@ export const Status: React.FC = () => {
           </div>
         )}
 
-        {/* Real Cluster Metrics Counter Bar */}
+        {/* Cluster Metrics */}
         {data?.systemMetrics && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
-              <span className="text-[10px] font-mono uppercase text-zinc-400 block">Compute Nodes</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger">
+            <div className="surface p-3.5 rounded-lg">
+              <span className="label block">Compute Nodes</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Server className="h-4 w-4 text-emerald-400" />
-                <span className="text-base font-bold font-mono text-white">
+                <Server className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                <span className="text-sm font-bold font-mono text-[var(--color-ink)]">
                   {data.systemMetrics.onlineComputeNodes} / {data.systemMetrics.totalComputeNodes} Online
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
-              <span className="text-[10px] font-mono uppercase text-zinc-400 block">Running Servers</span>
+            <div className="surface p-3.5 rounded-lg">
+              <span className="label block">Running Servers</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Cpu className="h-4 w-4 text-amber-400" />
-                <span className="text-base font-bold font-mono text-white">
+                <Cpu className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                <span className="text-sm font-bold font-mono text-[var(--color-ink)]">
                   {data.systemMetrics.runningServers} Instances
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
-              <span className="text-[10px] font-mono uppercase text-zinc-400 block">Cluster Latency</span>
+            <div className="surface p-3.5 rounded-lg">
+              <span className="label block">Cluster Latency</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Wifi className="h-4 w-4 text-sky-400" />
-                <span className="text-base font-bold font-mono text-white">
+                <Wifi className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                <span className="text-sm font-bold font-mono text-[var(--color-ink)]">
                   ~{data.systemMetrics.avgLatencyMs} ms
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
-              <span className="text-[10px] font-mono uppercase text-zinc-400 block">Security & DDoS</span>
+            <div className="surface p-3.5 rounded-lg">
+              <span className="label block">Security Status</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Shield className="h-4 w-4 text-emerald-400" />
-                <span className="text-base font-bold font-mono text-white">Active (Nominal)</span>
+                <Shield className="h-3.5 w-3.5 text-[var(--color-ok)]" />
+                <span className="text-sm font-bold font-mono text-[var(--color-ok)]">Nominal</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Infrastructure Components with 90-Day History Bars */}
-        <div className="space-y-8">
+        {/* Infrastructure Components */}
+        <div className="space-y-6">
           {Object.entries(componentsByGroup).map(([groupName, groupComponents]) => (
-            <div key={groupName} className="space-y-3">
+            <div key={groupName} className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono flex items-center gap-2">
-                  <span>{groupName}</span>
+                <h3 className="label">
+                  {groupName}
                 </h3>
-                <span className="text-[11px] text-zinc-400 font-mono">90 Days Ago — Today</span>
+                <span className="text-[10px] text-[var(--color-ink-mute)] font-mono">90 Days Ago — Today</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {groupComponents.map(comp => (
                   <div
                     key={comp.id}
-                    className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 transition-all space-y-3"
+                    className="surface p-3.5 rounded-lg border border-[var(--color-line)] space-y-2"
                   >
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-white">{comp.name}</span>
+                          <span className="text-xs font-semibold text-[var(--color-ink)]">{comp.name}</span>
                           {comp.latencyMs !== undefined && (
-                            <span className="px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-300">
+                            <span className="px-1.5 py-0.2 rounded surface-2 border border-[var(--color-line)] text-[10px] font-mono text-[var(--color-ink-dim)]">
                               {comp.latencyMs}ms
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-zinc-400 mt-0.5">{comp.details || comp.description}</p>
+                        <p className="text-[11px] text-[var(--color-ink-mute)] mt-0.5">{comp.details || comp.description}</p>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getStatusColor(comp.status)}`}>
+                      <div>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${getStatusColor(comp.status)}`}>
                           {getStatusIcon(comp.status)}
                           <span className="capitalize">{comp.status.replace('_', ' ')}</span>
                         </span>
@@ -383,33 +361,25 @@ export const Status: React.FC = () => {
 
                     {/* 90-Day Uptime Graph Bar */}
                     <div className="space-y-1 pt-1">
-                      <div className="flex items-center justify-between text-[10px] text-zinc-400 font-mono">
-                        <span>90 days ago</span>
-                        <span className="text-zinc-400">{comp.uptimePercent90Days || 99.98}% uptime</span>
-                        <span>Today</span>
-                      </div>
-
-                      {/* Bar ticks */}
-                      <div className="flex items-center gap-[2px] h-7 w-full overflow-hidden rounded bg-zinc-950 p-1 border border-zinc-800/80">
+                      <div className="flex items-center gap-[2px] h-6 w-full overflow-hidden rounded-[4px] surface-2 p-1 border border-[var(--color-line)]">
                         {comp.history90Days && comp.history90Days.length > 0 ? (
                           comp.history90Days.map((day, idx) => (
                             <div
                               key={day.date || idx}
                               onMouseEnter={() => setHoveredDay({ compId: comp.id, day })}
                               onMouseLeave={() => setHoveredDay(null)}
-                              className={`flex-1 h-full rounded-[1px] transition-colors cursor-pointer ${getDayColor(day.status)}`}
+                              className={`flex-1 h-full rounded-[1px] cursor-pointer ${getDayColor(day.status)}`}
                               title={`${day.date}: ${day.status} (${day.uptimePercent}%)`}
                             />
                           ))
                         ) : (
-                          <div className="w-full text-center text-[10px] text-zinc-400 py-1">Telemetry loading...</div>
+                          <div className="w-full text-center text-[10px] text-[var(--color-ink-mute)] py-0.5">Telemetry loading...</div>
                         )}
                       </div>
 
-                      {/* Tooltip display */}
                       {hoveredDay && hoveredDay.compId === comp.id && (
-                        <div className="p-1.5 rounded bg-zinc-950 border border-zinc-700 text-center text-[11px] font-mono text-zinc-200">
-                          <span className="font-semibold text-white">{hoveredDay.day.date}</span>: <span className="capitalize text-emerald-400">{hoveredDay.day.status}</span> ({hoveredDay.day.uptimePercent}% availability)
+                        <div className="p-1 rounded surface-2 border border-[var(--color-line)] text-center text-[10px] font-mono text-[var(--color-ink-dim)]">
+                          <span>{hoveredDay.day.date}</span>: <span className="capitalize text-[var(--color-ok)]">{hoveredDay.day.status}</span> ({hoveredDay.day.uptimePercent}% availability)
                         </div>
                       )}
                     </div>
@@ -421,60 +391,56 @@ export const Status: React.FC = () => {
         </div>
 
         {/* Past Incidents Archive */}
-        <div className="space-y-4 pt-6 border-t border-zinc-800/80">
+        <div className="space-y-3 pt-5 border-t border-[var(--color-line)]">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">
-              Past Incidents & Post-Mortems
+            <h3 className="label">
+              Past Incidents & Maintenance
             </h3>
-            <span className="text-xs text-zinc-400">Past 90 days</span>
+            <span className="text-[11px] text-[var(--color-ink-mute)] font-mono">Past 90 days</span>
           </div>
 
           {data?.pastIncidents && data.pastIncidents.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {data.pastIncidents.map(inc => {
                 const isExpanded = !!expandedIncidents[inc.id];
                 return (
-                  <div key={inc.id} className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                  <div key={inc.id} className="surface p-3.5 rounded-lg border border-[var(--color-line)] space-y-1.5">
                     <div
                       onClick={() => toggleIncident(inc.id)}
                       className="flex items-start justify-between gap-2 cursor-pointer select-none"
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-white hover:text-amber-300 transition-colors">
+                          <span className="text-xs font-semibold text-[var(--color-ink)] hover:text-[var(--color-accent)] transition-colors">
                             {inc.title}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[var(--color-ok)]/10 text-[var(--color-ok)] border border-[var(--color-ok)]/30">
                             Resolved
                           </span>
                         </div>
-                        <span className="text-[11px] text-zinc-400 font-mono block mt-0.5">
-                          {new Date(inc.startedAt).toLocaleDateString()} • Duration: {
-                            inc.resolvedAt
-                              ? `${Math.round((new Date(inc.resolvedAt).getTime() - new Date(inc.startedAt).getTime()) / 60000)} mins`
-                              : 'Resolved'
-                          }
+                        <span className="text-[10px] text-[var(--color-ink-mute)] font-mono block mt-0.5">
+                          {new Date(inc.startedAt).toLocaleDateString()}
                         </span>
                       </div>
 
-                      <div className="text-zinc-400 hover:text-white p-1">
-                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <div className="text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] p-0.5">
+                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                       </div>
                     </div>
 
-                    <p className="text-xs text-zinc-300">{inc.description}</p>
+                    <p className="text-xs text-[var(--color-ink-dim)]">{inc.description}</p>
 
                     {isExpanded && (
-                      <div className="space-y-2 pt-3 border-t border-zinc-800/80">
-                        <span className="text-[10px] font-mono uppercase text-zinc-400 block">Incident Timeline</span>
+                      <div className="space-y-1.5 pt-2 border-t border-[var(--color-line)]">
+                        <span className="label block">Timeline</span>
                         {inc.timeline.map((item, idx) => (
                           <div key={item.id || idx} className="text-xs flex items-start gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-ok)] mt-1.5 shrink-0" />
                             <div>
-                              <span className="text-zinc-400 font-mono text-[10px]">
+                              <span className="text-[var(--color-ink-mute)] font-mono text-[10px]">
                                 {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} —{' '}
                               </span>
-                              <span className="text-zinc-200">{item.message}</span>
+                              <span className="text-[var(--color-ink-dim)]">{item.message}</span>
                             </div>
                           </div>
                         ))}
@@ -485,92 +451,85 @@ export const Status: React.FC = () => {
               })}
             </div>
           ) : (
-            <div className="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/80 text-center">
-              <CheckCircle2 className="h-6 w-6 text-emerald-400 mx-auto mb-2" />
-              <p className="text-xs text-zinc-400">No incidents reported in the past 90 days. All systems performing at peak availability.</p>
+            <div className="surface p-6 rounded-lg text-center">
+              <CheckCircle2 className="h-5 w-5 text-[var(--color-ok)] mx-auto mb-1.5" />
+              <p className="text-xs text-[var(--color-ink-dim)]">No incidents reported in the past 90 days. All systems operational.</p>
             </div>
           )}
         </div>
 
         {/* Footer Note */}
-        <div className="text-center pt-8 pb-4 text-xs text-zinc-400 space-y-1">
-          <p>AetherPanel Real-Time Health Engine • Monitored every 15s via direct daemon telemetry.</p>
-          <p className="text-[11px] text-zinc-400">Zero synthetic or fabricated uptime data. Backed by real distributed node heartbeats.</p>
+        <div className="text-center pt-6 pb-2 text-xs text-[var(--color-ink-mute)] space-y-0.5">
+          <p>Real-Time Health Engine • Monitored via direct daemon telemetry.</p>
         </div>
 
       </div>
 
       {/* Subscribe Modal */}
       {showSubscribeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Subscribe to Status Alerts</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 anim-fade-in">
+          <div className="w-full max-w-sm rounded-lg surface border border-[var(--color-line)] p-5 space-y-3 anim-scale-in">
+            <div className="flex items-center justify-between border-b border-[var(--color-line)] pb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Bell className="h-4 w-4 text-[var(--color-accent)]" />
+                <h3 className="text-xs font-semibold text-[var(--color-ink)]">Subscribe to Status Alerts</h3>
               </div>
               <button
                 onClick={() => setShowSubscribeModal(false)}
-                className="text-zinc-400 hover:text-white text-sm"
+                className="btn-icon"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400">
-              Get notified immediately whenever an infrastructure incident is declared or resolved.
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              Receive updates when infrastructure incidents are declared or resolved.
             </p>
 
             {subSuccess ? (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-                <Check className="h-4 w-4 flex-shrink-0" />
+              <div className="p-2.5 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-[var(--color-ok)] text-xs flex items-center gap-2">
+                <Check className="h-3.5 w-3.5 shrink-0" />
                 <span>{subSuccess}</span>
               </div>
             ) : (
-              <form onSubmit={handleSubscribe} className="space-y-3">
+              <form onSubmit={handleSubscribe} className="space-y-2.5">
                 <div>
-                  <label className="text-xs font-semibold text-zinc-300 block mb-1">Email Notifications</label>
+                  <label className="label block mb-1">Email</label>
                   <input
                     type="email"
                     placeholder="sysadmin@example.com"
                     value={subEmail}
                     onChange={e => setSubEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500"
+                    className="field w-full px-2.5 py-1.5 text-xs rounded-md"
                   />
                 </div>
 
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-zinc-800"></div>
-                  <span className="flex-shrink mx-2 text-[10px] uppercase font-mono text-zinc-400">OR</span>
-                  <div className="flex-grow border-t border-zinc-800"></div>
-                </div>
-
                 <div>
-                  <label className="text-xs font-semibold text-zinc-300 block mb-1">Discord Webhook Relay</label>
+                  <label className="label block mb-1">Discord Webhook</label>
                   <input
                     type="url"
                     placeholder="https://discord.com/api/webhooks/..."
                     value={subWebhook}
                     onChange={e => setSubWebhook(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500"
+                    className="field w-full px-2.5 py-1.5 text-xs rounded-md"
                   />
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-1.5 pt-1 border-t border-[var(--color-line)]">
                   <button
                     type="button"
                     onClick={() => setShowSubscribeModal(false)}
-                    className="px-4 py-2 rounded-xl bg-zinc-800 text-xs text-zinc-300 hover:text-white"
+                    className="btn btn-ghost text-xs py-1.5"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={subLoading || (!subEmail && !subWebhook)}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 flex items-center gap-1.5 disabled:opacity-50"
+                    className="btn btn-primary text-xs py-1.5 flex items-center gap-1"
                   >
-                    {subLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    <span>Confirm Subscription</span>
+                    {subLoading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    <span>Confirm</span>
                   </button>
                 </div>
               </form>

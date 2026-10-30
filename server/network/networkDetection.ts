@@ -154,8 +154,7 @@ export interface NetworkDiagnostics {
   publicIp: string | null;
   isBehindNat: boolean;
   isPublicIpReachable: boolean;
-  preferPlayit: boolean;
-  mode: 'direct' | 'playit' | 'unavailable';
+  mode: 'direct' | 'nat' | 'unavailable';
 }
 
 /**
@@ -176,15 +175,11 @@ export async function runNetworkDiagnostics(sftpPort = 2022): Promise<NetworkDia
     isPublicIpReachable = await checkPortReachable(publicIp, sftpPort);
   }
 
-  // We prefer Playit if we are behind NAT and the port is not reachable directly,
-  // or if we have no public IP.
-  const preferPlayit = !publicIp || isBehindNat || !isPublicIpReachable;
-
-  let mode: 'direct' | 'playit' | 'unavailable' = 'unavailable';
+  let mode: 'direct' | 'nat' | 'unavailable' = 'unavailable';
   if (publicIp && !isBehindNat && isPublicIpReachable) {
     mode = 'direct';
-  } else {
-    mode = 'playit';
+  } else if (publicIp) {
+    mode = 'nat';
   }
 
   return {
@@ -192,7 +187,6 @@ export async function runNetworkDiagnostics(sftpPort = 2022): Promise<NetworkDia
     publicIp,
     isBehindNat,
     isPublicIpReachable,
-    preferPlayit,
     mode
   };
 }

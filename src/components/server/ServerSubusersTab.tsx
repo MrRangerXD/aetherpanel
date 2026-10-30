@@ -201,106 +201,106 @@ export const ServerSubusersTab: React.FC<ServerSubusersTabProps> = ({ server }) 
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Users className="h-6 w-6 text-violet-400" />
+          <h2 className="text-base font-semibold text-ink flex items-center gap-2">
+            <Users className="h-4 w-4 text-accent" />
             Subusers
           </h2>
-          <p className="text-zinc-400 text-sm mt-1">
-            Grant other users access to manage this server with specific permissions.
+          <p className="text-ink-mute text-xs mt-0.5">
+            Grant team members access to manage this server with fine-grained permissions.
           </p>
         </div>
         {canCreate && (
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all bg-violet-600 hover:bg-violet-500 text-white shadow-lg"
-        >
-          <Plus className="h-4 w-4" />
-          Add Subuser
-        </button>
+          <button
+            onClick={openAddModal}
+            className="btn btn-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Subuser
+          </button>
         )}
       </div>
 
       {error && !showAddModal && !showEditModal && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-rose-300">{error}</p>
+        <div className="p-3 bg-err/10 border border-err/25 rounded-lg flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-err shrink-0 mt-0.5" />
+          <p className="text-xs text-err">{error}</p>
         </div>
       )}
 
       {loading ? (
-        <div className="animate-pulse space-y-4">
-          <div className="h-20 bg-zinc-900 rounded-xl"></div>
-          <div className="h-20 bg-zinc-900 rounded-xl"></div>
+        <div className="space-y-3">
+          <div className="h-20 surface rounded-lg anim-shimmer" />
+          <div className="h-20 surface rounded-lg anim-shimmer" />
         </div>
       ) : subusers.length === 0 ? (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-12 text-center">
-          <Shield className="h-12 w-12 text-zinc-600 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-white mb-2">No Subusers Found</h3>
-          <p className="text-zinc-400 max-w-md mx-auto">
-            You are the only person who has access to this server. Add a subuser to collaborate.
+        <div className="surface rounded-lg p-10 text-center">
+          <Shield className="h-8 w-8 text-ink-mute mx-auto mb-3" />
+          <h3 className="text-sm font-medium text-ink mb-1">No Subusers Found</h3>
+          <p className="text-xs text-ink-mute max-w-sm mx-auto">
+            You are currently the only authorized user for this container. Add a subuser to grant access.
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {subusers.map(sub => {
             const isSelf = sub.userId === user?.id;
             return (
-              <div key={sub.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
+              <div key={sub.id} className="surface rounded-lg p-4 flex flex-col gap-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold">
+                    <div className="h-8 w-8 rounded-md bg-surface-2 border border-line text-accent flex items-center justify-center font-mono text-xs font-semibold">
                       {(sub.username || sub.email || '?').charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="text-white font-semibold flex items-center gap-2">
+                      <h3 className="text-xs font-semibold text-ink flex items-center gap-1.5">
                         {sub.username || sub.email}
                         {isSelf && (
-                          <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="px-1.5 py-0.2 rounded bg-surface-3 text-ink-dim text-[10px] font-mono uppercase">
                             You
                           </span>
                         )}
                       </h3>
                       {sub.email && sub.username !== sub.email && (
-                        <p className="text-xs text-zinc-400">{sub.email}</p>
+                        <p className="text-[11px] font-mono text-ink-mute">{sub.email}</p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     {!isSelf && canUpdate && (
-                    <button
-                      onClick={() => openEditModal(sub)}
-                      className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 rounded-lg transition-colors"
-                      title="Edit Permissions"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
+                      <button
+                        onClick={() => openEditModal(sub)}
+                        className="btn-icon text-ink-mute hover:text-ink"
+                        title="Edit Permissions"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
                     )}
                     {!isSelf && canDelete && (
-                    <button
-                      onClick={() => handleRevokeSubuser(sub.id)}
-                      className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-colors"
-                      title="Revoke Access"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                      <button
+                        onClick={() => handleRevokeSubuser(sub.id)}
+                        className="btn-icon text-ink-mute hover:text-err"
+                        title="Revoke Access"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     )}
                     {isSelf && (
-                      <span className="text-[10px] text-zinc-500 bg-zinc-900 px-2 py-1 border border-zinc-800 rounded italic cursor-help" title="You cannot modify your own server permissions.">
+                      <span className="text-[10px] font-mono text-ink-mute bg-surface-2 px-2 py-0.5 border border-line rounded">
                         Locked
                       </span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] text-zinc-500 font-semibold mb-2 uppercase">Permissions ({sub.permissions?.length || 0})</p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <p className="label mb-1.5">Permissions ({sub.permissions?.length || 0})</p>
+                  <div className="flex flex-wrap gap-1">
                     {sub.permissions?.slice(0, 10).map(perm => (
-                      <span key={perm} className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300">
+                      <span key={perm} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-2 border border-line text-ink-dim">
                         {perm}
                       </span>
                     ))}
                     {(sub.permissions?.length || 0) > 10 && (
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-2 border border-line text-ink-mute">
                         +{(sub.permissions?.length || 0) - 10} more
                       </span>
                     )}
@@ -314,86 +314,86 @@ export const ServerSubusersTab: React.FC<ServerSubusersTabProps> = ({ server }) 
 
       {/* ADD / EDIT MODAL */}
       {(showAddModal || showEditModal) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-zinc-800 shrink-0">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="surface rounded-lg w-full max-w-2xl flex flex-col max-h-[85vh] anim-scale-in">
+            <div className="flex items-center justify-between p-4 border-b border-line shrink-0">
+              <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
                 {showEditModal ? (
                   <>
-                    <Edit2 className="h-5 w-5 text-amber-400" />
-                    Edit Permissions for {showEditModal.username}
+                    <Edit2 className="h-4 w-4 text-accent" />
+                    Edit Permissions: {showEditModal.username}
                   </>
                 ) : (
                   <>
-                    <Plus className="h-5 w-5 text-violet-400" />
+                    <Plus className="h-4 w-4 text-accent" />
                     Add New Subuser
                   </>
                 )}
               </h2>
               <button
                 onClick={() => { setShowAddModal(false); setShowEditModal(null); }}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="btn-icon text-ink-mute hover:text-ink"
               >
-                <X className="h-6 w-6" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+            <div className="p-4 overflow-y-auto space-y-4 flex-1">
               {error && (
-                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
-                  <p className="text-sm text-rose-300">{error}</p>
+                <div className="p-3 bg-err/10 border border-err/25 rounded-lg flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 text-err shrink-0 mt-0.5" />
+                  <p className="text-xs text-err">{error}</p>
                 </div>
               )}
 
               {showAddModal && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-zinc-300">User Email or Username</label>
+                <div className="space-y-1">
+                  <label className="label">User Email or Username</label>
                   <input
                     type="text"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="e.g. hello@example.com or user123"
-                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors"
+                    placeholder="e.g. operator@domain.com or user123"
+                    className="field w-full font-mono text-xs"
                   />
-                  <p className="text-xs text-zinc-500">The user must already be registered in AetherPanel.</p>
+                  <p className="text-[11px] text-ink-mute">The user must already have a registered account.</p>
                 </div>
               )}
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-sm font-semibold text-zinc-300">Permissions</label>
+                  <label className="label">Permissions Matrix</label>
                   <button
                     onClick={handleSelectAllPerms}
-                    className="text-xs text-violet-400 hover:text-violet-300 font-semibold"
+                    className="text-[11px] text-accent hover:underline font-mono"
                   >
                     {selectedPerms.length === AVAILABLE_PERMISSIONS.length ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {AVAILABLE_PERMISSIONS.filter(p => hasPerm(p.id)).map(perm => {
                     const isSelected = selectedPerms.includes(perm.id);
                     return (
                       <div
                         key={perm.id}
                         onClick={() => handleTogglePerm(perm.id)}
-                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
                           isSelected
-                            ? 'bg-violet-600/20 border-violet-500'
-                            : 'bg-zinc-900 border-zinc-800 hover:border-zinc-600'
+                            ? 'bg-accent/10 border-accent/40'
+                            : 'bg-surface-2 border-line hover:border-line-soft'
                         }`}
                       >
-                        <div className={`mt-0.5 flex-shrink-0 h-4 w-4 rounded flex items-center justify-center border ${
-                          isSelected ? 'bg-violet-500 border-violet-500 text-white' : 'border-zinc-600'
+                        <div className={`mt-0.5 flex-shrink-0 h-3.5 w-3.5 rounded flex items-center justify-center border ${
+                          isSelected ? 'bg-accent border-accent text-white' : 'border-line text-transparent'
                         }`}>
-                          {isSelected && <Check className="h-3 w-3" />}
+                          <Check className="h-2.5 w-2.5" />
                         </div>
                         <div>
-                          <p className={`text-sm font-medium ${isSelected ? 'text-violet-300' : 'text-zinc-300'}`}>
+                          <p className={`text-xs font-medium ${isSelected ? 'text-accent' : 'text-ink'}`}>
                             {perm.label}
                           </p>
-                          <p className="text-xs text-zinc-500 mt-0.5 leading-snug">
+                          <p className="text-[10px] text-ink-mute leading-snug">
                             {perm.desc}
                           </p>
                         </div>
@@ -404,10 +404,10 @@ export const ServerSubusersTab: React.FC<ServerSubusersTabProps> = ({ server }) 
               </div>
             </div>
 
-            <div className="p-4 sm:p-6 border-t border-zinc-800 flex justify-end gap-3 shrink-0">
+            <div className="p-4 border-t border-line flex justify-end gap-2 shrink-0">
               <button
                 onClick={() => { setShowAddModal(false); setShowEditModal(null); }}
-                className="px-4 py-2.5 rounded-xl font-semibold text-zinc-400 hover:text-white transition-colors"
+                className="btn btn-ghost"
                 disabled={isSubmitting}
               >
                 Cancel
@@ -415,18 +415,18 @@ export const ServerSubusersTab: React.FC<ServerSubusersTabProps> = ({ server }) 
               <button
                 onClick={showEditModal ? handleEditSubuser : handleAddSubuser}
                 disabled={isSubmitting}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {isSubmitting ? (
-                  <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : showEditModal ? (
                   <>
-                    <Save className="h-4 w-4" />
+                    <Save className="h-3.5 w-3.5" />
                     Save Permissions
                   </>
                 ) : (
                   <>
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                     Add Subuser
                   </>
                 )}

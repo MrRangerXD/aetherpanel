@@ -92,7 +92,6 @@ export const AfkRewards: React.FC = () => {
       return;
     }
 
-    // Timer elapsed calculation
     const startMs = new Date(activeSession.startedAt).getTime();
     setSecondsElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
 
@@ -100,7 +99,6 @@ export const AfkRewards: React.FC = () => {
       setSecondsElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
     }, 1000);
 
-    // Heartbeat every 60 seconds (or interval)
     const intervalSeconds = Math.min(60, settings.intervalMinutes * 60);
     heartbeatIntervalRef.current = setInterval(() => {
       sendHeartbeat(activeSession.id);
@@ -112,7 +110,6 @@ export const AfkRewards: React.FC = () => {
     };
   }, [activeSession, settings.intervalMinutes, sendHeartbeat]);
 
-  // Start AFK Session
   const handleStartAfk = async () => {
     try {
       setLoading(true);
@@ -134,7 +131,6 @@ export const AfkRewards: React.FC = () => {
     }
   };
 
-  // Stop AFK Session
   const handleStopAfk = async () => {
     if (!activeSession) return;
     try {
@@ -165,134 +161,128 @@ export const AfkRewards: React.FC = () => {
 
   if (loading && !activeSession) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-xs text-zinc-400">
-        <RefreshCw className="w-6 h-6 animate-spin text-violet-500" />
+      <div className="surface p-12 text-center rounded-lg text-xs text-[var(--color-ink-dim)] space-y-2">
+        <RefreshCw className="w-5 h-5 animate-spin text-[var(--color-accent)] mx-auto" />
         <span>Loading AFK Rewards & Wallet...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-line)] pb-5">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Coins className="w-6 h-6 text-amber-400" />
-            AFK Rewards & Wallet
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-ink)] flex items-center gap-2">
+            <Coins className="w-5 h-5 text-[var(--color-accent)]" />
+            <span>AFK Rewards & Wallet</span>
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Earn hosting credits by keeping your AetherPanel control plane active in your browser.
+          <p className="text-xs text-[var(--color-ink-mute)] mt-1">
+            Earn hosting credits by keeping your control plane active in your browser.
           </p>
         </div>
 
         <button
           onClick={fetchData}
-          className="self-start sm:self-auto px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl border border-zinc-700/50 transition-all flex items-center gap-2"
+          className="btn btn-ghost text-xs"
         >
-          {refreshing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Refresh
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[var(--color-accent)]' : ''}`} />
+          <span>Refresh</span>
         </button>
       </div>
 
       {errorMsg && (
-        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs p-4 rounded-xl flex items-center gap-3">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+        <div className="p-3 rounded-md bg-[var(--color-err)]/10 border border-[var(--color-err)]/30 text-[var(--color-err)] text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Top Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-amber-950/30 via-zinc-900 to-zinc-900 border border-amber-500/20 rounded-2xl p-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="surface p-4 rounded-lg space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Available Credits</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <Coins className="w-4 h-4" />
-            </div>
+            <span className="label">Available Credits</span>
+            <Coins className="w-3.5 h-3.5 text-[var(--color-ink-mute)]" />
           </div>
-          <p className="text-2xl font-bold text-white mt-2">+{userCredits.toLocaleString()} Credits</p>
-          <p className="text-[11px] text-zinc-500 mt-1">Ready to redeem for server upgrades</p>
+          <p className="text-2xl font-bold text-[var(--color-ink)] font-mono">+{userCredits.toLocaleString()} Credits</p>
+          <p className="text-[10px] text-[var(--color-ink-mute)]">Ready for server renewals</p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="surface p-4 rounded-lg space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Today's Earnings</span>
-            <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20">
-              <Award className="w-4 h-4" />
-            </div>
+            <span className="label">Today's Earnings</span>
+            <Award className="w-3.5 h-3.5 text-[var(--color-ink-mute)]" />
           </div>
-          <p className="text-2xl font-bold text-white mt-2">+{todayEarnedCredits} / {settings.dailyMaxCredits}</p>
-          <div className="w-full bg-zinc-800 rounded-full h-1.5 mt-3 overflow-hidden">
+          <p className="text-2xl font-bold text-[var(--color-ink)] font-mono">+{todayEarnedCredits} / {settings.dailyMaxCredits}</p>
+          <div className="w-full bg-[var(--color-surface-2)] rounded-full h-1 mt-2 overflow-hidden border border-[var(--color-line)]">
             <div
-              className="bg-violet-500 h-full rounded-full transition-all duration-300"
+              className="bg-[var(--color-accent)] h-full transition-all duration-300"
               style={{ width: `${dailyProgressPercent}%` }}
             />
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="surface p-4 rounded-lg space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">AFK Reward Rate</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <Zap className="w-4 h-4" />
-            </div>
+            <span className="label">AFK Rate</span>
+            <Zap className="w-3.5 h-3.5 text-[var(--color-ink-mute)]" />
           </div>
-          <p className="text-2xl font-bold text-white mt-2">+{settings.creditsPerInterval} Credits</p>
-          <p className="text-[11px] text-zinc-500 mt-1">Credited every {settings.intervalMinutes} minutes active</p>
+          <p className="text-2xl font-bold text-[var(--color-ink)] font-mono">+{settings.creditsPerInterval} Credits</p>
+          <p className="text-[10px] text-[var(--color-ink-mute)]">Every {settings.intervalMinutes} min active</p>
         </div>
       </div>
 
       {/* AFK Control Panel */}
-      <div className="bg-gradient-to-r from-violet-950/30 via-zinc-900 to-zinc-950 border border-violet-500/30 rounded-2xl p-6 shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
+      <div className="surface p-5 sm:p-6 rounded-lg space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${activeSession ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-              <h2 className="text-base font-bold text-white">AFK Loyalty Session</h2>
+              <span className={`w-2 h-2 rounded-full ${activeSession ? 'bg-[var(--color-ok)] animate-pulse' : 'bg-[var(--color-ink-mute)]'}`} />
+              <h2 className="text-sm font-semibold text-[var(--color-ink)]">AFK Loyalty Session</h2>
             </div>
-            <p className="text-xs text-zinc-400 max-w-xl">
-              Keep this tab open while managing your panel or servers to automatically earn reward credits toward server renewals.
+            <p className="text-xs text-[var(--color-ink-mute)] max-w-lg leading-relaxed">
+              Keep this tab open while managing your servers to automatically earn reward credits.
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {activeSession ? (
               <button
                 onClick={handleStopAfk}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
+                className="btn btn-danger text-xs py-2 px-4 flex items-center gap-2"
               >
-                <Square className="w-4 h-4" />
-                Stop Session
+                <Square className="w-3.5 h-3.5" />
+                <span>Stop Session</span>
               </button>
             ) : (
               <button
                 onClick={handleStartAfk}
-                className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-violet-600/25 transition-all flex items-center gap-2"
+                className="btn btn-primary text-xs py-2 px-5 flex items-center gap-2"
               >
-                <Play className="w-4 h-4 fill-current" />
-                Start AFK Loyalty Session
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start AFK Session</span>
               </button>
             )}
           </div>
         </div>
 
         {activeSession && (
-          <div className="mt-6 pt-6 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4">
-              <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Active Time</span>
-              <p className="text-2xl font-mono font-bold text-violet-400 mt-1">{formatTime(secondsElapsed)}</p>
+          <div className="pt-4 border-t border-[var(--color-line)] grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+              <span className="label">Active Time</span>
+              <p className="text-xl font-mono font-bold text-[var(--color-accent)]">{formatTime(secondsElapsed)}</p>
             </div>
 
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4">
-              <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Earned This Session</span>
-              <p className="text-2xl font-mono font-bold text-emerald-400 mt-1">+{activeSession.earnedCredits} Credits</p>
+            <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+              <span className="label">Earned This Session</span>
+              <p className="text-xl font-mono font-bold text-[var(--color-ok)]">+{activeSession.earnedCredits} Credits</p>
             </div>
 
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4">
-              <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Server Sync Status</span>
-              <p className="text-xs font-medium text-zinc-300 mt-2 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="surface-2 p-3 rounded-md border border-[var(--color-line)] space-y-0.5">
+              <span className="label">Sync Status</span>
+              <p className="text-xs font-medium text-[var(--color-ink)] mt-1 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-ok)] shrink-0" />
                 <span>{heartbeatStatus}</span>
               </p>
             </div>
@@ -301,45 +291,41 @@ export const AfkRewards: React.FC = () => {
       </div>
 
       {/* Transaction History Ledger */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+      <div className="surface p-5 rounded-lg space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <History className="w-4 h-4 text-violet-400" />
-            Reward Transaction Ledger
+          <h3 className="text-sm font-semibold text-[var(--color-ink)] flex items-center gap-2">
+            <History className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+            <span>Reward Transaction Ledger</span>
           </h3>
-          <span className="text-xs text-zinc-500">{transactions.length} Total Ledger Entries</span>
+          <span className="text-xs text-[var(--color-ink-mute)] font-mono">{transactions.length} Entries</span>
         </div>
 
         {transactions.length === 0 ? (
-          <div className="py-8 text-center text-xs text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
-            No reward transactions recorded yet. Start an AFK session to earn credits.
+          <div className="py-8 text-center text-xs text-[var(--color-ink-mute)]">
+            No reward transactions recorded yet.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border border-[var(--color-line)]">
             <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-950 text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
+              <thead className="surface-2 text-[var(--color-ink-mute)] label border-b border-[var(--color-line)]">
                 <tr>
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Description</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
+                  <th className="py-2.5 px-3">Timestamp</th>
+                  <th className="py-2.5 px-3">Type</th>
+                  <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3 text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/50">
+              <tbody className="divide-y divide-[var(--color-line)]">
                 {transactions.map(tx => (
-                  <tr key={tx.id} className="hover:bg-zinc-850/50 transition-colors">
-                    <td className="py-3 px-4 font-mono text-zinc-400">{new Date(tx.createdAt).toLocaleString()}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                        tx.type === 'AFK_REWARD' ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20' :
-                        tx.type === 'ADMIN_ADJUSTMENT' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                        'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      }`}>
+                  <tr key={tx.id} className="hover:bg-[var(--color-surface-2)] transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-[var(--color-ink-mute)] text-[11px]">{new Date(tx.createdAt).toLocaleString()}</td>
+                    <td className="py-2.5 px-3">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono surface-2 border border-[var(--color-line)] text-[var(--color-ink-dim)]">
                         {tx.type}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-zinc-300">{tx.description}</td>
-                    <td className={`py-3 px-4 text-right font-mono font-bold ${tx.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td className="py-2.5 px-3 text-[var(--color-ink)]">{tx.description}</td>
+                    <td className={`py-2.5 px-3 text-right font-mono font-medium ${tx.amount >= 0 ? 'text-[var(--color-ok)]' : 'text-[var(--color-err)]'}`}>
                       {tx.amount >= 0 ? `+${tx.amount}` : tx.amount}
                     </td>
                   </tr>

@@ -347,12 +347,6 @@ export interface Node {
   reservedCpuCores?: number;
   reservedDiskGB?: number;
   sftpFqdn?: string;
-  playitSftpAddress?: string;
-  playitSftpPort?: number;
-  playitAgentInstalled?: boolean;
-  playitAgentRunning?: boolean;
-  playitClaimCode?: string;
-  playitClaimUrl?: string;
 }
 
 export interface SftpActiveSessionDTO {
@@ -377,7 +371,7 @@ export interface SftpConnectionInfo {
   password?: string;
   uri: string;
   isProtected: boolean;
-  tunnelType: 'direct' | 'fqdn' | 'playit';
+  tunnelType: 'direct' | 'fqdn';
   nodeName?: string;
   activeSessions?: SftpActiveSessionDTO[];
   clientConfigs?: {
@@ -385,65 +379,6 @@ export interface SftpConnectionInfo {
     cyberduckDuckUrl: string;
     winscpCommand: string;
   };
-}
-
-export type PlayitAgentState = 
-  | 'NOT_INSTALLED'
-  | 'NOT_CONFIGURED'
-  | 'INSTALLING'
-  | 'INSTALLED'
-  | 'STARTING'
-  | 'AWAITING_CLAIM'
-  | 'RUNNING_UNCLAIMED'
-  | 'CLAIM_URL_AVAILABLE'
-  | 'CLAIMING'
-  | 'CLAIMED'
-  | 'CONNECTING'
-  | 'RUNNING_CLAIMED'
-  | 'ONLINE'
-  | 'OFFLINE'
-  | 'STOPPING'
-  | 'STOPPED'
-  | 'CRASHED'
-  | 'UNAVAILABLE'
-  | 'BLOCKED'
-  | 'ERROR';
-
-export interface PlayitStatus {
-  isInstalled: boolean;
-  isRunning: boolean;
-  isClaimed: boolean;
-  status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
-  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
-  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
-  tunnelManagement: 'Managed externally';
-  claimUrl?: string;
-  claimCode?: string;
-  agentVersion: string;
-  pid?: number;
-  logs?: string[];
-  errorReason?: string;
-  lastCheckedAt: string;
-}
-
-export interface NodePlayitStatus {
-  nodeId: string;
-  isInstalled: boolean;
-  isRunning: boolean;
-  isClaimed: boolean;
-  status: PlayitAgentState;
-  agentStatus: 'RUNNING' | 'STOPPED' | 'STARTING' | 'CRASHED' | 'NOT_INSTALLED' | 'ERROR' | 'UNAVAILABLE' | 'BLOCKED';
-  claimStatus: 'UNCLAIMED' | 'CLAIM_IN_PROGRESS' | 'CLAIM_URL_AVAILABLE' | 'CLAIMED';
-  accountStatus: 'Connected' | 'Unlinked' | 'Pending';
-  tunnelManagement: 'Managed externally';
-  claimUrl?: string;
-  claimCode?: string;
-  agentVersion: string;
-  pid?: number;
-  logs?: string[];
-  errorReason?: string;
-  lastCheckedAt: string;
 }
 
 export interface NodeInstallToken {
@@ -812,12 +747,84 @@ export interface SystemSettings {
   authProviders?: AuthProviderSettings;
   themeSettings?: CustomThemeSettings;
   antiAbuse?: AntiAbuseSettings;
-  enablePlayit?: boolean;
   pageAnimationsEnabled?: boolean;
   animationSettings?: AnimationSettings;
   socialLinks?: SocialLinks;
   heroDescription?: string;
   footerDescription?: string;
+  homepageConfig?: HomepageConfig;
+}
+
+export interface HomepageConfig {
+  showHeroBadge?: boolean;
+  heroBadgeText?: string;
+  heroBadgeLinkText?: string;
+  heroBadgeLinkTarget?: string;
+  heroHeadlinePrefix?: string;
+  heroHeadlineAccent?: string;
+  heroDescription?: string;
+  heroPrimaryCtaText?: string;
+  heroPrimaryCtaPage?: string;
+  heroSecondaryCtaText?: string;
+  heroSecondaryCtaPage?: string;
+  heroBullet1?: string;
+  heroBullet2?: string;
+  heroBullet3?: string;
+  heroBackgroundImages?: string[];
+  heroSlideDelaySeconds?: number;
+
+  showTrustBar?: boolean;
+  trustBarItem1?: string;
+  trustBarItem2?: string;
+  trustBarItem3?: string;
+  trustBarItem4?: string;
+  trustBarItem5?: string;
+
+  showMinecraftSection?: boolean;
+  showDiscordBotSection?: boolean;
+  showInfrastructureSection?: boolean;
+  showStatsSection?: boolean;
+  showFeaturesSection?: boolean;
+  showPricingSection?: boolean;
+  showFaqSection?: boolean;
+  showCtaSection?: boolean;
+
+  mcEyebrow?: string;
+  mcHeading?: string;
+  mcDescription?: string;
+  mcBullet1?: string;
+  mcBullet2?: string;
+  mcBullet3?: string;
+  mcCtaText?: string;
+
+  botEyebrow?: string;
+  botHeading?: string;
+  botDescription?: string;
+  botBullet1?: string;
+  botBullet2?: string;
+  botBullet3?: string;
+  botCtaText?: string;
+
+  stat1Value?: string;
+  stat1Label?: string;
+  stat2Value?: string;
+  stat2Label?: string;
+  stat3Value?: string;
+  stat3Label?: string;
+  stat4Value?: string;
+  stat4Label?: string;
+
+  infraEyebrow?: string;
+  infraHeading?: string;
+  infraDescription?: string;
+
+  ctaEyebrow?: string;
+  ctaHeading?: string;
+  ctaDescription?: string;
+  ctaPrimaryText?: string;
+  ctaPrimaryPage?: string;
+  ctaSecondaryText?: string;
+  ctaSecondaryPage?: string;
 }
 
 export interface AnimationSettings {
@@ -1070,6 +1077,8 @@ export interface TelemetryPoint {
   totalDiskGB: number;
   netInKBps: number;
   netOutKBps: number;
+  networkInBytes?: number;
+  networkOutBytes?: number;
   latencyMs: number;
   loadAvg1m?: number;
   tps?: number;

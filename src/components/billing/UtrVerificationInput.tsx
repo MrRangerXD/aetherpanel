@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   CheckCircle2, AlertCircle, RefreshCw, ShieldCheck,
-  Zap, Lock, ArrowRight, Building, Sparkles
+  Zap, Lock, ArrowRight, Building, Sparkles, Check, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 
@@ -109,7 +109,9 @@ export const UtrVerificationInput: React.FC<UtrVerificationInputProps> = ({
         </div>
 
         {onCancel && (
-          <button onClick={onCancel} className="text-xs text-zinc-500 hover:text-white">✕</button>
+          <button onClick={onCancel} className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
         )}
       </div>
 
@@ -123,12 +125,12 @@ export const UtrVerificationInput: React.FC<UtrVerificationInputProps> = ({
             </label>
 
             {/* Validation Badge */}
-            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-bold transition-all ${
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-bold transition-all flex items-center gap-1 ${
               isValidLength
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                 : 'bg-zinc-900 text-zinc-500 border-zinc-800'
             }`}>
-              {cleanDigits.length} / 12 {isValidLength ? '✓ Valid Format' : 'Digits'}
+              {cleanDigits.length} / 12 {isValidLength ? <span className="inline-flex items-center gap-1 text-emerald-400"><Check className="w-2.5 h-2.5" /> Valid Format</span> : 'Digits'}
             </span>
           </div>
 

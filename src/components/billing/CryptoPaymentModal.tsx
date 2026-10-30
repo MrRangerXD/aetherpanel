@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Coins, QrCode, Copy, Check, RefreshCw, AlertCircle, ShieldCheck,
-  CheckCircle2, Server, ArrowRight, Zap, Clock, ExternalLink, Sparkles, Crown
+  CheckCircle2, Server, ArrowRight, Zap, Clock, ExternalLink, Sparkles, Crown, X
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { CryptoInvoice } from '../../types';
@@ -257,7 +257,7 @@ export const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
             onClick={onClose}
             className="text-zinc-500 hover:text-white p-2.5 rounded-xl transition-all hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 

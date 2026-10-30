@@ -6,7 +6,7 @@ import {
   Save, PlayCircle, Shield, AlertTriangle, ArrowLeft, Key, ExternalLink,
   Layers, CheckCircle2, ChevronRight, Zap, RefreshCcw, Upload, FileArchive,
   Eye, EyeOff, Search, Box, Package, AlertOctagon, Archive, AlertCircle, MessageSquare,
-  Globe, Wifi, Sliders, X, FolderInput
+  Globe, Wifi, Sliders, X, FolderInput, Sparkles, Menu, ChevronLeft, ChevronsUpDown, Server as ServerIcon
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
@@ -16,7 +16,7 @@ import { useTheme } from '../../lib/ThemeContext';
 import { useBranding } from '../../lib/BrandingContext';
 import { ServerDiscordTab } from '../../components/server/ServerDiscordTab';
 import { ServerMonitoringTab } from '../../components/server/ServerMonitoringTab';
-import { ServerNetworkPlayitTab } from '../../components/server/ServerNetworkPlayitTab';
+import { ServerNetworkTab } from '../../components/server/ServerNetworkTab';
 import { ServerImporterTab } from '../../components/server/ServerImporterTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
@@ -49,7 +49,6 @@ interface ServerManageProps {
 export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab, onNavigate }) => {
   const { user } = useAuth();
   const { accentClasses } = useTheme();
-  const { enablePlayit } = useBranding();
 
   const [server, setServer] = useState<Server | null>(null);
   const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'importer' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers'>(
@@ -74,6 +73,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [powerLoadingAction, setPowerLoadingAction] = useState<'start' | 'stop' | 'restart' | 'kill' | null>(null);
 
   // Files state
   const [currentPath, setCurrentPath] = useState('/');
@@ -517,7 +517,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         setInstallProgressStep('Validating JAR integrity & atomic promotion...');
         setPluginNotice({
           type: 'success',
-          message: res.message || `Plugin '${item.name}' installed successfully (✓ Valid JAR). Restart the server to load it.`
+          message: res.message || `Plugin '${item.name}' installed successfully (Valid JAR). Restart the server to load it.`
         });
         setTimeout(() => {
           fetchPlugins();
@@ -566,7 +566,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       if (res.success) {
         setPluginNotice({
           type: 'success',
-          message: res.message || 'Plugin uploaded and verified successfully (✓ Valid JAR). Restart the server to load it.'
+          message: res.message || 'Plugin uploaded and verified successfully (Valid JAR). Restart the server to load it.'
         });
         fetchPlugins();
         setPluginTab('installed');
@@ -815,14 +815,20 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Power Actions
   const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
-    const res = await apiRequest(`/servers/${serverId}/power`, {
-      method: 'POST',
-      body: JSON.stringify({ action })
-    });
-    if (action === 'start' && res.success === false) {
-      runPreflightCheck();
+    if (powerLoadingAction) return;
+    setPowerLoadingAction(action);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/power`, {
+        method: 'POST',
+        body: JSON.stringify({ action })
+      });
+      if (action === 'start' && res.success === false) {
+        runPreflightCheck();
+      }
+      await fetchServerDetails();
+    } finally {
+      setPowerLoadingAction(null);
     }
-    fetchServerDetails();
   };
 
   // File Upload Handling
@@ -1237,110 +1243,185 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     return server?.permissions?.includes(perm);
   };
   const canManageSubusers = user?.role === 'admin' || user?.role === 'super_admin' || !server?.isSubuser || hasPerm('subusers.view') || hasPerm('subusers.create') || hasPerm('subusers.update') || hasPerm('subusers.delete');
+  const canStart = !server?.isSubuser || server?.permissions?.includes('server.start') || hasPerm('power.start');
+  const canRestart = !server?.isSubuser || server?.permissions?.includes('server.restart') || hasPerm('power.restart');
+  const canStop = !server?.isSubuser || server?.permissions?.includes('server.stop') || hasPerm('power.stop');
+  const canKill = !server?.isSubuser || server?.permissions?.includes('server.kill') || hasPerm('power.kill');
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
-      
-      {/* Top Breadcrumb & Hero Banner with Server-Type Wallpaper */}
-      <div className={`relative overflow-hidden p-6 rounded-2xl border transition-all ${
-        isMinecraft
-          ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/30 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.08)]'
-          : isPython
-          ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-blue-950/30 border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.08)]'
-          : isBun
-          ? 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/20 border-amber-500/20'
-          : 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-amber-950/20 border-zinc-800'
-      }`}>
-        {/* Subtle Background Pattern Overlay */}
-        <div className="absolute inset-0 pointer-events-none opacity-10 bg-[radial-gradient(#fbbf24_1px,transparent_1px)] [background-size:16px_16px]" />
-        {isMinecraft && (
-          <div className="absolute top-0 right-0 w-80 h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/15 via-transparent to-transparent pointer-events-none" />
-        )}
-        {isPython && (
-          <div className="absolute top-0 right-0 w-80 h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
-        )}
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-2">
+    <div className="space-y-5 p-4 sm:p-6 max-w-7xl mx-auto">
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          PTERODACTYL SERVER HEADER & CONTROL HERO
+      ───────────────────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          PTERODACTYL SERVER HEADER & CONTROL HERO
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="p-4 sm:p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-3.5">
+        {/* Top Breadcrumb row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--color-ink-mute)]">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => onNavigate('dashboard')}
-              className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer font-medium"
             >
-              <ArrowLeft className="h-3.5 w-3.5 text-amber-400" /> Back to Dashboard
+              <ArrowLeft className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+              <span>Servers</span>
             </button>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white font-sans tracking-tight break-words">{server.name}</h1>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-semibold border ${
-                server.status === 'running'
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                  : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-              }`}>
-                <span className={`h-2 w-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
-                <span className="capitalize">{server.status}</span>
-              </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono tracking-wider uppercase border ${
-                isMinecraft
-                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                  : isPython
-                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
-                  : isBun
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                  : 'bg-zinc-800 text-zinc-300 border-zinc-700'
-              }`}>
-                {isMinecraft ? 'MINECRAFT' : isPython ? 'PYTHON BOT' : isBun ? 'BUN BOT' : 'NODE.JS BOT'}
-              </span>
-            </div>
-            <p className="text-xs text-zinc-400 flex flex-wrap items-center gap-2">
-              <span className="font-medium text-zinc-300">{server.software} ({server.version})</span>
-              <span>•</span>
-              <span className="font-mono text-zinc-400">Node: {server.location}</span>
-            </p>
+            <span className="text-[var(--color-ink-mute)]">/</span>
+            <span className="text-[var(--color-ink)] font-semibold truncate max-w-xs">{server.name}</span>
           </div>
 
-          {/* IP & Power Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-950/90 border border-zinc-800 text-xs font-mono text-zinc-300 shadow-inner max-w-full truncate">
-              <span className="truncate">IP: <strong className="text-white font-mono">{fullIp}</strong></span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] text-[var(--color-ink-mute)] bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-line)]">
+              ID: {server.id.substring(0, 8)}
+            </span>
+            {server.isSubuser && (
+              <span className="font-mono text-[10px] text-[var(--color-accent)] bg-[var(--color-accent)]/10 px-2 py-0.5 rounded border border-[var(--color-accent)]/30">
+                Shared Access
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Server Title, Status, Real Specs, and Pterodactyl Power Buttons */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+          {/* Left: Icon, Server Name & Real Specs */}
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border border-[var(--color-line)] bg-[var(--color-surface-2)] text-[var(--color-accent)]">
+              {isMinecraft ? <Box className="h-5 w-5" /> : isPython ? <FileText className="h-5 w-5" /> : <TerminalIcon className="h-5 w-5" />}
+            </div>
+
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold text-[var(--color-ink)] tracking-tight break-words">
+                  {server.name}
+                </h1>
+
+                {/* Real-time Status Badge */}
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                  server.status === 'running'
+                    ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/40'
+                    : server.status === 'starting' || server.status === 'stopping'
+                    ? 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/40'
+                    : 'bg-[var(--color-surface-2)] text-[var(--color-ink-mute)] border-[var(--color-line)]'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    server.status === 'running'
+                      ? 'bg-[var(--color-ok)] animate-pulse'
+                      : server.status === 'starting' || server.status === 'stopping'
+                      ? 'bg-[var(--color-warn)] animate-spin'
+                      : 'bg-[var(--color-ink-mute)]'
+                  }`} />
+                  <span className="uppercase tracking-wider font-mono">
+                    {server.status}
+                  </span>
+                </span>
+              </div>
+
+              {/* Real Server Specs & Node Info */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-mute)]">
+                <span className="text-[var(--color-ink-dim)] font-medium">{server.software} ({server.version || 'Latest'})</span>
+                <span>·</span>
+                <span className="font-mono">Node: {server.location || 'Local Node'}</span>
+                <span>·</span>
+                <span className="font-mono">
+                  {formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)} RAM
+                </span>
+                <span>·</span>
+                <span className="font-mono">
+                  {server.limits?.cpuCores || 1} CPU Core{server.limits?.cpuCores && server.limits.cpuCores > 1 ? 's' : ''}
+                </span>
+                <span>·</span>
+                <span className="font-mono">
+                  {server.limits?.diskGB || 10} GB NVMe
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Address Quick Copy & Pterodactyl Power Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1-click Address Pill */}
+            <div
+              onClick={() => handleCopy(fullIp)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono text-[var(--color-ink-dim)] hover:border-[var(--color-accent)] transition-colors cursor-pointer group"
+              title="Click to copy server address"
+            >
+              <Wifi className="h-3.5 w-3.5 text-[var(--color-ink-mute)] group-hover:text-[var(--color-accent)] transition-colors" />
+              <span className="truncate max-w-[180px] sm:max-w-[220px]">
+                <strong className="text-[var(--color-ink)] font-mono">{fullIp}</strong>
+              </span>
               <button
-                onClick={() => handleCopy(fullIp)}
-                className="p-1 hover:text-white text-zinc-400 transition-colors shrink-0"
-                title="Copy Server IP"
+                type="button"
+                className="p-0.5 hover:text-[var(--color-ink)] text-[var(--color-ink-mute)] transition-colors shrink-0"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5">
-              {!isRunning ? (
+            {/* Pterodactyl Power Buttons Group */}
+            <div className="flex items-center gap-1 p-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)]">
+              {!isRunning && server.status !== 'starting' ? (
                 <button
+                  type="button"
+                  disabled={powerLoadingAction !== null || !canStart}
                   onClick={() => handlePowerAction('start')}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer active:scale-95"
+                  className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                  title="Start Server"
                 >
-                  <Play className="h-3.5 w-3.5 fill-white" />
-                  <span>Start Server</span>
+                  {powerLoadingAction === 'start' ? (
+                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                  )}
+                  <span>Start</span>
                 </button>
               ) : (
                 <>
                   <button
+                    type="button"
+                    disabled={powerLoadingAction !== null || !canRestart}
                     onClick={() => handlePowerAction('restart')}
-                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-warn)] hover:text-[var(--color-warn)] hover:bg-[var(--color-warn)]/10"
+                    title="Restart Server"
                   >
-                    <RotateCw className="h-3.5 w-3.5" />
+                    {powerLoadingAction === 'restart' ? (
+                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCw className="h-3.5 w-3.5" />
+                    )}
                     <span>Restart</span>
                   </button>
+
                   <button
+                    type="button"
+                    disabled={powerLoadingAction !== null || !canStop}
                     onClick={() => handlePowerAction('stop')}
-                    className="min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-rose-500/20 cursor-pointer active:scale-95"
+                    className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-err)] hover:text-[var(--color-err)] hover:bg-[var(--color-err)]/10"
+                    title="Gracefully Stop Server"
                   >
-                    <Square className="h-3.5 w-3.5 fill-white" />
+                    {powerLoadingAction === 'stop' ? (
+                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    )}
                     <span>Stop</span>
                   </button>
+
                   <button
+                    type="button"
+                    disabled={powerLoadingAction !== null || !canKill}
                     onClick={() => handlePowerAction('kill')}
-                    title="Kill Process Immediately"
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-zinc-900 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-all cursor-pointer"
+                    className="btn btn-danger text-xs py-1.5 px-2.5 flex items-center gap-1.5"
+                    title="Force Kill Process (Immediate SIGKILL)"
                   >
-                    <Skull className="h-3.5 w-3.5" />
+                    {powerLoadingAction === 'kill' ? (
+                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Skull className="h-3.5 w-3.5" />
+                    )}
+                    <span>Kill</span>
                   </button>
                 </>
               )}
@@ -1349,268 +1430,304 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </div>
       </div>
 
-      {/* Resource Metrics Strip - responsive 2 to 4 cols */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
-          <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-            <span>CPU Load</span>
-            <Cpu className="h-3.5 w-3.5 text-violet-400" />
-          </div>
-          <div className="text-sm sm:text-base font-bold text-white font-mono">{isRunning ? `${server.cpuUsage.toFixed(1)}%` : '0%'}</div>
-          <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-violet-500 rounded-full transition-all duration-500" style={{ width: `${isRunning ? Math.min(100, server.cpuUsage) : 0}%` }} />
-          </div>
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          PTERODACTYL 2-COLUMN LAYOUT: SIDEBAR SUB-NAVIGATION + TAB CONTENT
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        {/* Mobile / Compact screens quick select dropdown */}
+        <div className="w-full lg:hidden p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <label className="block text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)] mb-1">Server Navigation</label>
+          <select
+            value={activeTab}
+            onChange={(e) => handleTabSelect(e.target.value as any)}
+            className="w-full bg-[var(--color-surface-2)] border border-[var(--color-line)] text-[var(--color-ink)] text-xs font-medium rounded-md px-3 py-2 focus:outline-none focus:border-[var(--color-accent)]"
+          >
+            {hasPerm('console.view') && <option value="console">Console</option>}
+            {hasPerm('files.view') && <option value="files">File Manager</option>}
+            {hasPerm('databases.view') && <option value="databases">Databases ({databases.length})</option>}
+            {hasPerm('schedules.view') && <option value="schedules">Schedules ({schedules.length})</option>}
+            {canManageSubusers && <option value="subusers">Users</option>}
+            {hasPerm('backups.view') && <option value="backups">Backups ({backups.length})</option>}
+            {hasPerm('files.view') && <option value="network">Network & SFTP</option>}
+            {hasPerm('startup.update') && <option value="settings">Startup & Settings</option>}
+            {(hasPerm('console.view') || hasPerm('monitoring.view')) && <option value="monitoring">Monitoring & Metrics</option>}
+            {isMinecraft && hasPerm('plugins.view') && <option value="plugins">Plugins Manager</option>}
+            {isMinecraft && hasPerm('startup.update') && <option value="properties">Server Properties</option>}
+            {isBot && hasPerm('startup.update') && <option value="env">Environment (.env)</option>}
+            {hasPerm('files.create') && <option value="importer">Server Importer</option>}
+            {hasPerm('discord.manage') && <option value="discord">Discord Bot</option>}
+            {hasPerm('activity.view') && <option value="activity">Audit Activity</option>}
+          </select>
         </div>
 
-        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
-          <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-            <span>RAM Memory</span>
-            <Activity className="h-3.5 w-3.5 text-cyan-400" />
-          </div>
-          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {isRunning ? formatMemory(Math.min(server.ramUsageMB || 0, server.resources?.memoryMb || server.limits?.ramMB || 512)) : '0 MB'} / {formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)}
-          </div>
-          <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${isRunning ? Math.min(100, (Math.min(server.ramUsageMB || 0, server.resources?.memoryMb || server.limits?.ramMB || 512) / (server.resources?.memoryMb || server.limits?.ramMB || 512)) * 100) : 0}%` }} />
-          </div>
-        </div>
-
-        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
-          <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-            <span>NVMe Disk</span>
-            <HardDrive className="h-3.5 w-3.5 text-emerald-400" />
-          </div>
-          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {(server.diskUsageMB / 1024).toFixed(1)}GB / {server.limits?.diskGB || 10}GB
-          </div>
-          <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, (server.diskUsageMB / ((server.limits?.diskGB || 10) * 1024)) * 100)}%` }} />
-          </div>
-        </div>
-
-        <div className="p-3 sm:p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
-          <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-            <span>Container Uptime</span>
-            <Clock className="h-3.5 w-3.5 text-amber-400" />
-          </div>
-          <div className="text-sm sm:text-base font-bold text-white font-mono truncate">
-            {isRunning ? `${Math.floor(server.uptimeSeconds / 3600)}h ${Math.floor((server.uptimeSeconds % 3600) / 60)}m` : 'Offline'}
-          </div>
-          <span className="text-[10px] text-zinc-500">Auto-watchdog active</span>
-        </div>
-      </div>
-
-      {/* Tabs Navigation - Responsive Mobile Dropdown + Touch Horizontal Scroll Bar */}
-      <div className="space-y-2">
-        {/* Mobile / Tablet Quick Select Dropdown (< lg screens) */}
-        <div className="lg:hidden">
-                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Select Management View</label>
-                <select
-                  value={activeTab}
-                  onChange={(e) => handleTabSelect(e.target.value as any)}
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500"
-                >
-                  {hasPerm('console.view') && <option value="console">💻 Console Logs</option>}
-                  {(hasPerm('console.view') || hasPerm('monitoring.view')) && <option value="monitoring">📊 Monitoring & Metrics</option>}
-                  {hasPerm('files.view') && <option value="network">🌐 {enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</option>}
-                  {hasPerm('files.view') && <option value="files">📁 File Manager</option>}
-                  {hasPerm('files.create') && <option value="importer">🚀 Server Importer (Migration)</option>}
-                  {isMinecraft && hasPerm('plugins.view') && <option value="plugins">🧩 Plugins Manager</option>}
-                  {isMinecraft && hasPerm('startup.update') && <option value="properties">⚙️ Server Properties</option>}
-                  {isBot && hasPerm('startup.update') && <option value="env">🔑 Environment Variables</option>}
-                  {hasPerm('backups.view') && <option value="backups">💾 Backups ({backups.length})</option>}
-                  {hasPerm('databases.view') && <option value="databases">🗄️ Databases ({databases.length})</option>}
-                  {hasPerm('schedules.view') && <option value="schedules">⏱️ Schedules ({schedules.length})</option>}
-                  {hasPerm('discord.manage') && <option value="discord">💬 Discord Bot & Alerts</option>}
-                  {hasPerm('startup.update') && <option value="settings">⚡ Startup & Settings</option>}
-                  {hasPerm('activity.view') && <option value="activity">📋 Audit Log</option>}
-                  {canManageSubusers && <option value="subusers">👥 Subusers</option>}
-                </select>
-              </div>
-
-              {/* Scrollable Tabs Bar for lg+ screens */}
-        <div className="hidden lg:flex items-center gap-1.5 border-b border-zinc-800 overflow-x-auto pb-2 text-xs touch-scroll">
+        {/* Desktop Pterodactyl Left Sidebar Sub-Navigation */}
+        <aside className="hidden lg:block w-56 shrink-0 p-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-0.5 sticky top-6">
+          <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">Management</div>
           {hasPerm('console.view') && (
             <button
               onClick={() => handleTabSelect('console')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'console' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'console'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
               }`}
             >
-              <TerminalIcon className="h-4 w-4" />
-              <span>Console Logs</span>
-            </button>
-          )}
-
-          {(hasPerm('console.view') || hasPerm('monitoring.view')) && (
-            <button
-              onClick={() => handleTabSelect('monitoring')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'monitoring' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <Activity className="h-4 w-4" />
-              <span>Monitoring & Metrics</span>
-            </button>
-          )}
-
-          {hasPerm('files.view') && (
-            <button
-              onClick={() => handleTabSelect('network')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'network' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <Globe className="h-4 w-4" />
-              <span>{enablePlayit ? 'Network, SFTP & Playit' : 'Network & SFTP'}</span>
+              <div className="flex items-center gap-2.5">
+                <TerminalIcon className={`h-3.5 w-3.5 ${activeTab === 'console' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Console</span>
+              </div>
             </button>
           )}
 
           {hasPerm('files.view') && (
             <button
               onClick={() => handleTabSelect('files')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'files' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'files'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
               }`}
             >
-              <Folder className="h-4 w-4" />
-              <span>File Manager</span>
-            </button>
-          )}
-
-          {hasPerm('files.create') && (
-            <button
-              onClick={() => handleTabSelect('importer')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'importer' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <FolderInput className="h-4 w-4" />
-              <span>Server Importer</span>
-            </button>
-          )}
-
-          {isMinecraft && hasPerm('plugins.view') && (
-            <button
-              onClick={() => handleTabSelect('plugins')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'plugins' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <Box className="h-4 w-4" />
-              <span>Plugins Manager</span>
-            </button>
-          )}
-
-          {isMinecraft && hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('properties')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'properties' ? 'bg-amber-500 text-zinc-950 font-bold shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <Sliders className="h-4 w-4" />
-              <span>Server Properties</span>
-            </button>
-          )}
-
-          {isBot && hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('env')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'env' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <Key className="h-4 w-4" />
-              <span>Environment Variables</span>
-            </button>
-          )}
-
-          {hasPerm('backups.view') && (
-            <button
-              onClick={() => handleTabSelect('backups')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'backups' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <HardDrive className="h-4 w-4" />
-              <span>Backups ({backups.length})</span>
+              <div className="flex items-center gap-2.5">
+                <Folder className={`h-3.5 w-3.5 ${activeTab === 'files' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>File Manager</span>
+              </div>
             </button>
           )}
 
           {hasPerm('databases.view') && (
             <button
               onClick={() => handleTabSelect('databases')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'databases' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'databases'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
               }`}
             >
-              <Database className="h-4 w-4" />
-              <span>Databases ({databases.length})</span>
+              <div className="flex items-center gap-2.5">
+                <Database className={`h-3.5 w-3.5 ${activeTab === 'databases' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Databases</span>
+              </div>
+              {databases.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
+                  {databases.length}
+                </span>
+              )}
             </button>
           )}
 
           {hasPerm('schedules.view') && (
             <button
               onClick={() => handleTabSelect('schedules')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'schedules' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'schedules'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
               }`}
             >
-              <Clock className="h-4 w-4" />
-              <span>Schedules ({schedules.length})</span>
-            </button>
-          )}
-
-          {hasPerm('discord.manage') && (
-            <button
-              onClick={() => handleTabSelect('discord')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'discord' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <MessageSquare className="h-4 w-4" />
-              <span>Discord Bot</span>
-            </button>
-          )}
-
-          {hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('settings')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'settings' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <SettingsIcon className="h-4 w-4" />
-              <span>Startup & Settings</span>
-            </button>
-          )}
-
-          {hasPerm('activity.view') && (
-            <button
-              onClick={() => handleTabSelect('activity')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'activity' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Audit Log</span>
+              <div className="flex items-center gap-2.5">
+                <Clock className={`h-3.5 w-3.5 ${activeTab === 'schedules' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Schedules</span>
+              </div>
+              {schedules.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
+                  {schedules.length}
+                </span>
+              )}
             </button>
           )}
 
           {canManageSubusers && (
             <button
               onClick={() => handleTabSelect('subusers')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer ${
-                activeTab === 'subusers' ? 'bg-violet-600 text-white shadow-md' : 'text-zinc-400 hover:text-white bg-zinc-900/60'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'subusers'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
               }`}
             >
-              <Shield className="h-4 w-4" />
-              <span>Subusers</span>
+              <div className="flex items-center gap-2.5">
+                <Shield className={`h-3.5 w-3.5 ${activeTab === 'subusers' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Users</span>
+              </div>
             </button>
           )}
-        </div>
-      </div>
+
+          {hasPerm('backups.view') && (
+            <button
+              onClick={() => handleTabSelect('backups')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'backups'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <HardDrive className={`h-3.5 w-3.5 ${activeTab === 'backups' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Backups</span>
+              </div>
+              {backups.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
+                  {backups.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {hasPerm('files.view') && (
+            <button
+              onClick={() => handleTabSelect('network')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'network'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className={`h-3.5 w-3.5 ${activeTab === 'network' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Network</span>
+              </div>
+            </button>
+          )}
+
+          {hasPerm('startup.update') && (
+            <button
+              onClick={() => handleTabSelect('settings')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'settings'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <SettingsIcon className={`h-3.5 w-3.5 ${activeTab === 'settings' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Startup & Settings</span>
+              </div>
+            </button>
+          )}
+
+          {(hasPerm('console.view') || hasPerm('monitoring.view')) && (
+            <button
+              onClick={() => handleTabSelect('monitoring')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'monitoring'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Activity className={`h-3.5 w-3.5 ${activeTab === 'monitoring' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Monitoring</span>
+              </div>
+            </button>
+          )}
+
+          {/* Configuration sub-section */}
+          {(isMinecraft || isBot || hasPerm('files.create') || hasPerm('discord.manage') || hasPerm('activity.view')) && (
+            <div className="pt-2 pb-1 px-2.5 text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)] border-t border-[var(--color-line)] mt-2">
+              Configuration
+            </div>
+          )}
+
+          {isMinecraft && hasPerm('plugins.view') && (
+            <button
+              onClick={() => handleTabSelect('plugins')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'plugins'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Box className={`h-3.5 w-3.5 ${activeTab === 'plugins' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Plugins</span>
+              </div>
+            </button>
+          )}
+
+          {isMinecraft && hasPerm('startup.update') && (
+            <button
+              onClick={() => handleTabSelect('properties')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'properties'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sliders className={`h-3.5 w-3.5 ${activeTab === 'properties' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Properties</span>
+              </div>
+            </button>
+          )}
+
+          {isBot && hasPerm('startup.update') && (
+            <button
+              onClick={() => handleTabSelect('env')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'env'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Key className={`h-3.5 w-3.5 ${activeTab === 'env' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>.env Config</span>
+              </div>
+            </button>
+          )}
+
+          {hasPerm('files.create') && (
+            <button
+              onClick={() => handleTabSelect('importer')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'importer'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <FolderInput className={`h-3.5 w-3.5 ${activeTab === 'importer' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Importer</span>
+              </div>
+            </button>
+          )}
+
+          {hasPerm('discord.manage') && (
+            <button
+              onClick={() => handleTabSelect('discord')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'discord'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className={`h-3.5 w-3.5 ${activeTab === 'discord' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Discord</span>
+              </div>
+            </button>
+          )}
+
+          {hasPerm('activity.view') && (
+            <button
+              onClick={() => handleTabSelect('activity')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                activeTab === 'activity'
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <FileText className={`h-3.5 w-3.5 ${activeTab === 'activity' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                <span>Audit Log</span>
+              </div>
+            </button>
+          )}
+        </aside>
+
+        {/* Right Main Content Area */}
+        <div className="flex-1 min-w-0 w-full">
 
       {/* TAB 1: CONSOLE LOGS */}
       {activeTab === 'console' && (
@@ -1637,10 +1754,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </TabTransition>
       )}
 
-      {/* TAB: NETWORK, SFTP & PLAYIT.GG */}
+      {/* TAB: NETWORK, SFTP & ALLOCATIONS */}
       {activeTab === 'network' && (
         <TabTransition>
-          <ServerNetworkPlayitTab server={server} onRefreshServer={fetchServerDetails} />
+          <ServerNetworkTab server={server} onRefreshServer={fetchServerDetails} />
         </TabTransition>
       )}
 
@@ -1708,10 +1825,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </div>
               <button
                 onClick={() => setPluginNotice(null)}
-                className="text-zinc-400 hover:text-white text-xs px-1"
+                className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                 title="Dismiss"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -1777,8 +1894,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                                     <AlertTriangle className="h-3 w-3 shrink-0" />
                                     Paper failed to load plugin
                                   </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 font-mono border border-zinc-700">
-                                    ✓ Valid JAR
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 font-mono border border-zinc-700 inline-flex items-center gap-1">
+                                    <Check className="w-2.5 h-2.5 text-zinc-400" /> Valid JAR
                                   </span>
                                 </div>
                                 {plug.paperError && (
@@ -1795,8 +1912,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                                   }`}>
                                     {plug.isEnabled ? 'Installed' : 'Disabled'}
                                   </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 font-mono border border-emerald-500/20">
-                                    ✓ Valid JAR
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 font-mono border border-emerald-500/20 inline-flex items-center gap-1">
+                                    <Check className="w-2.5 h-2.5 text-emerald-400" /> Valid JAR
                                   </span>
                                 </div>
                                 {plug.paperStatus === 'LOADED' && (
@@ -1942,9 +2059,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                   </div>
                   <button
                     onClick={() => setSelectedPluginDetails(null)}
-                    className="p-1 text-zinc-400 hover:text-white text-sm"
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
@@ -2761,7 +2878,10 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                 </div>
 
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-2">
-                  <p className="font-bold">⚠️ Warning: Active Files Replacement</p>
+                  <div className="flex items-center gap-2 font-bold text-amber-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Warning: Active Files Replacement</span>
+                  </div>
                   <p className="text-[11px] leading-relaxed text-amber-200/90">
                     Restoring this backup will stop the server and extract all backup contents directly into your server root filesystem directory, replacing existing server configuration and world files.
                   </p>
@@ -3670,15 +3790,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-semibold">Java {v}</span>
                                   {isRecommended && (
-                                    <span className="text-[9px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-md font-bold font-sans">
-                                      ✦ Recommended
+                                    <span className="text-[9px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-md font-bold font-sans inline-flex items-center gap-1">
+                                      <Sparkles className="w-2.5 h-2.5 text-violet-400" /> Recommended
                                     </span>
                                   )}
                                 </div>
                               </div>
                               <div className="text-[11px] font-mono">
                                 {detected?.available ? (
-                                  <span className="text-emerald-400 font-semibold">✓ Installed</span>
+                                  <span className="text-emerald-400 font-semibold inline-flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-400" /> Installed
+                                  </span>
                                 ) : (
                                   <span className="text-zinc-500">Not Installed</span>
                                 )}
@@ -3702,9 +3824,15 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                               <span className="text-zinc-500">Compatibility:</span>
                               <div className="font-mono mt-0.5">
                                 {parseInt(javaVersion.replace(/[^0-9]/g, ''), 10) >= getRecommendedJava(server?.version) ? (
-                                  <span className="text-emerald-400 font-bold">✓ Compatible</span>
+                                  <span className="text-emerald-400 font-bold inline-flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Compatible</span>
+                                  </span>
                                 ) : (
-                                  <span className="text-rose-400 font-bold">⚠️ Incompatible</span>
+                                  <span className="text-rose-400 font-bold inline-flex items-center gap-1">
+                                    <AlertCircle className="h-3.5 w-3.5" />
+                                    <span>Incompatible</span>
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -4302,9 +4430,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
               </h3>
               <button
                 onClick={() => setShowReinstallModal(false)}
-                className="p-1 text-zinc-500 hover:text-white text-sm"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-850 transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -4404,32 +4532,35 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </div>
       )}
 
+        </div>
+      </div>
+
       {/* Delete Database Modal */}
       {deletingDb && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-rose-500/30 p-6 rounded-3xl space-y-4">
-            <h3 className="text-lg font-bold text-rose-400 flex items-center gap-2">
-              <AlertOctagon className="h-5 w-5 text-rose-500" /> Delete Database
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-line)] p-6 rounded-lg space-y-4 anim-scale-in">
+            <h3 className="text-base font-semibold text-[var(--color-err)] flex items-center gap-2">
+              <AlertOctagon className="h-4 w-4" /> Delete Database
             </h3>
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to permanently drop database schema <strong className="text-white font-mono">{deletingDb.name}</strong> and revoke user <strong className="text-white font-mono">{deletingDb.username}</strong>?
+            <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+              Are you sure you want to permanently drop database schema <strong className="text-[var(--color-ink)] font-mono">{deletingDb.name}</strong> and revoke user <strong className="text-[var(--color-ink)] font-mono">{deletingDb.username}</strong>?
             </p>
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-md bg-[var(--color-err)]/10 border border-[var(--color-err)]/30 text-[var(--color-err)] text-xs flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>All tables, rows, and data stored in this database will be irreversibly erased from the SQL host.</span>
             </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-line)]">
               <button
                 onClick={() => setDeletingDb(null)}
                 disabled={isDeletingDb}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 rounded-xl"
+                className="btn btn-ghost text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDeleteDatabase}
                 disabled={isDeletingDb}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs rounded-xl flex items-center gap-2 disabled:opacity-50"
+                className="btn btn-danger text-xs flex items-center gap-1.5"
               >
                 {isDeletingDb ? (
                   <>
@@ -4450,31 +4581,29 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
       {/* Delete Server Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-rose-500/30 p-6 rounded-3xl space-y-4">
-            <h3 className="text-lg font-bold text-rose-400 flex items-center gap-2">
-              <AlertOctagon className="h-5 w-5 text-rose-500" /> Delete Server Permanently
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-line)] p-6 rounded-lg space-y-4 anim-scale-in">
+            <h3 className="text-base font-semibold text-[var(--color-err)] flex items-center gap-2">
+              <AlertOctagon className="h-4 w-4" /> Delete Server Permanently
             </h3>
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              This action cannot be undone. To confirm deletion, please type the exact server name <strong className="text-white font-mono">{server.name}</strong> below:
+            <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+              This action cannot be undone. To confirm deletion, please type the exact server name <strong className="text-[var(--color-ink)] font-mono">{server.name}</strong> below:
             </p>
             <input
               type="text"
               value={deleteConfirmInput}
               onChange={(e) => setDeleteConfirmInput(e.target.value)}
               placeholder={server.name}
-              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white font-mono"
+              className="field w-full text-xs font-mono"
             />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 bg-zinc-900 text-xs text-zinc-300 rounded-xl">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-line)]">
+              <button onClick={() => setShowDeleteModal(false)} className="btn btn-ghost text-xs">
                 Cancel
               </button>
               <button
                 onClick={handleDeleteServer}
                 disabled={deleteConfirmInput !== server.name || isDeleting}
-                className={`px-4 py-2 rounded-xl text-xs text-white font-semibold transition-all ${
-                  deleteConfirmInput === server.name ? 'bg-rose-600 hover:bg-rose-500' : 'bg-rose-900/50 text-zinc-500 cursor-not-allowed'
-                }`}
+                className="btn btn-danger text-xs"
               >
                 {isDeleting ? 'Deleting...' : 'Delete Server'}
               </button>
@@ -4486,3 +4615,4 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     </div>
   );
 };
+

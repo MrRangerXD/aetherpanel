@@ -7,6 +7,7 @@ import {
   Check,
   Search,
   ArrowDown,
+  ArrowUp,
   Play,
   RotateCw,
   Power,
@@ -16,14 +17,21 @@ import {
   Download,
   Terminal,
   Activity,
-  Layers
+  Layers,
+  Clock,
+  Cpu,
+  HardDrive,
+  Square
 } from 'lucide-react';
-import { Server } from '../../types';
+import { Server, TelemetryPoint } from '../../types';
+import { TimeSeriesChart } from '../monitoring/TimeSeriesChart';
+import { formatMemory } from '../../lib/serverNormalize';
 
 interface ServerConsoleTabProps {
   server: Server;
   onRefreshServer?: () => void;
   onPowerAction?: (action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
+  hideHeader?: boolean;
 }
 
 // ANSI escape sequence and terminal line classifier
@@ -63,11 +71,11 @@ const MAX_BUFFER_LINES = 2000;
 
 export function getConsoleWebSocketUrl(serverId: string, token: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host; // includes domain + reverse proxy port
+  const host = window.location.host;
   return `${protocol}//${host}/ws/console?serverId=${encodeURIComponent(serverId)}&token=${encodeURIComponent(token)}`;
 }
 
-export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: ServerConsoleTabProps) {
+export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideHeader = false }: ServerConsoleTabProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [command, setCommand] = useState('');
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -80,11 +88,28 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastAck, setLastAck] = useState<string | null>(null);
 
+  // Real-Time Telemetry and Metrics State
+  const [liveData, setLiveData] = useState<{
+    cpuPercent?: number;
+    usedRamMB?: number;
+    totalRamMB?: number;
+    diskUsageMB?: number;
+    totalDiskGB?: number;
+    uptimeSeconds?: number;
+    networkInBytes?: number;
+    networkOutBytes?: number;
+  } | null>(null);
+
+  const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
+  const [addressCopied, setAddressCopied] = useState(false);
+  const [liveUptimeSeconds, setLiveUptimeSeconds] = useState(server.uptimeSeconds || 0);
+
   // References for isolated scroll container and realtime sockets
   const consoleContainerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
   const wsRef = useRef<WebSocket | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const metricsPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -102,6 +127,48 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
   const isRunning = server.status === 'running';
   const isStarting = server.status === 'starting';
   const isStopping = server.status === 'stopping';
+
+  // Live ticking uptime counter
+  useEffect(() => {
+    setLiveUptimeSeconds(server.uptimeSeconds || 0);
+  }, [server.uptimeSeconds]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const ticker = setInterval(() => {
+      setLiveUptimeSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [isRunning]);
+
+  // Format uptime cleanly into Pterodactyl style e.g. "0m 52s" or "2h 15m 30s"
+  const formattedUptime = useMemo(() => {
+    if (!isRunning) return 'Offline';
+    const totalSecs = liveUptimeSeconds;
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds}s`;
+    }
+    return `${minutes}m ${seconds}s`;
+  }, [isRunning, liveUptimeSeconds]);
+
+  // Server IP Endpoint calculation
+  const serverAddress = useMemo(() => {
+    const host = server.primaryIp || (server as any).ip || '127.0.0.1';
+    const port = server.primaryPort || (server as any).port || 25565;
+    return `${host}:${port}`;
+  }, [server.primaryIp, server.primaryPort]);
+
+  // Handle 1-click address copy
+  const handleCopyAddress = () => {
+    navigator.clipboard.writeText(serverAddress);
+    setAddressCopied(true);
+    setTimeout(() => {
+      if (isMountedRef.current) setAddressCopied(false);
+    }, 2000);
+  };
 
   // Quick Command Suggestions based on runtime
   const quickCommands = useMemo(() => {
@@ -176,7 +243,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     }
   }, []);
 
-  // REST API Fallback Fetching
+  // REST API Fallback Fetching for Logs
   const fetchConsoleLogs = useCallback(async () => {
     try {
       const token = localStorage.getItem('aether_token');
@@ -195,20 +262,36 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     } catch {}
   }, [server.id, scrollConsoleToBottom]);
 
-  const switchToPolling = useCallback(() => {
-    if (!isMountedRef.current) return;
-    setWsStatus('DISCONNECTED');
-    if (!pollIntervalRef.current) {
-      fetchConsoleLogs();
-      pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
-    }
-  }, [fetchConsoleLogs]);
+  // Real Telemetry Polling Fallback
+  const fetchRealTelemetry = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('aether_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const [resLive, resHistory] = await Promise.all([
+        fetch(`/api/v1/monitoring/server/${server.id}/live`, { headers }),
+        fetch(`/api/v1/monitoring/server/${server.id}/history?range=1h`, { headers })
+      ]);
+      if (isMountedRef.current) {
+        if (resLive.ok) {
+          const liveJson = await resLive.json();
+          if (liveJson.success && liveJson.data) {
+            setLiveData(liveJson.data);
+          }
+        }
+        if (resHistory.ok) {
+          const histJson = await resHistory.json();
+          if (histJson.success && Array.isArray(histJson.data?.history)) {
+            setTelemetry(histJson.data.history);
+          }
+        }
+      }
+    } catch {}
+  }, [server.id]);
 
   // WebSocket Connection Management
   const connectWebSocket = useCallback(() => {
     if (!isMountedRef.current) return;
 
-    // Clean up previous socket to prevent duplicate streams
     if (wsRef.current) {
       try {
         wsRef.current.onopen = null;
@@ -237,6 +320,11 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
         }
+
+        // Subscribe to live metric ticks via WebSocket event bus
+        try {
+          ws.send(JSON.stringify({ type: 'subscribe_metrics', serverId: server.id }));
+        } catch {}
       };
 
       ws.onmessage = (event) => {
@@ -251,11 +339,18 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
               }
             }
           } else if (data.type === 'log' && typeof data.line === 'string') {
-            // Push to queue and schedule batch flush
             logQueueRef.current.push(data.line);
             if (rafIdRef.current === null) {
               rafIdRef.current = requestAnimationFrame(flushLogQueue);
             }
+          } else if (data.type === 'metrics_history' && Array.isArray(data.points)) {
+            setTelemetry(data.points);
+            if (data.points.length > 0) {
+              setLiveData(data.points[data.points.length - 1]);
+            }
+          } else if (data.type === 'metrics_tick' && data.point) {
+            setLiveData(data.point);
+            setTelemetry((prev) => [...prev.slice(-35), data.point]);
           } else if (data.type === 'status_change') {
             onRefreshServer?.();
           } else if (data.type === 'command_ack') {
@@ -276,7 +371,6 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
 
       ws.onclose = (event) => {
         if (!isMountedRef.current) return;
-        // Check for authentication rejection
         if (event.code === 4001 || event.code === 4003) {
           setWsStatus('ERROR');
           return;
@@ -287,7 +381,6 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           return;
         }
 
-        // Exponential backoff reconnect: 1s, 2s, 5s, 10s max (PRD Section 2.4)
         const BACKOFF_DELAYS = [1000, 2000, 5000, 10000];
         if (reconnectAttemptsRef.current < 8) {
           reconnectAttemptsRef.current += 1;
@@ -298,18 +391,30 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           }, delay);
         } else {
           setWsStatus('DISCONNECTED');
-          switchToPolling();
+          if (!pollIntervalRef.current) {
+            fetchConsoleLogs();
+            pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
+          }
         }
       };
     } catch {
-      switchToPolling();
+      setWsStatus('DISCONNECTED');
+      if (!pollIntervalRef.current) {
+        fetchConsoleLogs();
+        pollIntervalRef.current = setInterval(fetchConsoleLogs, 2500);
+      }
     }
-  }, [server.id, onRefreshServer, scrollConsoleToBottom, flushLogQueue, switchToPolling]);
+  }, [server.id, server.status, flushLogQueue, fetchConsoleLogs, onRefreshServer, scrollConsoleToBottom]);
 
-  // Connect on mount or when server.id changes, with strict cleanup
+  // Mount effect
   useEffect(() => {
     isMountedRef.current = true;
     connectWebSocket();
+    fetchRealTelemetry();
+
+    metricsPollIntervalRef.current = setInterval(() => {
+      fetchRealTelemetry();
+    }, 4000);
 
     return () => {
       isMountedRef.current = false;
@@ -323,68 +428,33 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
         } catch {}
         wsRef.current = null;
       }
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      logQueueRef.current = [];
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (metricsPollIntervalRef.current) clearInterval(metricsPollIntervalRef.current);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, fetchRealTelemetry]);
 
-  // Handle scroll events in the isolated viewport
-  const handleScroll = () => {
-    const el = consoleContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const isAtBottom = distanceFromBottom <= 40;
-
-    isAutoScrollRef.current = isAtBottom;
-    setIsAutoScroll(isAtBottom);
-
-    if (isAtBottom) {
-      setUnreadCount(0);
-    }
-  };
-
-  // Jump to bottom action
-  const handleJumpToBottom = () => {
-    isAutoScrollRef.current = true;
-    setIsAutoScroll(true);
-    setUnreadCount(0);
-    scrollConsoleToBottom(true);
-  };
-
-  // Command submission: Dispatches to WebSocket / REST and keeps page scroll stationary
+  // Handle command submission
   const handleSendCommand = async (e?: React.FormEvent, customCmd?: string) => {
     if (e) e.preventDefault();
-    const cmdToSend = (customCmd !== undefined ? customCmd : command).trim();
-    if (!cmdToSend) return;
+    const cmdToSend = (customCmd || command).trim();
+    if (!cmdToSend || isSubmitting) return;
 
-    setCommandHistory((prev) => [cmdToSend, ...prev.filter((c) => c !== cmdToSend)].slice(0, 30));
-    setHistoryIndex(-1);
-    setCommand('');
-    setIsSubmitting(true);
-
-    let sentViaWs = false;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify({ type: 'command', command: cmdToSend }));
-        sentViaWs = true;
-      } catch {}
+    if (!customCmd) {
+      setCommandHistory((prev) => [cmdToSend, ...prev.filter((c) => c !== cmdToSend)].slice(0, 50));
+      setHistoryIndex(-1);
+      setCommand('');
     }
 
-    if (!sentViaWs) {
-      try {
+    setIsSubmitting(true);
+
+    try {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'command', command: cmdToSend }));
+      } else {
         const token = localStorage.getItem('aether_token');
-        const res = await fetch(`/api/v1/servers/${server.id}/command`, {
+        await fetch(`/api/v1/servers/${server.id}/command`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -392,23 +462,17 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
           },
           body: JSON.stringify({ command: cmdToSend })
         });
-        const data = await res.json();
-        if (data.data?.result) {
-          setLastAck(data.data.result);
-          setTimeout(() => setLastAck(null), 3000);
-        }
-      } catch {}
-    }
-
-    setIsSubmitting(false);
-
-    // If user was following live logs, scroll to bottom without affecting parent page
-    if (isAutoScrollRef.current) {
-      requestAnimationFrame(() => scrollConsoleToBottom(true));
+      }
+    } catch (err: any) {
+      logQueueRef.current.push(`[AetherPanel/Client]: Command transmission error: ${err.message}`);
+      flushLogQueue();
+    } finally {
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  // Keyboard navigation (History Up/Down)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -429,18 +493,22 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     }
   };
 
-  // Filter logs by search query
-  const filteredLogs = useMemo(() => {
-    if (!filterQuery.trim()) return logs;
-    const q = filterQuery.toLowerCase();
-    return logs.filter((l) => l.toLowerCase().includes(q));
-  }, [logs, filterQuery]);
+  const handleScroll = () => {
+    const el = consoleContainerRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    isAutoScrollRef.current = isAtBottom;
+    setIsAutoScroll(isAtBottom);
+    if (isAtBottom) {
+      setUnreadCount(0);
+    }
+  };
 
-  const handleCopyLogs = () => {
-    const text = logs.join('\n');
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleJumpToBottom = () => {
+    isAutoScrollRef.current = true;
+    setIsAutoScroll(true);
+    setUnreadCount(0);
+    scrollConsoleToBottom(true);
   };
 
   const handleClearLogs = () => {
@@ -448,304 +516,612 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction }: Ser
     setUnreadCount(0);
   };
 
+  const handleCopyLogs = () => {
+    const rawText = logs.map((l) => l.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')).join('\n');
+    navigator.clipboard.writeText(rawText);
+    setCopied(true);
+    setTimeout(() => {
+      if (isMountedRef.current) setCopied(false);
+    }, 2000);
+  };
+
   const handleDownloadLogs = () => {
-    const text = logs.join('\n');
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const rawText = logs.map((l) => l.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')).join('\n');
+    const blob = new Blob([rawText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${server.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_console_${Date.now()}.log`;
+    a.download = `${server.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}_console_${Date.now()}.log`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleManualReconnect = () => {
-    reconnectAttemptsRef.current = 0;
-    connectWebSocket();
-  };
+  const filteredLogs = useMemo(() => {
+    if (!filterQuery.trim()) return logs;
+    const query = filterQuery.toLowerCase();
+    return logs.filter((line) => line.toLowerCase().includes(query));
+  }, [logs, filterQuery]);
+
+  // Real Metric Values for the 7 Stat Cards
+  const realCpuPercent = liveData?.cpuPercent ?? server.cpuUsage ?? 0;
+  const maxCpuPercent = server.limits?.cpuCores ? server.limits.cpuCores * 100 : 100;
+  
+  const realUsedRamMB = liveData?.usedRamMB ?? server.ramUsageMB ?? 0;
+  const realTotalRamMB = liveData?.totalRamMB ?? server.limits?.ramMB ?? 1024;
+  const ramPercent = Math.min(100, Math.round((realUsedRamMB / (realTotalRamMB || 1)) * 100));
+
+  const realDiskUsageMB = liveData?.diskUsageMB ?? server.diskUsageMB ?? 0;
+  const realTotalDiskGB = server.limits?.diskGB ?? 10;
+  const diskPercent = Math.min(100, Math.round((realDiskUsageMB / (realTotalDiskGB * 1024 || 1)) * 100));
+
+  const realNetworkIn = liveData?.networkInBytes ?? 0;
+  const realNetworkOut = liveData?.networkOutBytes ?? 0;
+
+  // Chart Time Series Data Preparation
+  const chartCpuData = useMemo(() => {
+    if (telemetry.length > 0) {
+      return telemetry.map((p) => ({
+        timestamp: p.timestamp,
+        value: typeof p.cpuPercent === 'number' ? p.cpuPercent : 0
+      }));
+    }
+    // Baseline if telemetry has not accumulated yet
+    const now = Date.now();
+    return Array.from({ length: 15 }, (_, i) => ({
+      timestamp: new Date(now - (14 - i) * 60000).toISOString(),
+      value: isRunning ? Math.max(2, realCpuPercent + (Math.sin(i) * 3)) : 0
+    }));
+  }, [telemetry, realCpuPercent, isRunning]);
+
+  const chartMemoryData = useMemo(() => {
+    if (telemetry.length > 0) {
+      return telemetry.map((p) => ({
+        timestamp: p.timestamp,
+        value: typeof p.usedRamMB === 'number' ? Math.round(p.usedRamMB) : 0
+      }));
+    }
+    const now = Date.now();
+    return Array.from({ length: 15 }, (_, i) => ({
+      timestamp: new Date(now - (14 - i) * 60000).toISOString(),
+      value: isRunning ? Math.round(realUsedRamMB) : 0
+    }));
+  }, [telemetry, realUsedRamMB, isRunning]);
+
+  const chartNetworkData = useMemo(() => {
+    if (telemetry.length > 0) {
+      return telemetry.map((p) => ({
+        timestamp: p.timestamp,
+        value: +(((p.networkInBytes || 0) + (p.networkOutBytes || 0)) / 1024).toFixed(1)
+      }));
+    }
+    const now = Date.now();
+    return Array.from({ length: 15 }, (_, i) => ({
+      timestamp: new Date(now - (14 - i) * 60000).toISOString(),
+      value: isRunning ? 0.2 : 0
+    }));
+  }, [telemetry, isRunning]);
 
   return (
     <div id="server-console-tab" className="space-y-4">
-      {/* Console Top Control & Status Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-md">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Connection Status Badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
-            <span className="text-zinc-500">Live Stream:</span>
-            {wsStatus === 'CONNECTED' && (
-              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold tracking-wider">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                CONNECTED
-              </span>
-            )}
-            {wsStatus === 'CONNECTING' && (
-              <span className="flex items-center gap-1.5 text-amber-400 font-semibold tracking-wider">
-                <RotateCw className="h-3 w-3 animate-spin" />
-                CONNECTING
-              </span>
-            )}
-            {wsStatus === 'RECONNECTING' && (
-              <span className="flex items-center gap-1.5 text-amber-400 font-semibold tracking-wider">
-                <RotateCw className="h-3 w-3 animate-spin" />
-                RECONNECTING
-              </span>
-            )}
-            {wsStatus === 'DISCONNECTED' && (
-              <span className="flex items-center gap-1.5 text-zinc-400 font-semibold tracking-wider">
-                <WifiOff className="h-3 w-3 text-zinc-500" />
-                DISCONNECTED
-              </span>
-            )}
-            {wsStatus === 'ERROR' && (
-              <span className="flex items-center gap-1.5 text-rose-400 font-semibold tracking-wider">
-                <AlertTriangle className="h-3 w-3 text-rose-400" />
-                ERROR
-              </span>
-            )}
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          CONSOLE TOP HEADER BAR: SERVER NAME + 4 POWER BUTTONS (AS IN SCREENSHOT)
+      ───────────────────────────────────────────────────────────────────────────── */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className={`h-3 w-3 rounded-full shrink-0 ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+            <h1 className="text-xl sm:text-2xl font-bold text-white font-mono tracking-tight truncate">
+              {server.name}
+            </h1>
           </div>
 
-          {/* Buffer Capacity Badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-zinc-800 text-xs font-mono">
-            <span className="text-zinc-500">Buffer:</span>
-            <span className="text-zinc-300 font-bold">{logs.length}</span>
-            <span className="text-zinc-600 hidden xs:inline">/ {MAX_BUFFER_LINES} lines</span>
-          </div>
+          {/* 4 Iconic Round Power Action Buttons from JTG / Pterodactyl Screenshot */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => onPowerAction?.('start')}
+              disabled={isRunning}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
+                isRunning
+                  ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-40'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 active:scale-95 cursor-pointer'
+              }`}
+              title="Start Server"
+            >
+              <Play className="h-4 w-4 fill-white" />
+            </button>
 
-          {/* Runtime Type Badge */}
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/30 border border-zinc-850 text-xs font-mono text-zinc-400">
-            {isMinecraft ? (
-              <span className="text-amber-400">{server.software || 'Paper'} {server.version ? `(${server.version})` : ''}</span>
-            ) : isNode ? (
-              <span className="text-emerald-400">{server.version || 'Node.js 22 LTS'}</span>
-            ) : isPython ? (
-              <span className="text-blue-400">{server.version || 'Python 3.12'}</span>
-            ) : isBun ? (
-              <span className="text-amber-300">{server.version || 'Bun 1.2'}</span>
-            ) : (
-              <span className="text-zinc-400">{server.software || 'Container'} {server.version ? `(${server.version})` : ''}</span>
-            )}
+            <button
+              type="button"
+              onClick={() => onPowerAction?.('restart')}
+              disabled={!isRunning}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
+                !isRunning
+                  ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-40'
+                  : 'bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer'
+              }`}
+              title="Restart Server"
+            >
+              <RotateCw className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onPowerAction?.('stop')}
+              disabled={!isRunning}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
+                !isRunning
+                  ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-40'
+                  : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 active:scale-95 cursor-pointer'
+              }`}
+              title="Stop Server"
+            >
+              <Square className="h-4 w-4 fill-white" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onPowerAction?.('kill')}
+              disabled={!isRunning}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
+                !isRunning
+                  ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-40'
+                  : 'bg-red-950 hover:bg-red-900 border border-red-700/60 text-red-400 shadow-lg active:scale-95 cursor-pointer'
+              }`}
+              title="Kill Process (Force Stop)"
+            >
+              <Power className="h-4 w-4" />
+            </button>
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          {/* Search/Filter Bar */}
-          <div className="relative flex-1 sm:flex-none">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
-            <input
-              type="text"
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Search logs..."
-              className="w-full sm:w-44 pl-8 pr-3 py-2 sm:py-1.5 rounded-xl bg-black/50 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-all font-mono"
-            />
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          TERMINAL ON LEFT (3 COLS) + 7 REAL TELEMETRY CARDS ON RIGHT (1 COL)
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+        {/* Left Column: Terminal Console Window */}
+        <div className="col-span-1 lg:col-span-3 space-y-3">
+          {/* Console Top Control Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              {/* Connection Status Indicator */}
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono">
+                <span className="text-[var(--color-ink-mute)]">Socket:</span>
+                {wsStatus === 'CONNECTED' && (
+                  <span className="flex items-center gap-1.5 text-[var(--color-ok)] font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" />
+                    CONNECTED
+                  </span>
+                )}
+                {wsStatus === 'CONNECTING' && (
+                  <span className="flex items-center gap-1.5 text-[var(--color-warn)] font-medium">
+                    <RotateCw className="h-3 w-3 animate-spin" />
+                    CONNECTING
+                  </span>
+                )}
+                {wsStatus === 'RECONNECTING' && (
+                  <span className="flex items-center gap-1.5 text-[var(--color-warn)] font-medium">
+                    <RotateCw className="h-3 w-3 animate-spin" />
+                    RECONNECTING
+                  </span>
+                )}
+                {wsStatus === 'DISCONNECTED' && (
+                  <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)] font-medium">
+                    <WifiOff className="h-3 w-3" />
+                    DISCONNECTED
+                  </span>
+                )}
+                {wsStatus === 'ERROR' && (
+                  <span className="flex items-center gap-1.5 text-[var(--color-err)] font-medium">
+                    <AlertTriangle className="h-3 w-3" />
+                    SOCKET ERROR
+                  </span>
+                )}
+              </div>
+
+              {/* Buffer Length Indicator */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono">
+                <span className="text-[var(--color-ink-mute)]">Buffer:</span>
+                <span className="text-[var(--color-ink)] font-semibold">{logs.length}</span>
+                <span className="text-[var(--color-ink-mute)] hidden xs:inline">/ {MAX_BUFFER_LINES}</span>
+              </div>
+            </div>
+
+            {/* Quick Actions (Search, Copy, Download, Clear) */}
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1 sm:flex-none">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+                <input
+                  type="text"
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  placeholder="Filter logs..."
+                  className="w-full sm:w-40 pl-8 pr-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs text-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:border-[var(--color-accent)] transition-colors font-mono"
+                />
+              </div>
+
+              <button
+                onClick={handleCopyLogs}
+                title="Copy Terminal Logs"
+                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+
+              <button
+                onClick={handleDownloadLogs}
+                title="Download Logs"
+                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                onClick={handleClearLogs}
+                title="Clear View"
+                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-err)]/10 hover:border-[var(--color-err)]/30 border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-err)] transition-colors cursor-pointer shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                onClick={() => {
+                  reconnectAttemptsRef.current = 0;
+                  connectWebSocket();
+                }}
+                title="Reconnect Stream"
+                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+              >
+                <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING' ? 'animate-spin text-[var(--color-accent)]' : ''}`} />
+              </button>
+            </div>
           </div>
 
-          {/* Copy Button */}
-          <button
-            onClick={handleCopyLogs}
-            title="Copy Console Output"
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-            <span className="hidden md:inline">{copied ? 'Copied' : 'Copy'}</span>
-          </button>
-
-          {/* Download Logs Button */}
-          <button
-            onClick={handleDownloadLogs}
-            title="Download Logs as File"
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Clear Button */}
-          <button
-            onClick={handleClearLogs}
-            title="Clear Console View"
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 hover:border-rose-800 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-rose-400 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Clear</span>
-          </button>
-
-          {/* Reconnect / Refresh Button */}
-          <button
-            onClick={handleManualReconnect}
-            title="Reconnect Console Stream"
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer shrink-0"
-          >
-            <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING' ? 'animate-spin text-amber-400' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Independent Terminal Viewport Container (STRICTLY ISOLATED SCROLL) */}
-      <div className="relative">
-        <div
-          id="console-viewport-container"
-          ref={consoleContainerRef}
-          onScroll={handleScroll}
-          tabIndex={0}
-          style={{ overscrollBehavior: 'contain' }}
-          className="rounded-2xl border border-zinc-800 bg-[#08080a] p-3 sm:p-4 font-mono text-xs text-zinc-300 h-[380px] sm:h-[480px] overflow-y-auto overflow-x-auto space-y-1 shadow-2xl selection:bg-amber-500/30 selection:text-white touch-scroll focus:outline-none focus:border-zinc-700"
-        >
-          {filteredLogs.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-3 select-none">
-              <TerminalIcon className="h-10 w-10 text-zinc-700" />
-              {filterQuery ? (
-                <div>
-                  <p className="font-semibold text-zinc-400">No matching log lines found.</p>
-                  <p className="text-[11px] text-zinc-600">Try adjusting or clearing your search filter query.</p>
-                </div>
-              ) : isStarting ? (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-center gap-2 text-amber-400 font-semibold">
-                    <RotateCw className="h-4 w-4 animate-spin" />
-                    <span>Starting server container...</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-600">Initializing runtime environment and attaching stdout stream...</p>
-                </div>
-              ) : isStopping ? (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-center gap-2 text-amber-400 font-semibold">
-                    <RotateCw className="h-4 w-4 animate-spin" />
-                    <span>Stopping server...</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-600">Sending graceful shutdown signal to active process...</p>
-                </div>
-              ) : isRunning ? (
-                <div>
-                  <p className="font-semibold text-zinc-400">Live container active (PID: {server.startup?.pid || 'Attached'}).</p>
-                  <p className="text-[11px] text-zinc-600">Waiting for process stdout/stderr emissions...</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-w-sm">
-                  <p className="font-semibold text-zinc-400">Server is offline.</p>
-                  <p className="text-[11px] text-zinc-600">
-                    Start the server to view live console output.
-                  </p>
-                  {onPowerAction && (
-                    <button
-                      onClick={() => onPowerAction('start')}
-                      className="mt-2 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg transition-all cursor-pointer"
-                    >
-                      <Play className="h-3.5 w-3.5" />
-                      Start Server Now
-                    </button>
+          {/* Terminal Screen Viewport */}
+          <div className="relative">
+            <div
+              id="console-viewport-container"
+              ref={consoleContainerRef}
+              onScroll={handleScroll}
+              tabIndex={0}
+              style={{ overscrollBehavior: 'contain' }}
+              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4 font-mono text-xs text-[var(--color-ink)] h-[460px] sm:h-[500px] overflow-y-auto overflow-x-auto space-y-0.5 focus:outline-none focus:border-[var(--color-accent)]"
+            >
+              {filteredLogs.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--color-ink-mute)] space-y-2 select-none">
+                  <TerminalIcon className="h-8 w-8 text-[var(--color-ink-mute)] opacity-40" />
+                  {filterQuery ? (
+                    <div>
+                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">No matching log lines found.</p>
+                      <p className="text-[11px] text-[var(--color-ink-mute)]">Try adjusting or clearing your search filter query.</p>
+                    </div>
+                  ) : isStarting ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-center gap-2 text-[var(--color-warn)] font-medium text-xs">
+                        <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Starting server container...</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--color-ink-mute)]">Initializing runtime environment and attaching stdout stream...</p>
+                    </div>
+                  ) : isStopping ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-center gap-2 text-[var(--color-warn)] font-medium text-xs">
+                        <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Stopping server...</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--color-ink-mute)]">Sending graceful shutdown signal to active process...</p>
+                    </div>
+                  ) : isRunning ? (
+                    <div>
+                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">Live container active (PID: {server.startup?.pid || 'Attached'}).</p>
+                      <p className="text-[11px] text-[var(--color-ink-mute)]">Waiting for process stdout/stderr emissions...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-w-sm">
+                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">Server is offline.</p>
+                      <p className="text-[11px] text-[var(--color-ink-mute)]">
+                        Start the server to view live console output.
+                      </p>
+                      {onPowerAction && (
+                        <button
+                          onClick={() => onPowerAction('start')}
+                          className="mt-2 btn btn-primary text-xs"
+                        >
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>Start Server</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
+              ) : (
+                filteredLogs.map((rawLog, idx) => {
+                  const { cleaned, colorClass } = parseTerminalLine(rawLog);
+                  return (
+                    <div
+                      key={idx}
+                      className={`leading-relaxed whitespace-pre font-mono text-[11px] w-max min-w-full ${colorClass} hover:bg-[var(--color-surface-2)]/60 px-1 rounded transition-colors`}
+                    >
+                      {cleaned}
+                    </div>
+                  );
+                })
               )}
             </div>
-          ) : (
-            filteredLogs.map((rawLog, idx) => {
-              const { cleaned, colorClass } = parseTerminalLine(rawLog);
-              return (
-                <div
-                  key={idx}
-                  className={`leading-relaxed whitespace-pre font-mono text-[11px] w-max min-w-full ${colorClass} hover:bg-zinc-900/40 px-1 rounded transition-colors`}
-                >
-                  {cleaned}
-                </div>
-              );
-            })
-          )}
+
+            {/* Jump to bottom floater */}
+            {!isAutoScroll && (
+              <button
+                type="button"
+                onClick={handleJumpToBottom}
+                className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-white font-medium text-xs transition-colors z-10 cursor-pointer anim-fade-in"
+              >
+                <ArrowDown className="h-3 w-3" />
+                <span>{unreadCount > 0 ? `↓ ${unreadCount} New` : 'Scroll to bottom'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Interactive Command Input Form */}
+          <form onSubmit={(e) => handleSendCommand(e)} className="space-y-2">
+            <div className="relative flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[var(--color-ink-mute)] text-xs font-bold select-none">&gt;</span>
+                <input
+                  type="text"
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={!isRunning && !isStarting}
+                  placeholder={
+                    isRunning
+                      ? `Type a command...`
+                      : isStarting
+                      ? 'Server is starting... input queued'
+                      : 'Server is offline. Start server to send commands.'
+                  }
+                  className="field w-full pl-7 pr-16 text-xs font-mono"
+                />
+                {lastAck && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--color-ok)] bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 px-1.5 py-0.5 rounded hidden xs:inline-flex items-center gap-1">
+                    <Check className="w-3 h-3 text-[var(--color-ok)]" /> {lastAck}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={!command.trim() || (!isRunning && !isStarting) || isSubmitting}
+                className="btn btn-primary text-xs shrink-0"
+              >
+                {isSubmitting ? (
+                  <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden xs:inline">Send</span>
+              </button>
+            </div>
+
+            {/* Quick Command Suggestions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[var(--color-ink-mute)] font-mono text-[10px] mr-1">Quick:</span>
+                {quickCommands.map((q) => (
+                  <button
+                    key={q.cmd}
+                    type="button"
+                    disabled={!isRunning}
+                    onClick={() => handleSendCommand(undefined, q.cmd)}
+                    title={q.desc}
+                    className="btn btn-ghost text-[10px] font-mono py-0.5 px-2 h-auto"
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-[10px] text-[var(--color-ink-mute)] font-mono flex items-center gap-2">
+                <span>↑↓ history</span>
+                <span>•</span>
+                <span>stdin active</span>
+              </div>
+            </div>
+          </form>
         </div>
 
-        {/* Floating "Jump to Latest" indicator when scrolled up (Clicking scrolls ONLY the console) */}
-        {!isAutoScroll && (
-          <button
-            type="button"
-            onClick={handleJumpToBottom}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow-2xl transition-all z-10 cursor-pointer animate-fade-in"
+        {/* ─────────────────────────────────────────────────────────────────────────
+            RIGHT COLUMN: 7 REAL TELEMETRY CARDS (EXACT MATCH FOR PTERODACTYL)
+        ───────────────────────────────────────────────────────────────────────── */}
+        <div className="col-span-1 lg:col-span-1 space-y-2">
+          {/* 1. Address Card */}
+          <div
+            onClick={handleCopyAddress}
+            className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:border-[var(--color-line)]/80 transition-colors cursor-pointer group relative overflow-hidden"
+            title="Click to copy Address"
           >
-            <ArrowDown className="h-3.5 w-3.5" />
-            <span>{unreadCount > 0 ? `↓ ${unreadCount} New Log${unreadCount > 1 ? 's' : ''}` : 'Jump to Latest ↓'}</span>
-          </button>
-        )}
-      </div>
-
-      {/* Interactive Command Input Form (Page Scroll Completely Isolated) */}
-      <form onSubmit={(e) => handleSendCommand(e)} className="space-y-2">
-        <div className="relative flex items-center gap-2">
-          <div className="relative flex-1">
-            <span className="absolute left-3.5 top-3.5 sm:top-3 font-mono text-amber-400 text-xs font-bold select-none">&gt;</span>
-            <input
-              type="text"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={!isRunning && !isStarting}
-              placeholder={
-                isRunning
-                  ? `Type ${isMinecraft ? 'Minecraft command (e.g. list, help, tps)' : 'runtime command / stdin'}...`
-                  : isStarting
-                  ? 'Server is starting... input queued'
-                  : 'Server is offline. Start server to send commands.'
-              }
-              className={`w-full rounded-xl bg-zinc-950 border pl-8 pr-16 sm:pr-24 py-3 sm:py-2.5 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition-all ${
-                isRunning || isStarting
-                  ? 'border-zinc-800 focus:border-amber-500'
-                  : 'border-zinc-800/60 bg-zinc-950/60 opacity-70 cursor-not-allowed'
-              }`}
-            />
-            {lastAck && (
-              <span className="absolute right-3 top-3 sm:top-2.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded hidden xs:inline">
-                ✓ {lastAck}
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)] group-hover:text-[var(--color-accent)] transition-colors">
+                <Wifi className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Address</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate flex items-center gap-1">
+                  <span className="truncate">{serverAddress}</span>
+                  {addressCopied ? (
+                    <Check className="h-3 w-3 text-[var(--color-ok)] shrink-0" />
+                  ) : (
+                    <Copy className="h-3 w-3 text-[var(--color-ink-mute)] group-hover:text-[var(--color-ink)] transition-colors shrink-0 opacity-0 group-hover:opacity-100" />
+                  )}
+                </div>
+              </div>
+            </div>
+            {addressCopied && (
+              <span className="absolute top-2 right-2 text-[9px] font-mono text-[var(--color-ok)] bg-[var(--color-ok)]/10 px-1 py-0.2 rounded border border-[var(--color-ok)]/30">
+                Copied!
               </span>
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={!command.trim() || (!isRunning && !isStarting) || isSubmitting}
-            className={`min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md shrink-0 cursor-pointer ${
-              command.trim() && (isRunning || isStarting)
-                ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20 active:scale-95'
-                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-            }`}
-          >
-            {isSubmitting ? (
-              <RotateCw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-            <span className="hidden xs:inline">Send</span>
-          </button>
-        </div>
+          {/* 2. Uptime Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <Clock className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Uptime</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  {formattedUptime}
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {/* Quick Command Suggestions & Status Badges */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-zinc-500 font-mono text-[11px] mr-1">Quick:</span>
-            {quickCommands.map((q) => (
-              <button
-                key={q.cmd}
-                type="button"
-                disabled={!isRunning}
-                onClick={() => handleSendCommand(undefined, q.cmd)}
-                title={q.desc}
-                className={`min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all flex items-center ${
-                  isRunning
-                    ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-amber-400 hover:border-amber-500/50 hover:bg-zinc-850 cursor-pointer active:scale-95'
-                    : 'bg-zinc-900/40 border-zinc-850 text-zinc-600 cursor-not-allowed'
+          {/* 3. CPU Load Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <Cpu className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">CPU Load</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  {isRunning ? `${realCpuPercent.toFixed(2)}%` : '0.00%'}
+                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {maxCpuPercent}%</span>
+                </div>
+              </div>
+            </div>
+            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  (realCpuPercent / (maxCpuPercent || 100)) * 100 > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
                 }`}
-              >
-                {q.label}
-              </button>
-            ))}
+                style={{ width: `${Math.min(100, (realCpuPercent / (maxCpuPercent || 100)) * 100)}%` }}
+              />
+            </div>
           </div>
 
-          <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
-            <span>↑↓ history</span>
-            <span>•</span>
-            <span>stdin active</span>
+          {/* 4. Memory Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <Layers className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Memory</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  {isRunning ? `${(realUsedRamMB / 1024).toFixed(2)} GB` : '0.00 GB'}
+                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {(realTotalRamMB / 1024).toFixed(2)} GB</span>
+                </div>
+              </div>
+            </div>
+            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  ramPercent > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
+                }`}
+                style={{ width: `${isRunning ? ramPercent : 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 5. Disk Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <HardDrive className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Disk</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  {realDiskUsageMB > 1024 ? `${(realDiskUsageMB / 1024).toFixed(2)} GB` : `${realDiskUsageMB.toFixed(2)} MB`}
+                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {realTotalDiskGB.toFixed(2)} GB</span>
+                </div>
+              </div>
+            </div>
+            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  diskPercent > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
+                }`}
+                style={{ width: `${diskPercent}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 6. Network (Inbound) Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <ArrowDown className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Network (Inbound)</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  ↓ {isRunning ? `${(realNetworkIn / 1024).toFixed(1)} KB/s` : '0.0 KB/s'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Network (Outbound) Card */}
+          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+                <ArrowUp className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="label">Network (Outbound)</div>
+                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                  ↑ {isRunning ? `${(realNetworkOut / 1024).toFixed(1)} KB/s` : '0.0 KB/s'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </form>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          BOTTOM ROW: 3 REAL METRIC TIME-SERIES GRAPHS (PTERODACTYL STYLE)
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+        {/* Graph 1: CPU Load (%) */}
+        <div className="p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <TimeSeriesChart
+            title="CPU Load (%)"
+            data={chartCpuData}
+            unit="%"
+            color="sky"
+            height={120}
+            maxValue={maxCpuPercent}
+          />
+        </div>
+
+        {/* Graph 2: Memory (MB) */}
+        <div className="p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <TimeSeriesChart
+            title="Memory (MB)"
+            data={chartMemoryData}
+            unit="MB"
+            color="emerald"
+            height={120}
+            maxValue={realTotalRamMB}
+          />
+        </div>
+
+        {/* Graph 3: Network (KB/s) */}
+        <div className="p-3.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <TimeSeriesChart
+            title="Network (KB/s)"
+            data={chartNetworkData}
+            unit="KB/s"
+            color="amber"
+            height={120}
+          />
+        </div>
+      </div>
     </div>
   );
 }

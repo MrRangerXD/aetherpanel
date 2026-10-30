@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Gamepad2, Bot, Check, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
-import { useTheme } from '../../lib/ThemeContext';
+import { Gamepad2, Bot, Check, ArrowRight } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 
@@ -9,7 +8,6 @@ interface PricingProps {
 }
 
 export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
-  const { accentClasses } = useTheme();
   const [activeCategory, setActiveCategory] = useState<'minecraft' | 'bot'>('minecraft');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -40,47 +38,55 @@ export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
   });
 
   return (
-    <div className="space-y-12 py-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="space-y-10 py-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="text-center max-w-3xl mx-auto space-y-4">
-        <h1 className="text-4xl font-extrabold text-white">Transparent, Scalable Pricing</h1>
-        <p className="text-sm text-zinc-400">
-          No hidden fees or bandwidth limits. Select your product and deploy your server instantly.
+      <div className="text-center max-w-2xl mx-auto space-y-3">
+        <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-ink)] tracking-tight">Simple, Scalable Pricing</h1>
+        <p className="text-xs text-[var(--color-ink-mute)]">
+          No hidden fees or bandwidth limits. Select your plan and deploy your container in seconds.
         </p>
 
         {/* Category Switcher */}
-        <div className="pt-4 flex items-center justify-center gap-2">
+        <div className="pt-3 flex items-center justify-center gap-1.5">
           <button
             onClick={() => setActiveCategory('minecraft')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              activeCategory === 'minecraft' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeCategory === 'minecraft'
+                ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-line)]'
+                : 'text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] border border-transparent'
             }`}
           >
-            <Gamepad2 className="h-4 w-4" />
+            <Gamepad2 className="h-3.5 w-3.5 text-[var(--color-accent)]" />
             <span>Minecraft Hosting</span>
           </button>
           <button
             onClick={() => setActiveCategory('bot')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              activeCategory === 'bot' ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/20' : 'bg-zinc-900 text-zinc-400 hover:text-white'
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeCategory === 'bot'
+                ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-line)]'
+                : 'text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] border border-transparent'
             }`}
           >
-            <Bot className="h-4 w-4" />
+            <Bot className="h-3.5 w-3.5 text-[var(--color-accent)]" />
             <span>Discord Bot Hosting</span>
           </button>
         </div>
 
         {/* Billing Cycle Switcher */}
-        <div className="pt-2 flex items-center justify-center gap-3">
-          <span className={`text-xs ${billingCycle === 'monthly' ? 'text-white font-bold' : 'text-zinc-500'}`}>Monthly</span>
+        <div className="pt-1 flex items-center justify-center gap-2.5">
+          <span className={`text-xs ${billingCycle === 'monthly' ? 'text-[var(--color-ink)] font-semibold' : 'text-[var(--color-ink-mute)]'}`}>Monthly</span>
           <button
+            type="button"
             onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-            className="w-11 h-6 rounded-full bg-zinc-800 p-1 flex items-center relative"
+            className="w-9 h-5 rounded-full bg-[var(--color-surface-2)] border border-[var(--color-line)] p-0.5 flex items-center cursor-pointer"
           >
-            <div className={`h-4 w-4 rounded-full bg-violet-500 transition-transform ${billingCycle === 'yearly' ? 'translate-x-5' : ''}`} />
+            <div className={`h-3.5 w-3.5 rounded-full bg-[var(--color-accent)] transition-transform ${billingCycle === 'yearly' ? 'translate-x-4' : ''}`} />
           </button>
-          <span className={`text-xs ${billingCycle === 'yearly' ? 'text-white font-bold' : 'text-zinc-500'}`}>
-            Yearly (17% OFF)
+          <span className={`text-xs flex items-center gap-1.5 ${billingCycle === 'yearly' ? 'text-[var(--color-ink)] font-semibold' : 'text-[var(--color-ink-mute)]'}`}>
+            <span>Yearly</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-[var(--color-ok)] border border-[var(--color-ok)]/40 bg-[var(--color-ok)]/10">
+              17% OFF
+            </span>
           </span>
         </div>
       </div>
@@ -88,77 +94,101 @@ export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
       {/* Plans Grid */}
       {loading ? (
         <div className="flex justify-center items-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-[var(--color-accent)] border-t-transparent"></div>
         </div>
       ) : activePlans.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 text-sm">
+        <div className="text-center py-16 text-[var(--color-ink-mute)] text-xs">
           No active plans available for this category.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {activePlans.map((p) => {
             const price = billingCycle === 'yearly' ? (p.priceYearly / 12).toFixed(2) : p.priceMonthly.toFixed(2);
+            const isFree = p.priceMonthly === 0;
+
             return (
               <div
                 key={p.id}
-                className={`rounded-3xl p-6 bg-zinc-900/80 border flex flex-col justify-between relative transition-all ${
-                  p.isPopular ? 'border-violet-500 shadow-xl shadow-violet-500/10 bg-zinc-900' : 'border-zinc-800 hover:border-zinc-700'
+                className={`rounded-lg p-5 surface border flex flex-col justify-between transition-colors hover:border-[var(--color-accent)]/50 ${
+                  p.isPopular ? 'border-[var(--color-accent)] bg-[var(--color-surface-2)]' : 'border-[var(--color-line)]'
                 }`}
               >
-                {p.isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-bold bg-violet-600 text-white uppercase tracking-wider">
-                    Popular Choice
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-[var(--color-ink)]">{p.name}</h3>
+                    {isFree ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-[var(--color-ok)] border border-[var(--color-ok)]/40 bg-[var(--color-ok)]/10">
+                        FREE
+                      </span>
+                    ) : p.isPopular ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-[var(--color-accent)] border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10">
+                        POPULAR
+                      </span>
+                    ) : null}
                   </div>
-                )}
 
-                <div className="space-y-4">
-                  <h3 className="text-xl font-bold text-white">{p.name}</h3>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-white">${price}</span>
-                    <span className="text-xs text-zinc-400">/mo</span>
+                  <p className="text-xs text-[var(--color-ink-dim)] line-clamp-2">
+                    {p.description || 'High-performance cloud container.'}
+                  </p>
+
+                  <div className="flex items-baseline gap-1 py-1">
+                    {isFree ? (
+                      <span className="text-2xl font-bold text-[var(--color-ok)] font-sans">FREE</span>
+                    ) : (
+                      <>
+                        <span className="text-2xl font-bold text-[var(--color-ink)] font-mono tabular-nums">${price}</span>
+                        <span className="text-xs text-[var(--color-ink-mute)] font-mono">/mo</span>
+                      </>
+                    )}
                   </div>
 
-                  <div className="space-y-2 text-xs pt-4 border-t border-zinc-800 text-zinc-300">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
-                      <span>{p.ramMB >= 1024 ? `${p.ramMB / 1024}GB RAM` : `${p.ramMB}MB RAM`}</span>
+                  {/* Specs Box */}
+                  <div className="p-3 rounded-md surface-2 border border-[var(--color-line)] space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="label">RAM</span>
+                      <span className="text-[var(--color-ink)] font-medium">{p.ramMB >= 1024 ? `${p.ramMB / 1024} GB RAM` : `${p.ramMB} MB`}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
-                      <span>{p.cpuCores} vCPU Core{p.cpuCores > 1 ? 's' : ''}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="label">CPU</span>
+                      <span className="text-[var(--color-ink)] font-medium">{p.cpuCores} vCPU</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
-                      <span>{p.diskGB}GB NVMe Storage</span>
+                    <div className="flex items-center justify-between">
+                      <span className="label">Storage</span>
+                      <span className="text-[var(--color-ink)] font-medium">{p.diskGB} GB NVMe</span>
                     </div>
+                  </div>
+
+                  {/* Feature Checklist */}
+                  <div className="space-y-1.5 text-xs pt-1 border-t border-[var(--color-line)] text-[var(--color-ink-dim)]">
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
+                      <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" />
                       <span>{p.backupLimit} Backup Slot{p.backupLimit > 1 ? 's' : ''}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
-                      <span>{p.databaseLimit} Database Instance{p.databaseLimit > 1 ? 's' : ''}</span>
+                      <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" />
+                      <span>{p.databaseLimit} MySQL Database{p.databaseLimit > 1 ? 's' : ''}</span>
                     </div>
-                    {p.features && p.features.slice(0, 2).map((feat, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-400" />
-                        <span>{feat}</span>
-                      </div>
-                    ))}
+                    <div className="flex items-center gap-2">
+                      <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" />
+                      <span>DDoS Scrubbing</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" />
+                      <span>Instant Deployment</span>
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => onNavigate('deploy', { planId: p.id, productCategory: activeCategory })}
-                  className={`w-full mt-6 py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition-all ${
-                    p.isPopular
-                      ? `bg-gradient-to-r ${accentClasses.gradient} text-white shadow-md hover:opacity-95`
-                      : 'bg-zinc-800 text-white hover:bg-zinc-700'
-                  }`}
-                >
-                  <span>Deploy Now</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('deploy', { planId: p.id, productCategory: activeCategory })}
+                    className="btn btn-primary w-full text-xs py-2 flex items-center justify-center gap-1.5"
+                  >
+                    <span>Deploy {p.name}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             );
           })}

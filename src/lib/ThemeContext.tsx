@@ -370,12 +370,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       case 'golden':
       default:
         return {
-          text: 'text-amber-400',
-          bg: 'bg-amber-500',
-          border: 'border-amber-500/30',
-          ring: 'focus:ring-amber-500/50',
-          gradient: 'from-amber-500 via-yellow-500 to-amber-600',
-          shadow: 'shadow-amber-500/20'
+          text: 'text-orange-400',
+          bg: 'bg-gradient-to-r from-orange-500 to-amber-500',
+          border: 'border-orange-500/25',
+          ring: 'focus:ring-orange-500/40',
+          gradient: 'from-orange-500 via-amber-500 to-yellow-400',
+          shadow: 'shadow-orange-500/10'
         };
     }
   };

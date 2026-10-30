@@ -1,25 +1,89 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Gamepad2, Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
-  Globe2, ArrowRight, Server, Clock, ChevronDown, Shield,
-  Activity, Database, Calendar, RefreshCw, Check, Copy, ExternalLink,
-  FolderTree, History, CheckCircle2
+  Cpu, Zap, ShieldCheck, HardDrive,
+  ArrowRight, Clock, ChevronDown, Shield,
+  Check, ChevronRight, Star, FolderTree, History
 } from 'lucide-react';
 import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
-import { Plan } from '../../types';
+import { Plan, Product } from '../../types';
+import { Marquee } from '../../components/ui/Marquee';
 
 interface HomeProps {
   onNavigate: (page: string, params?: any) => void;
 }
 
+const ScrollReveal: React.FC<{ children: React.ReactNode; className?: string; delayMs?: number }> = ({
+  children,
+  className = '',
+  delayMs = 0
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      style={{ transitionDelay: `${delayMs}ms` }}
+      className={`transition-all duration-300 ease-out ${
+        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+      } ${className}`}
+    >
+      {children}
+    </div>
+  );
+};
+
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { heroDescription, brandName, homepageConfig = {} } = useBranding();
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [currencySymbol, setCurrencySymbol] = useState<string>('€');
   const [faqs, setFaqs] = useState<any[]>([]);
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<'minecraft' | 'bot'>('minecraft');
-  const [copiedIp, setCopiedIp] = useState(false);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [plansRes, prodRes, setRes] = await Promise.all([
+          apiRequest('/public/plans'),
+          apiRequest('/public/products'),
+          apiRequest('/public/settings')
+        ]);
+
+        if (plansRes.success && Array.isArray(plansRes.data)) {
+          setPlans(plansRes.data);
+        }
+        if (prodRes.success && Array.isArray(prodRes.data)) {
+          setProducts(prodRes.data.filter((p: Product) => p.isActive));
+        }
+        if (setRes.success && setRes.data?.currencySymbol) {
+          setCurrencySymbol(setRes.data.currencySymbol);
+        }
+      } catch (err: any) {
+        console.error('Failed to load public data:', err);
+      }
+    };
+    loadData();
+  }, []);
 
   useEffect(() => {
     const loadFaqs = async () => {
@@ -32,28 +96,45 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           const defaultFaqs = [
             {
               id: 'faq-1',
-              question: 'How fast will my server or bot deploy after checkout?',
-              answer: 'Deployments are fully automated. As soon as your order is confirmed, our orchestrator allocates dedicated RAM and NVMe storage, initializes your isolated Docker container, and boots your instance in under 30 seconds.'
+              category: 'plans',
+              question: 'Can I upgrade my plan later?',
+              answer: 'Yes, you can upgrade your plan at any time through our control panel with instant resource allocation and zero downtime.'
             },
             {
               id: 'faq-2',
-              question: 'What hardware powers AetherPanel nodes?',
-              answer: 'We exclusively deploy enterprise AMD Ryzen 9 7950X and 9950X processors boosting up to 5.7GHz, coupled with PCIe Gen4 enterprise NVMe arrays and ECC DDR5 5600MHz memory to prevent TPS lag and chunk hitches.'
+              category: 'free',
+              question: 'How can I get more server slots on the free panel?',
+              answer: 'You can earn more server slots by completing community milestones, participating in Discord events, or upgrading to any of our affordable plans.'
             },
             {
               id: 'faq-3',
-              question: 'Is DDoS mitigation included with every plan?',
-              answer: 'Yes. Every instance is protected by always-on 3.2+ Tbps automated BGP Anycast hardware scrubbing that drops volumetric layer 3, 4, and 7 attacks without disconnecting active players or increasing packet ping.'
+              category: 'auth',
+              question: "How can I know my account's password if I logged in with Discord on the free panel?",
+              answer: 'If you logged in via Discord OAuth, you can set a custom account password at any time via Account Settings or using the reset password feature.'
             },
             {
               id: 'faq-4',
-              question: 'Can I migrate my existing Minecraft worlds or bot scripts?',
-              answer: 'Absolutely. Use our Web SFTP manager, fast browser drag-and-drop uploader, or 1-click ZIP extractor to import existing server worlds, plugins, configuration files, and Node.js, Python, or Go scripts immediately.'
+              category: 'infrastructure',
+              question: 'Where are your servers located?',
+              answer: 'Our high-performance nodes are located in premier Tier-3 datacenters across North America and Europe, optimized for ultra-low ping and 99.99% uptime.'
             },
             {
               id: 'faq-5',
-              question: 'Can I upgrade or scale resources without losing data?',
-              answer: 'Yes. Upgrading CPU cores, RAM, and NVMe disk space is seamless and instantaneous. Your databases, worlds, and configurations remain completely intact during resource reallocation.'
+              category: 'billing',
+              question: 'What payment methods do you accept?',
+              answer: 'We accept all major credit/debit cards, PayPal, Google Pay, Apple Pay, and popular cryptocurrencies.'
+            },
+            {
+              id: 'faq-6',
+              category: 'free',
+              question: 'What are the current max limits for resources when creating a server on the free tier?',
+              answer: 'Free tier resources include up to 2GB DDR5 RAM, 1 shared vCPU core, and 10GB high-speed NVMe Gen4 storage with automated DDoS mitigation.'
+            },
+            {
+              id: 'faq-7',
+              category: 'policy',
+              question: 'What are the most common reasons for server suspension?',
+              answer: 'Common reasons include cryptocurrency mining, port scanning or stress testing, hosting malicious files, and repeated Terms of Service violations.'
             }
           ];
           setFaqs(defaultFaqs);
@@ -66,976 +147,676 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     loadFaqs();
   }, []);
 
+  const userTestimonials = useMemo(() => [
+    {
+      id: 'rev-1',
+      name: 'Clover Jordan',
+      role: 'CUSTOMER',
+      quote: 'Honestly, this is one of the better server hosting sites that I have used! Easy, good support when something breaks, and always is fixed within one hour! All good!'
+    },
+    {
+      id: 'rev-2',
+      name: 'propilot5000',
+      role: 'CUSTOMER',
+      quote: 'They offer a really fair amount of resources for free and they have an active support team!'
+    },
+    {
+      id: 'rev-3',
+      name: 'Yusuf Enes Keleş',
+      role: 'CUSTOMER',
+      quote: 'In one word, it is an excellent hosting provider, I recommend it to everyone to use it.'
+    }
+  ], []);
+
+  const availableCategories = useMemo(() => {
+    if (products.length > 0) {
+      return products.map(p => ({
+        id: p.category || (p.slug === 'bot' ? 'bot' : 'minecraft'),
+        name: p.name,
+        slug: p.slug,
+        productId: p.id,
+        description: p.description
+      }));
+    }
+    return [
+      { id: 'minecraft', name: 'Minecraft', slug: 'minecraft', productId: 'prod_minecraft', description: 'Single-thread dominance powered by AMD Ryzen 9 7950X silicon and PCIe Gen4 NVMe arrays for zero TPS drops.' },
+      { id: 'bot', name: 'Bot', slug: 'bot', productId: 'prod_bot', description: 'Deploy your bots on high-performance nodes with dedicated resources and 24/7 uptime.' }
+    ];
+  }, [products]);
+
+  const [activeCategoryTab, setActiveCategoryTab] = useState<string>('minecraft');
+
+  const currentCategoryMeta = useMemo(() => {
+    return availableCategories.find(c => c.id === activeCategoryTab) || availableCategories[0];
+  }, [availableCategories, activeCategoryTab]);
+
+  const categoryPlans = useMemo(() => {
+    const isBot = activeCategoryTab === 'bot';
+    const filtered = plans.filter(p => {
+      if (isBot) return p.productId === 'prod_bot' || p.id.startsWith('plan_bot');
+      return p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc');
+    });
+
+    if (filtered.length > 0) {
+      return filtered.sort((a, b) => a.ramMB - b.ramMB);
+    }
+
+    if (isBot) {
+      return [
+        { id: 'plan_bot_free', name: 'Free Bot Tier', description: 'Small bots & testing.', priceMonthly: 0.00, ramMB: 512, cpuCores: 0.5, diskGB: 10, isFree: true },
+        { id: 'plan_bot_starter', name: 'Tier 1', description: 'Small bots.', priceMonthly: 1.00, ramMB: 1024, cpuCores: 1, diskGB: 10 },
+        { id: 'plan_bot_basic', name: 'Tier 2', description: 'Medium community bot.', priceMonthly: 2.20, ramMB: 2048, cpuCores: 1.5, diskGB: 20 },
+        { id: 'plan_bot_pro', name: 'Tier 3', description: 'Multi-shard active bot.', priceMonthly: 4.50, ramMB: 4096, cpuCores: 2, diskGB: 35 },
+        { id: 'plan_bot_cluster', name: 'Tier 4', description: 'High-throughput cluster.', priceMonthly: 8.90, ramMB: 8192, cpuCores: 3, diskGB: 60 }
+      ];
+    } else {
+      return [
+        { id: 'plan_mc_free', name: 'Free Tier', description: 'Testing, small worlds & vanilla testing.', priceMonthly: 0.00, ramMB: 1024, cpuCores: 1, diskGB: 15, isFree: true },
+        { id: 'plan_mc_starter', name: 'Dirt Tier', description: 'Vanilla / Small SMP with friends.', priceMonthly: 2.99, ramMB: 2048, cpuCores: 1, diskGB: 20 },
+        { id: 'plan_mc_basic', name: 'Iron Tier', description: 'Paper / Purpur 1.21.4 with plugins.', priceMonthly: 5.50, ramMB: 3072, cpuCores: 2, diskGB: 30 },
+        { id: 'plan_mc_pro', name: 'Diamond Tier', description: 'Heavily modded Forge or Fabric server.', priceMonthly: 9.99, ramMB: 4096, cpuCores: 3, diskGB: 50 },
+        { id: 'plan_mc_ultra', name: 'Netherite Tier', description: 'Public SMP with high concurrent players.', priceMonthly: 18.99, ramMB: 6144, cpuCores: 4, diskGB: 75 },
+        { id: 'plan_mc_network', name: 'Bedrock Tier', description: 'Velocity / BungeeCord network hub.', priceMonthly: 34.99, ramMB: 8192, cpuCores: 6, diskGB: 120 }
+      ];
+    }
+  }, [plans, activeCategoryTab]);
+
+  const ramSteps = useMemo(() => {
+    return categoryPlans.map(p => p.ramMB);
+  }, [categoryPlans]);
+
+  const minRam = ramSteps.length > 0 ? ramSteps[0] : 1024;
+  const maxRam = ramSteps.length > 0 ? ramSteps[ramSteps.length - 1] : 8192;
+
+  const [selectedRamMB, setSelectedRamMB] = useState<number>(minRam);
+
   useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const res = await apiRequest('/public/plans');
-        if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-          setPlans(res.data);
-        }
-      } catch (err: any) {
-        console.error('Failed to load plans on home:', err.message || err);
+    if (ramSteps.length > 0) {
+      const defaultTier = categoryPlans.find(p => p.priceMonthly > 0) || categoryPlans[0];
+      setSelectedRamMB(defaultTier ? defaultTier.ramMB : ramSteps[0]);
+    }
+  }, [activeCategoryTab, categoryPlans, ramSteps]);
+
+  const activeSelectedPlan = useMemo(() => {
+    const found = categoryPlans.find(p => p.ramMB === selectedRamMB);
+    if (found) return found;
+    let closest = categoryPlans[0];
+    let minDiff = Math.abs(closest.ramMB - selectedRamMB);
+    for (const p of categoryPlans) {
+      const diff = Math.abs(p.ramMB - selectedRamMB);
+      if (diff < minDiff) {
+        closest = p;
+        minDiff = diff;
       }
-    };
-    loadPlans();
-  }, []);
+    }
+    return closest;
+  }, [categoryPlans, selectedRamMB]);
 
-  const mcPlans = plans.filter(p => p.productId === 'prod_minecraft' || p.id.startsWith('plan_mc_'));
-  const botPlans = plans.filter(p => p.productId === 'prod_bot' || p.id.startsWith('plan_bot_'));
+  const categoryFeatureChecks = useMemo(() => {
+    if (activeCategoryTab === 'bot') {
+      return ['DDoS Protection', 'Daily Backups', 'SFTP Access', 'Database'];
+    }
+    return ['3.2 Tbps DDoS Scrubbing', 'Automated Daily S3 Backups', 'Web SFTP & Fast Unzip', 'Free MySQL Database'];
+  }, [activeCategoryTab]);
 
-  const minMcPrice = mcPlans.length > 0
-    ? Math.min(...mcPlans.map(p => p.priceMonthly))
-    : 1.49;
-
-  const minBotPrice = botPlans.length > 0
-    ? Math.min(...botPlans.map(p => p.priceMonthly))
-    : 0.99;
-
-  const displayPlans = activeCategory === 'minecraft'
-    ? (mcPlans.length > 0 ? mcPlans.slice(0, 4) : [
-        { id: 'mc-basic', name: 'Starter Node', priceMonthly: 2.99, ramMB: 2048, cpuCores: 1, diskGB: 15, isPopular: false, backupLimit: 2, databaseLimit: 1 },
-        { id: 'mc-pro', name: 'Performance Node', priceMonthly: 7.99, ramMB: 6144, cpuCores: 2, diskGB: 35, isPopular: true, backupLimit: 5, databaseLimit: 2 },
-        { id: 'mc-ultra', name: 'Extreme Node', priceMonthly: 14.99, ramMB: 12288, cpuCores: 4, diskGB: 75, isPopular: false, backupLimit: 10, databaseLimit: 3 },
-        { id: 'mc-enterprise', name: 'Network Node', priceMonthly: 24.99, ramMB: 20480, cpuCores: 6, diskGB: 150, isPopular: false, backupLimit: 15, databaseLimit: 5 }
-      ])
-    : (botPlans.length > 0 ? botPlans.slice(0, 4) : [
-        { id: 'bot-micro', name: 'Micro Bot', priceMonthly: 0.99, ramMB: 512, cpuCores: 1, diskGB: 5, isPopular: false, backupLimit: 1, databaseLimit: 1 },
-        { id: 'bot-standard', name: 'Community Bot', priceMonthly: 2.49, ramMB: 1536, cpuCores: 1, diskGB: 15, isPopular: true, backupLimit: 3, databaseLimit: 2 },
-        { id: 'bot-cluster', name: 'Sharded Cluster', priceMonthly: 5.99, ramMB: 4096, cpuCores: 2, diskGB: 30, isPopular: false, backupLimit: 5, databaseLimit: 3 },
-        { id: 'bot-enterprise', name: 'High-Throughput', priceMonthly: 11.99, ramMB: 8192, cpuCores: 4, diskGB: 60, isPopular: false, backupLimit: 8, databaseLimit: 5 }
-      ]);
-
-  const copyIpToClipboard = () => {
-    navigator.clipboard.writeText('play.aethercloud.net:25565');
-    setCopiedIp(true);
-    setTimeout(() => setCopiedIp(false), 2000);
+  const formatRamString = (ramMB: number) => {
+    if (ramMB < 1024) return `${ramMB} MB`;
+    const gb = ramMB / 1024;
+    return `${gb % 1 === 0 ? gb : gb.toFixed(1)} GB`;
   };
 
   return (
-    <div className="relative overflow-x-hidden selection:bg-amber-500 selection:text-black bg-[#060608]">
+    <div className="relative overflow-x-hidden bg-[var(--color-bg)] min-h-screen text-[var(--color-ink)] selection:bg-[var(--color-accent)] selection:text-white">
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          SUBTLE ARCHITECTURAL AMBIENT LIGHTING
+          1. CLEAN HERO (ONE HEADLINE, ONE SUB, TWO BUTTONS, NO DOT OVERLAYS)
       ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10 select-none">
-        {/* Soft amber radial glow behind hero */}
-        <div
-          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[840px] h-[520px] rounded-full opacity-20 blur-[150px]"
-          style={{
-            background: 'radial-gradient(ellipse at center, rgba(245, 158, 11, 0.4) 0%, rgba(217, 119, 6, 0.15) 45%, transparent 70%)'
-          }}
-        />
-        {/* Subtle grid pattern */}
-        <div
-          className="absolute top-0 inset-x-0 h-[750px] opacity-[0.03]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M0 32h32V0' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E")`,
-            maskImage: 'radial-gradient(ellipse 60% 50% at 50% 20%, black 30%, transparent 80%)'
-          }}
-        />
-      </div>
+      <section className="relative py-20 sm:py-28 px-4 sm:px-6 lg:px-8 border-b border-[var(--color-line)] bg-[var(--color-bg)]">
+        <div className="max-w-3xl mx-auto text-center flex flex-col items-center">
+          
+          {/* Main Headline */}
+          <h1 className="text-3xl sm:text-5xl font-bold text-[var(--color-ink)] tracking-tight leading-[1.15] text-balance anim-fade-up">
+            Next-Generation Cloud & Game Server Hosting
+          </h1>
 
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          1. BALANCED, CINEMATIC HERO (CLEAN, RESTRAINED, NO GIANT DULL DEAD SPACE)
-      ───────────────────────────────────────────────────────────────────────────── */}
-      <section className="relative px-4 sm:px-6 lg:px-8 pt-16 sm:pt-20 pb-14 sm:pb-16 max-w-[1200px] mx-auto text-center flex flex-col items-center">
-        
-        {/* Announcement Badge */}
-        {homepageConfig.showHeroBadge !== false && (
-          <div className="mb-6 animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-zinc-900/90 border border-amber-500/25 shadow-[0_0_20px_rgba(245,158,11,0.08)] backdrop-blur-md transition-colors hover:border-amber-500/40">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono text-[11px] text-zinc-300 font-medium tracking-wide">
-                {homepageConfig.heroBadgeText || `POWERED BY ${brandName?.toUpperCase() || 'AETHERPANEL'} CLOUD`}
-              </span>
-              <span className="text-zinc-600">·</span>
-              <button
-                type="button"
-                onClick={() => onNavigate(homepageConfig.heroBadgeLinkTarget || 'status')}
-                className="text-amber-400 font-semibold text-[11px] hover:text-amber-300 transition-colors cursor-pointer"
-              >
-                {homepageConfig.heroBadgeLinkText || 'Hardware Status →'}
-              </button>
-            </div>
+          {/* Subtitle */}
+          <p className="text-sm sm:text-base text-[var(--color-ink-dim)] font-normal leading-relaxed max-w-xl mx-auto mt-4 mb-8 text-balance anim-fade-up">
+            {homepageConfig.heroDescription || heroDescription || 'High-performance Minecraft and Discord bot hosting on AMD Ryzen 9 7950X silicon, PCIe 4.0 NVMe arrays, and always-on 3.2 Tbps DDoS mitigation.'}
+          </p>
+
+          {/* Two Buttons */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto anim-fade-up">
+            <button
+              type="button"
+              onClick={() => onNavigate(homepageConfig.heroPrimaryCtaPage || 'register')}
+              className="btn btn-primary h-10 px-6 text-xs sm:text-sm font-semibold w-full sm:w-auto"
+            >
+              <span>{homepageConfig.heroPrimaryCtaText || 'Deploy Server Now'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const target = homepageConfig.heroSecondaryCtaPage || 'hosting';
+                if (target === 'hosting') {
+                  const el = document.getElementById('plans-showcase');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  else onNavigate('pricing');
+                } else {
+                  onNavigate(target);
+                }
+              }}
+              className="btn btn-ghost h-10 px-6 text-xs sm:text-sm border border-[var(--color-line)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] text-[var(--color-ink)] w-full sm:w-auto"
+            >
+              <span>{homepageConfig.heroSecondaryCtaText || 'Explore Plans'}</span>
+            </button>
           </div>
-        )}
 
-        {/* Hero Headline: 48–60px Desktop, 2 Lines Max, Clean Typography */}
-        <h1 className="text-4xl sm:text-5xl lg:text-[56px] font-extrabold text-white tracking-tight leading-[1.08] max-w-[780px] mx-auto">
-          {homepageConfig.heroHeadlinePrefix !== undefined && homepageConfig.heroHeadlinePrefix !== ''
-            ? homepageConfig.heroHeadlinePrefix
-            : 'Powerful infrastructure for'}{' '}
-          <span className="bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 bg-clip-text text-transparent">
-            {homepageConfig.heroHeadlineAccent !== undefined && homepageConfig.heroHeadlineAccent !== ''
-              ? homepageConfig.heroHeadlineAccent
-              : 'your next server.'}
-          </span>
-        </h1>
-
-        {/* Compact Description (25–35 words) */}
-        <p className="text-[15px] sm:text-base text-zinc-400 font-normal leading-[1.6] max-w-[620px] mx-auto mt-5 mb-8">
-          {homepageConfig.heroDescription || heroDescription || 'Deploy high-performance Minecraft servers and 24/7 background bots with sub-millisecond network routing, automated backups, and 99.9% verified uptime.'}
-        </p>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => onNavigate(homepageConfig.heroPrimaryCtaPage || 'register')}
-            className="w-full sm:w-auto h-12 px-7 rounded-xl font-bold text-sm text-zinc-950 bg-gradient-to-b from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-[0_0_24px_rgba(245,158,11,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-          >
-            <span>{homepageConfig.heroPrimaryCtaText || 'Get Started'}</span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const target = homepageConfig.heroSecondaryCtaPage || 'hosting';
-              if (target === 'hosting') {
-                const el = document.getElementById('hosting');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                else onNavigate('pricing');
-              } else {
-                onNavigate(target);
-              }
-            }}
-            className="w-full sm:w-auto h-12 px-7 rounded-xl font-medium text-sm text-zinc-300 bg-zinc-900/80 hover:bg-zinc-800 hover:text-white border border-white/[0.08] hover:border-white/[0.16] transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <span>{homepageConfig.heroSecondaryCtaText || 'Explore Hosting'}</span>
-          </button>
         </div>
-
-        {/* Hero Trust Row */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-zinc-400 font-normal">
-          <span className="flex items-center gap-1.5">
-            <Check className="h-3.5 w-3.5 text-amber-400" />
-            {homepageConfig.heroBullet1 || 'Instant activation'}
-          </span>
-          <span className="text-zinc-700 hidden sm:inline">·</span>
-          <span className="flex items-center gap-1.5">
-            <Check className="h-3.5 w-3.5 text-amber-400" />
-            {homepageConfig.heroBullet2 || 'No setup fees'}
-          </span>
-          <span className="text-zinc-700 hidden sm:inline">·</span>
-          <span className="flex items-center gap-1.5">
-            <Check className="h-3.5 w-3.5 text-amber-400" />
-            {homepageConfig.heroBullet3 || 'Cancel anytime'}
-          </span>
-        </div>
-
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          2. SPECIFICATION & TRUST RIBBON (TIGHT 64px HEIGHT, CRISP HAIRLINE BORDERS)
+          2. MARQUEE STRIP (PARTNER / FEATURE TEXT UNDER HERO)
       ───────────────────────────────────────────────────────────────────────────── */}
-      {homepageConfig.showTrustBar !== false && (
-        <section className="border-y border-white/[0.06] bg-zinc-950/60 backdrop-blur-sm my-6 sm:my-8">
-          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[66px] flex items-center justify-between">
-            <div className="w-full flex flex-wrap items-center justify-between gap-y-2 gap-x-4 text-xs sm:text-[13px] text-zinc-300 font-medium">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>{homepageConfig.trustBarItem1 || '99.99% Uptime SLA'}</span>
-              </div>
-              <span className="hidden md:inline text-zinc-800 select-none">|</span>
-              <div className="flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>{homepageConfig.trustBarItem2 || 'PCIe Gen4 NVMe Storage'}</span>
-              </div>
-              <span className="hidden md:inline text-zinc-800 select-none">|</span>
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>{homepageConfig.trustBarItem3 || '3.2 Tbps DDoS Protection'}</span>
-              </div>
-              <span className="hidden md:inline text-zinc-800 select-none">|</span>
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>{homepageConfig.trustBarItem4 || '<30s Instant Provisioning'}</span>
-              </div>
-              <span className="hidden md:inline text-zinc-800 select-none">|</span>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>{homepageConfig.trustBarItem5 || '24/7 Node Telemetry'}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          3. TARGETED RUNTIMES (MINECRAFT & DISCORD BOTS - SLEEK PRODUCT PANELS)
-      ───────────────────────────────────────────────────────────────────────────── */}
-      {(homepageConfig.showMinecraftSection !== false || homepageConfig.showDiscordBotSection !== false) && (
-        <section id="hosting" className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-          
-          {/* Section Heading */}
-          <div className="max-w-2xl mb-12 sm:mb-16">
-            <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block mb-2">
-              Targeted Runtimes
+      <section className="border-b border-[var(--color-line)] bg-[var(--color-surface)] py-3">
+        <Marquee speed={32}>
+          <div className="flex items-center gap-8 text-xs font-mono text-[var(--color-ink-mute)]">
+            <span className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" />
+              AMD Ryzen 9 7950X
             </span>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-              Optimized for demanding workloads.
-            </h2>
-            <p className="text-[15px] text-zinc-400 mt-2 font-normal leading-relaxed">
-              Tailored bare-metal configurations and container runtimes engineered specifically for gaming servers and 24/7 background bots.
-            </p>
+            <span>·</span>
+            <span>PCIe Gen4 NVMe 7,000 MB/s</span>
+            <span>·</span>
+            <span className="text-[var(--color-ok)]">99.99% Uptime SLA</span>
+            <span>·</span>
+            <span>3.2 Tbps Anycast DDoS Scrubbing</span>
+            <span>·</span>
+            <span>Automated S3 Backups</span>
+            <span>·</span>
+            <span>Pterodactyl Daemon</span>
+            <span>·</span>
+            <span>&lt;30s Provisioning</span>
+            <span>·</span>
+            <span>Global Tier-3 Nodes</span>
           </div>
-
-          {/* Feature 1: Minecraft (Visual LEFT ~520px, Content RIGHT) */}
-          {homepageConfig.showMinecraftSection !== false && (
-            <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center ${homepageConfig.showDiscordBotSection !== false ? 'mb-20 sm:mb-28' : ''}`}>
-              
-              {/* Left: High-End Minecraft Product Panel */}
-              <div className="lg:col-span-6 rounded-2xl bg-zinc-950/90 border border-white/[0.08] p-5 sm:p-6 shadow-2xl shadow-black/80 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-                {/* Top header row */}
-                <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                      <Gamepad2 className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Survival SMP (Paper 1.21.4)</h4>
-                      <p className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 mt-0.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        ONLINE · 20.0 TPS · 32 Players
-                      </p>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/[0.06] text-[11px] font-mono font-medium text-amber-400">
-                    5.7GHz Boost
-                  </span>
-                </div>
-
-                {/* Live server address banner with 1-click copy */}
-                <div className="my-4 p-3 rounded-xl bg-black/60 border border-white/[0.04] flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <span className="text-[11px] text-zinc-500 font-mono">HOST:</span>
-                    <span className="text-xs font-mono text-zinc-200 truncate">play.aethercloud.net:25565</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyIpToClipboard}
-                    className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-[11px] font-mono text-amber-400 border border-amber-500/20 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                  >
-                    {copiedIp ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                    <span>{copiedIp ? 'Copied!' : 'Copy IP'}</span>
-                  </button>
-                </div>
-
-                {/* Resource Allocation Bars */}
-                <div className="space-y-3 py-2 text-xs font-mono">
-                  {/* Memory */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-zinc-400">DDR5 ECC RAM</span>
-                      <span className="text-white font-medium">6.2 / 8.0 GB (77%)</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full w-[77%]" />
-                    </div>
-                  </div>
-
-                  {/* CPU */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-zinc-400">AMD Ryzen 9 7950X Compute</span>
-                      <span className="text-white font-medium">21% sustained</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full w-[21%]" />
-                    </div>
-                  </div>
-
-                  {/* NVMe */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-zinc-400">Gen4 NVMe Array</span>
-                      <span className="text-white font-medium">18.4 / 60 GB</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-zinc-700 rounded-full w-[30%]" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Jar selectors */}
-                <div className="mt-4 pt-3 border-t border-white/[0.04] flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                  <span>ACTIVE JAR: PaperMC 1.21.4</span>
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Auto-Restart OK
-                  </span>
-                </div>
-              </div>
-
-              {/* Right: Content */}
-              <div className="lg:col-span-6 space-y-4">
-                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
-                  <Gamepad2 className="h-3.5 w-3.5" />
-                  <span>{homepageConfig.mcEyebrow || 'MINECRAFT SERVER HOSTING'}</span>
-                </div>
-
-                <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                  {homepageConfig.mcHeading || 'Single-thread performance built for zero tick drops.'}
-                </h3>
-
-                <p className="text-[15px] text-zinc-400 leading-relaxed font-normal">
-                  {homepageConfig.mcDescription || 'Minecraft runs its core game loop on a single CPU core. We utilize AMD Ryzen 9 7950X silicon with single-thread boosts up to 5.7GHz, combined with Gen4 NVMe arrays to eliminate world-save hitches and chunk generation lag.'}
-                </p>
-
-                <ul className="space-y-2.5 pt-1 text-sm text-zinc-300">
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Instant 1-Click Installs:</strong> {homepageConfig.mcBullet1 || 'Paper, Purpur, Fabric, Forge & Modpacks'}</span>
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Web SFTP & Fast Unzip:</strong> {homepageConfig.mcBullet2 || 'Upload worlds and plugins directly in browser'}</span>
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Automated S3 Backups:</strong> {homepageConfig.mcBullet3 || 'Schedule daily or weekly snapshots'}</span>
-                  </li>
-                </ul>
-
-                <div className="pt-3 flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('minecraft')}
-                    className="h-11 px-5 rounded-xl font-semibold text-xs sm:text-sm text-zinc-950 bg-amber-400 hover:bg-amber-300 transition-colors flex items-center gap-2 cursor-pointer shadow-sm shadow-amber-500/10"
-                  >
-                    <span>{homepageConfig.mcCtaText || 'Explore Minecraft'}</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-xs font-mono text-zinc-400">
-                    From <strong className="text-white font-semibold">${minMcPrice.toFixed(2)}/mo</strong>
-                  </span>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* Feature 2: Discord Bot (REVERSED: Content LEFT, Visual RIGHT) */}
-          {homepageConfig.showDiscordBotSection !== false && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-              
-              {/* Left: Content */}
-              <div className="lg:col-span-6 space-y-4 order-2 lg:order-1">
-                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
-                  <Bot className="h-3.5 w-3.5" />
-                  <span>{homepageConfig.botEyebrow || 'DISCORD BOT HOSTING'}</span>
-                </div>
-
-                <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                  {homepageConfig.botHeading || '24/7 background process supervision and multi-runtime support.'}
-                </h3>
-
-                <p className="text-[15px] text-zinc-400 leading-relaxed font-normal">
-                  {homepageConfig.botDescription || 'Keep your bots online without unexpected downtime. Our runtime supervisor monitors process exit codes, injects environment variables securely, and automatically revives terminated workers within 1.2 seconds.'}
-                </p>
-
-                <ul className="space-y-2.5 pt-1 text-sm text-zinc-300">
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Multi-Runtime:</strong> {homepageConfig.botBullet1 || 'Node.js (18, 20, 22), Python (3.9 - 3.12), Bun & Go'}</span>
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Secret Token Management:</strong> {homepageConfig.botBullet2 || 'Store bot tokens securely outside git history'}</span>
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
-                    <span><strong className="text-white font-medium">Low-Latency Gateways:</strong> {homepageConfig.botBullet3 || 'Direct routes to Discord edge infrastructure'}</span>
-                  </li>
-                </ul>
-
-                <div className="pt-3 flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('bot')}
-                    className="h-11 px-5 rounded-xl font-semibold text-xs sm:text-sm text-zinc-950 bg-amber-400 hover:bg-amber-300 transition-colors flex items-center gap-2 cursor-pointer shadow-sm shadow-amber-500/10"
-                  >
-                    <span>{homepageConfig.botCtaText || 'Explore Discord Bots'}</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-xs font-mono text-zinc-400">
-                    From <strong className="text-white font-semibold">${minBotPrice.toFixed(2)}/mo</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* Right: High-End Discord Bot Product Panel */}
-              <div className="lg:col-span-6 rounded-2xl bg-zinc-950/90 border border-white/[0.08] p-5 sm:p-6 shadow-2xl shadow-black/80 order-1 lg:order-2 relative overflow-hidden">
-                <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                      <Bot className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Community Moderator Bot</h4>
-                      <p className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 mt-0.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Active · 12ms WebSocket ping · 42 Guilds
-                      </p>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/[0.06] text-[11px] font-mono text-zinc-300">
-                    Node.js 22 LTS
-                  </span>
-                </div>
-
-                {/* Simulated Bot Console Stdout */}
-                <div className="my-4 rounded-xl bg-black/70 border border-white/[0.04] p-3.5 text-[11px] font-mono text-zinc-400 space-y-1.5 select-none">
-                  <p className="text-zinc-500">&gt; node index.js</p>
-                  <p className="text-zinc-300">[BOT] Authenticating with Discord Gateway...</p>
-                  <p className="text-emerald-400/90">[READY] Logged in as ModGuard#9102 (PID: 2841)</p>
-                  <p className="text-zinc-400">[HEARTBEAT] Shard 0 acknowledgement received (12ms)</p>
-                  <p className="text-amber-400/90">[SUPERVISOR] Auto-restart watchdog enabled</p>
-                </div>
-
-                {/* Metrics Bar */}
-                <div className="grid grid-cols-3 gap-3 text-center font-mono">
-                  <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.04]">
-                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">RAM Footprint</p>
-                    <p className="text-xs font-semibold text-white mt-0.5">128 MB</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.04]">
-                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Verified SLA</p>
-                    <p className="text-xs font-semibold text-white mt-0.5">99.98%</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.04]">
-                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Revive Time</p>
-                    <p className="text-xs font-semibold text-amber-400 mt-0.5">&lt; 1.2s</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-        </section>
-      )}
+        </Marquee>
+      </section>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          4. BARE-METAL INFRASTRUCTURE (SPLIT: LEFT NARRATIVE, RIGHT EDGE TELEMETRY)
+          3. INTERACTIVE PRODUCT & TIER SLIDER SHOWCASE
       ───────────────────────────────────────────────────────────────────────────── */}
-      {homepageConfig.showInfrastructureSection !== false && (
-        <section id="infrastructure" className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 border-t border-white/[0.06]">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-            
-            {/* LEFT: Heading, narrative, specs */}
-            <div className="lg:col-span-6 space-y-5">
-              <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block">
-                {homepageConfig.infraEyebrow || 'Bare-Metal Hardware'}
-              </span>
-
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-                {homepageConfig.infraHeading || 'Engineered for pure single-core speed.'}
-              </h2>
-
-              <p className="text-[15px] text-zinc-400 leading-relaxed font-normal">
-                {homepageConfig.infraDescription || 'We never oversell CPU cores or place workloads behind congested shared hypervisors. Every instance is backed by enterprise AMD Ryzen hardware with direct bare-metal access.'}
-              </p>
-
-              <div className="space-y-3.5 pt-1 text-sm text-zinc-300">
-                <div className="flex items-start gap-3">
-                  <Cpu className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white font-semibold">AMD Ryzen 9 7950X / 9950X:</strong>
-                    <p className="text-xs text-zinc-400 mt-0.5">Sustained 5.7GHz boost clocks for latency-critical game loops.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <HardDrive className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white font-semibold">Enterprise PCIe 4.0 NVMe Arrays:</strong>
-                    <p className="text-xs text-zinc-400 mt-0.5">7,000 MB/s read/write speeds for instantaneous chunk loading and world saves.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white font-semibold">3.2 Tbps Always-On DDoS Scrubbing:</strong>
-                    <p className="text-xs text-zinc-400 mt-0.5">Hardware BGP filters drop layer 3/4 volumetric attacks without player disconnects.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Globe2 className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-white font-semibold">Global Tier-1 Routing:</strong>
-                    <p className="text-xs text-zinc-400 mt-0.5">Strategically placed compute nodes across North America, Europe, and Asia-Pacific.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT: Edge Telemetry Card */}
-            <div className="lg:col-span-6 rounded-2xl bg-zinc-950/90 border border-white/[0.08] p-5 sm:p-6 shadow-2xl shadow-black/80 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                  GLOBAL EDGE TELEMETRY
-                </span>
-                <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  ALL NODES OPERATIONAL
-                </span>
-              </div>
-
-              {/* Node 1: US East */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-white/[0.04] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-white">US-East (Ashburn, VA)</span>
-                  <span className="font-mono text-amber-400 font-medium">3.8 ms avg</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
-                  <span>Ryzen 9 7950X · 128GB DDR5 ECC</span>
-                  <span className="text-emerald-400">0% loss</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400 rounded-full w-[24%]" />
-                </div>
-              </div>
-
-              {/* Node 2: EU Central */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-white/[0.04] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-white">EU-Central (Frankfurt, DE)</span>
-                  <span className="font-mono text-amber-400 font-medium">7.2 ms avg</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
-                  <span>Ryzen 9 9950X · 192GB DDR5 ECC</span>
-                  <span className="text-emerald-400">0% loss</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400 rounded-full w-[31%]" />
-                </div>
-              </div>
-
-              {/* Node 3: AP East */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-white/[0.04] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-white">AP-East (Singapore)</span>
-                  <span className="font-mono text-amber-400 font-medium">11.8 ms avg</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
-                  <span>Ryzen 9 7950X · 128GB DDR5 ECC</span>
-                  <span className="text-emerald-400">0% loss</span>
-                </div>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400 rounded-full w-[19%]" />
-                </div>
-              </div>
-
-              <div className="pt-1 text-right">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('status')}
-                  className="text-xs font-mono text-amber-400 hover:text-amber-300 font-semibold inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <span>View Full Infrastructure Telemetry</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </section>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          5. STATISTICS ROW (RESTRAINED, CRISP NUMBERS, NO GIANT BOXES)
-      ───────────────────────────────────────────────────────────────────────────── */}
-      {homepageConfig.showStatsSection !== false && (
-        <section className="border-y border-white/[0.06] bg-zinc-950/60 py-12 sm:py-14 my-6 sm:my-8">
-          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+      <section id="pricing" className="scroll-mt-14">
+        <div id="plans-showcase" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
+          <ScrollReveal>
+            <div className="rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] p-6 sm:p-8">
               
-              {/* Stat 1 */}
-              <div>
-                <p className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-white tracking-tight leading-none">
-                  {homepageConfig.stat1Value || '99.99%' }
-                </p>
-                <p className="text-xs uppercase tracking-wider text-zinc-400 font-mono font-medium mt-2.5">
-                  {homepageConfig.stat1Label || 'Uptime SLA'}
-                </p>
+              {/* Category Tabs */}
+              <div className="flex justify-center mb-8">
+                <div className="inline-flex p-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)]">
+                  {availableCategories.map((cat) => {
+                    const isActive = activeCategoryTab === cat.id;
+                    const cleanName = cat.name.replace(/\s*Hosting\s*$/i, '');
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setActiveCategoryTab(cat.id)}
+                        className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-line)]'
+                            : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)]'
+                        }`}
+                      >
+                        {cleanName}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Stat 2 */}
-              <div>
-                <p className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-white tracking-tight leading-none">
-                  {homepageConfig.stat2Value || '32+'}
-                </p>
-                <p className="text-xs uppercase tracking-wider text-zinc-400 font-mono font-medium mt-2.5">
-                  {homepageConfig.stat2Label || 'Global PoPs'}
-                </p>
-              </div>
-
-              {/* Stat 3 */}
-              <div>
-                <p className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-white tracking-tight leading-none">
-                  {homepageConfig.stat3Value || '24/7'}
-                </p>
-                <p className="text-xs uppercase tracking-wider text-zinc-400 font-mono font-medium mt-2.5">
-                  {homepageConfig.stat3Label || 'Monitoring'}
-                </p>
-              </div>
-
-              {/* Stat 4 */}
-              <div>
-                <p className="text-3xl sm:text-4xl lg:text-[44px] font-extrabold text-white tracking-tight leading-none">
-                  {homepageConfig.stat4Value || '<30s'}
-                </p>
-                <p className="text-xs uppercase tracking-wider text-zinc-400 font-mono font-medium mt-2.5">
-                  {homepageConfig.stat4Label || 'Deployment'}
-                </p>
-              </div>
-
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          6. PLATFORM CAPABILITIES (1 DOMINANT + 4 COMPACT SUPPORTING CARDS)
-      ───────────────────────────────────────────────────────────────────────────── */}
-      {homepageConfig.showFeaturesSection !== false && (
-        <section className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-          
-          {/* Section Heading */}
-          <div className="max-w-2xl mb-12 sm:mb-14">
-            <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block mb-2">
-              Platform Capabilities
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-              Everything you need. Nothing you don't.
-            </h2>
-            <p className="text-[15px] text-zinc-400 mt-2 font-normal">
-              A comprehensive suite of management tools designed to keep your servers organized, secure, and always accessible.
-            </p>
-          </div>
-
-          {/* Asymmetric Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
-            
-            {/* Dominant Feature: Real-Time Interactive Console (7 cols) */}
-            <div className="md:col-span-7 rounded-2xl bg-zinc-950/90 border border-white/[0.08] p-5 sm:p-6 flex flex-col justify-between shadow-xl">
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-9 w-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Terminal className="h-4 w-4" />
-                  </div>
+              {/* 2-Column Showcase */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                
+                {/* Left Column: Title, Subtitle, Features & RAM Slider */}
+                <div className="lg:col-span-7 space-y-6">
                   <div>
-                    <h3 className="text-base font-bold text-white">Full Duplex Real-Time Console</h3>
-                    <p className="text-xs text-zinc-400">WebSocket terminal streaming with instant command execution</p>
-                  </div>
-                </div>
-
-                {/* Console preview snippet */}
-                <div className="rounded-xl bg-black/75 border border-white/[0.05] p-3.5 text-[11px] font-mono text-zinc-400 space-y-1.5 mb-4 select-none">
-                  <p className="text-zinc-500">&gt; server.broadcast("Daily automatic backup complete")</p>
-                  <p className="text-emerald-400/90">[ANNOUNCE] Broadcast dispatched to 32 connected clients</p>
-                  <p className="text-zinc-400">[DAEMON] Snapshot backup synced to offsite S3 in 4.12s</p>
-                  <p className="text-amber-400/90">[STATUS] Memory: 3.8GB/8.0GB · 20.0 TPS stable</p>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono text-zinc-400">
-                <span>Low-Latency WebSocket Session</span>
-                <span className="text-emerald-400 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Connected (11ms)
-                </span>
-              </div>
-            </div>
-
-            {/* 4 Supporting Features (5 cols) */}
-            <div className="md:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* Feature 1: File Manager */}
-              <div className="p-4 rounded-2xl bg-zinc-950/90 border border-white/[0.06] flex flex-col justify-between hover:border-white/[0.12] transition-colors">
-                <div className="space-y-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <FolderTree className="h-4 w-4" />
-                  </div>
-                  <h4 className="text-sm font-semibold text-white">Web SFTP Manager</h4>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    In-browser code editor, drag-and-drop file uploader, and 1-click archive extraction.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 2: Automated Backups */}
-              <div className="p-4 rounded-2xl bg-zinc-950/90 border border-white/[0.06] flex flex-col justify-between hover:border-white/[0.12] transition-colors">
-                <div className="space-y-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <History className="h-4 w-4" />
-                  </div>
-                  <h4 className="text-sm font-semibold text-white">Automated Backups</h4>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Scheduled snapshots replicated offsite with 1-click restore functionality.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 3: Cron Schedules */}
-              <div className="p-4 rounded-2xl bg-zinc-950/90 border border-white/[0.06] flex flex-col justify-between hover:border-white/[0.12] transition-colors">
-                <div className="space-y-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Calendar className="h-4 w-4" />
-                  </div>
-                  <h4 className="text-sm font-semibold text-white">Task Schedules</h4>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Automate restarts, broadcasts, and maintenance commands with standard cron syntax.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 4: Managed Databases */}
-              <div className="p-4 rounded-2xl bg-zinc-950/90 border border-white/[0.06] flex flex-col justify-between hover:border-white/[0.12] transition-colors">
-                <div className="space-y-2">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Database className="h-4 w-4" />
-                  </div>
-                  <h4 className="text-sm font-semibold text-white">Instant Databases</h4>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Free isolated MySQL databases provisioned automatically for plugins and bot storage.
-                  </p>
-                </div>
-              </div>
-
-            </div>
-
-          </div>
-        </section>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          7. PRICING (MEDIUM-SIZED BALANCED CARDS, CLEAN CATEGORY TOGGLE)
-      ───────────────────────────────────────────────────────────────────────────── */}
-      {homepageConfig.showPricingSection !== false && (
-        <section id="pricing" className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 border-t border-white/[0.06]">
-          
-          {/* Section Heading & Category Switcher */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 sm:mb-14">
-            <div>
-              <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block mb-2">
-                Predictable Pricing
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-                Simple, transparent plans.
-              </h2>
-              <p className="text-[15px] text-zinc-400 mt-2 font-normal">
-                No hidden fees, no resource overselling. Cancel or upgrade your plan anytime.
-              </p>
-            </div>
-
-            {/* Category Toggle */}
-            <div className="inline-flex p-1 rounded-xl bg-zinc-900 border border-white/[0.08] text-xs font-medium self-start md:self-auto">
-              <button
-                type="button"
-                onClick={() => setActiveCategory('minecraft')}
-                className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${activeCategory === 'minecraft' ? 'bg-amber-400 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Minecraft Hosting
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveCategory('bot')}
-                className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${activeCategory === 'bot' ? 'bg-amber-400 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Discord Bot Hosting
-              </button>
-            </div>
-          </div>
-
-          {/* Pricing Cards Grid (4 Column, Medium Height) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
-            {displayPlans.map((plan) => {
-              const isFeatured = plan.isPopular;
-              return (
-                <div
-                  key={plan.id}
-                  className={`rounded-2xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-200 ${
-                    isFeatured
-                      ? 'bg-zinc-950 border border-amber-500/50 shadow-xl shadow-amber-500/5 relative'
-                      : 'bg-zinc-950/80 border border-white/[0.06] hover:border-white/[0.14]'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-base font-bold text-white">{plan.name}</h4>
-                      {isFeatured && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-400 text-zinc-950">
-                          POPULAR
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-zinc-400 mb-5">
-                      {activeCategory === 'minecraft' ? 'Dedicated game node' : '24/7 background worker'}
+                    <h2 className="text-2xl sm:text-3xl font-bold text-[var(--color-ink)] tracking-tight">
+                      {currentCategoryMeta.name.replace(/\s*Hosting\s*$/i, '')} Hosting
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[var(--color-ink-mute)] leading-relaxed mt-2 max-w-lg font-normal">
+                      {currentCategoryMeta.description}
                     </p>
+                  </div>
 
-                    <div className="flex items-baseline gap-1 mb-5">
-                      <span className="text-3xl sm:text-4xl font-extrabold text-white font-sans">${plan.priceMonthly.toFixed(2)}</span>
-                      <span className="text-xs text-zinc-400 font-mono">/mo</span>
+                  {/* 2x2 Feature Checks */}
+                  <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 text-xs text-[var(--color-ink-dim)]">
+                    {categoryFeatureChecks.map((chk, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-[var(--color-accent)] shrink-0" />
+                        <span>{chk}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* RAM Range Slider */}
+                  <div className="pt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="label">RAM</span>
+                      <span className="text-xl font-bold text-[var(--color-ink)] font-mono">
+                        {formatRamString(activeSelectedPlan.ramMB)}
+                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => onNavigate('register')}
-                      className={`w-full h-10 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-                        isFeatured
-                          ? 'bg-amber-400 text-zinc-950 hover:bg-amber-300 font-bold'
-                          : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/[0.08]'
-                      }`}
-                    >
-                      <span>Deploy Now</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
+                    {(() => {
+                      const currentIndex = ramSteps.indexOf(activeSelectedPlan.ramMB) !== -1 ? ramSteps.indexOf(activeSelectedPlan.ramMB) : 0;
+                      const maxIndex = Math.max(1, ramSteps.length - 1);
+                      const percent = (currentIndex / maxIndex) * 100;
 
-                    <div className="h-px bg-white/[0.06] my-5" />
+                      const updateFromClientX = (clientX: number, target: HTMLElement) => {
+                        const rect = target.getBoundingClientRect();
+                        const clickX = clientX - rect.left;
+                        const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+                        const targetIdx = Math.round(ratio * maxIndex);
+                        if (ramSteps[targetIdx] !== undefined) {
+                          setSelectedRamMB(ramSteps[targetIdx]);
+                        }
+                      };
 
-                    {/* Feature List */}
-                    <ul className="space-y-2.5 text-xs text-zinc-300">
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span><strong>{(plan.ramMB / 1024).toFixed(plan.ramMB % 1024 === 0 ? 0 : 1)} GB</strong> DDR5 RAM</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span><strong>{plan.cpuCores} vCPU</strong> (5.7GHz Boost)</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span><strong>{plan.diskGB} GB</strong> Gen4 NVMe</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span><strong>{plan.backupLimit || 2}</strong> Automated Backups</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                        <span><strong>{plan.databaseLimit || 1}</strong> Free MySQL DB</span>
-                      </li>
-                    </ul>
+                      const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+                        try {
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                        } catch {}
+                        updateFromClientX(e.clientX, e.currentTarget);
+                      };
+
+                      const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+                        if (e.buttons === 1) {
+                          updateFromClientX(e.clientX, e.currentTarget);
+                        }
+                      };
+
+                      const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+                        try {
+                          e.currentTarget.releasePointerCapture(e.pointerId);
+                        } catch {}
+                      };
+
+                      return (
+                        <div className="relative pt-1 pb-1">
+                          <div
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={handlePointerUp}
+                            className="relative h-2 w-full rounded-full bg-[var(--color-surface-2)] border border-[var(--color-line)] cursor-pointer select-none touch-none"
+                          >
+                            <div
+                              className="absolute top-0 left-0 h-full rounded-full bg-[var(--color-accent)] pointer-events-none"
+                              style={{ width: `${percent}%` }}
+                            />
+                            <div
+                              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border border-[var(--color-line)] pointer-events-none"
+                              style={{ left: `${percent}%` }}
+                            />
+                          </div>
+
+                          <input
+                            type="range"
+                            min={0}
+                            max={maxIndex}
+                            step={1}
+                            value={currentIndex}
+                            onChange={(e) => {
+                              const index = parseInt(e.target.value, 10);
+                              if (ramSteps[index] !== undefined) {
+                                setSelectedRamMB(ramSteps[index]);
+                              }
+                            }}
+                            className="sr-only"
+                            aria-label="Select RAM allocation"
+                          />
+                        </div>
+                      );
+                    })()}
+
+                    <div className="flex justify-between text-[11px] font-mono text-[var(--color-ink-mute)]">
+                      <span>{formatRamString(minRam)}</span>
+                      <span>{formatRamString(maxRam)}</span>
+                    </div>
                   </div>
 
-                  <div className="mt-6 pt-3 border-t border-white/[0.04] text-[11px] font-mono text-zinc-500 text-center">
-                    3.2 Tbps DDoS Filter Included
+                </div>
+
+                {/* Right Column: Spec Card */}
+                <div className="lg:col-span-5">
+                  <div className="rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-line)] p-5 space-y-4">
+                    
+                    <div className="flex items-baseline justify-between border-b border-[var(--color-line)] pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-[var(--color-ink)]">
+                            {activeSelectedPlan.name}
+                          </h3>
+                          {activeSelectedPlan.priceMonthly === 0 && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[var(--color-ok)]/10 text-[var(--color-ok)] border border-[var(--color-ok)]/30">
+                              FREE
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--color-ink-mute)] mt-0.5">
+                          {activeSelectedPlan.description || 'Dedicated container instance'}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        {activeSelectedPlan.priceMonthly === 0 ? (
+                          <span className="text-2xl font-bold text-[var(--color-ok)]">FREE</span>
+                        ) : (
+                          <>
+                            <span className="text-2xl font-bold text-[var(--color-ink)] font-mono">
+                              {currencySymbol}{activeSelectedPlan.priceMonthly.toFixed(2)}
+                            </span>
+                            <span className="text-[11px] text-[var(--color-ink-mute)] font-mono">/mo</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Specs List */}
+                    <div className="space-y-2.5 text-xs font-mono">
+                      <div className="flex items-center justify-between text-[var(--color-ink-dim)]">
+                        <span className="label">CPU</span>
+                        <strong className="text-[var(--color-ink)] font-medium">
+                          {activeSelectedPlan.cpuCores} vCPU ({activeCategoryTab === 'minecraft' ? '5.7GHz' : 'Dedicated'})
+                        </strong>
+                      </div>
+                      <div className="h-px bg-[var(--color-line)]" />
+
+                      <div className="flex items-center justify-between text-[var(--color-ink-dim)]">
+                        <span className="label">RAM</span>
+                        <strong className="text-[var(--color-ink)] font-medium">
+                          {formatRamString(activeSelectedPlan.ramMB)} DDR5
+                        </strong>
+                      </div>
+                      <div className="h-px bg-[var(--color-line)]" />
+
+                      <div className="flex items-center justify-between text-[var(--color-ink-dim)]">
+                        <span className="label">Storage</span>
+                        <strong className="text-[var(--color-ink)] font-medium">
+                          {activeSelectedPlan.diskGB} GB NVMe
+                        </strong>
+                      </div>
+                      <div className="h-px bg-[var(--color-line)]" />
+
+                      <div className="flex items-center justify-between text-[var(--color-ink-dim)]">
+                        <span className="label">Uptime</span>
+                        <strong className="text-[var(--color-ok)] font-medium">99.99%</strong>
+                      </div>
+                    </div>
+
+                    {/* Deploy CTA */}
+                    <div className="pt-2 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('register', { planId: activeSelectedPlan.id })}
+                        className="btn btn-primary h-9 w-full text-xs"
+                      >
+                        <span>Deploy {activeSelectedPlan.name}</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+
+                      <div className="flex items-center justify-between text-[11px] pt-1">
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('pricing')}
+                          className="text-[var(--color-accent)] hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                        >
+                          <span>All Plans</span>
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const freePlan = categoryPlans.find(p => p.priceMonthly === 0);
+                            if (freePlan) setSelectedRamMB(freePlan.ramMB);
+                            else onNavigate('register');
+                          }}
+                          className="text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer"
+                        >
+                          Start for Free
+                        </button>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+
+              </div>
+
+            </div>
+          </ScrollReveal>
+        </div>
+      </section>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          8. FAQ (CLEAN ACCORDION, HAIRLINE DIVIDERS, EDITORIAL 2-COLUMN)
+          4. INFRASTRUCTURE HIGHLIGHTS (FLAT BENTO CARDS)
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <section id="infrastructure" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-[var(--color-line)] scroll-mt-14">
+        <ScrollReveal>
+          <div className="max-w-2xl mb-10 text-left">
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] tracking-tight">
+              Hardware & Network
+            </h2>
+            <p className="text-xs sm:text-sm text-[var(--color-ink-mute)] mt-1.5 leading-relaxed">
+              No oversold CPU cores or congested shared hypervisors. Pure bare-metal throughput for seamless gameplay and 24/7 bots.
+            </p>
+          </div>
+        </ScrollReveal>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <ScrollReveal delayMs={30}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+                <Cpu className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">5.7GHz Single-Core Boost</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                Game loops execute on a single core. AMD Ryzen 9 7950X silicon guarantees zero tick drops during heavy player loads and TNT physics.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={60}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+                <HardDrive className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">7,000 MB/s Gen4 NVMe</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                PCIe 4.0 storage arrays eliminate chunk generation stutter and save-world lag. Load 100+ modpacks without freezing.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={90}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-ok)]">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">3.2 Tbps Always-On DDoS Filter</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                Automated hardware Anycast filters absorb volumetric attacks instantly. Never get null-routed or disconnected mid-game.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={120}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+                <FolderTree className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">In-Browser SFTP File Manager</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                Drag-and-drop world folders, edit config files in browser with syntax highlighting, and extract massive ZIP modpacks in 3 seconds.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={150}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+                <History className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">Automated Offsite Snapshots</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                Scheduled daily and weekly backups replicated offsite to secure S3 vaults with 1-click instant rollback.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={180}>
+            <div className="p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-2.5">
+              <div className="h-8 w-8 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] flex items-center justify-center text-[var(--color-accent)]">
+                <Zap className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">1.2s Auto-Restart Watchdog</h3>
+              <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                Process-level supervisor detects memory leaks or crash exits and revives terminated bots or game servers within seconds.
+              </p>
+            </div>
+          </ScrollReveal>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          5. TESTIMONIALS (FLAT MONOCHROME CARDS)
+      ───────────────────────────────────────────────────────────────────────────── */}
+      <section id="reviews" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-[var(--color-line)]">
+        <ScrollReveal>
+          <div className="text-left mb-8">
+            <h2 className="text-2xl font-bold text-[var(--color-ink)] tracking-tight">
+              Customer Feedback
+            </h2>
+            <p className="text-xs text-[var(--color-ink-mute)] mt-1">
+              Verified server owners running on our infrastructure.
+            </p>
+          </div>
+        </ScrollReveal>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {userTestimonials.slice(0, 3).map((t, index) => (
+            <ScrollReveal key={t.id} delayMs={index * 40}>
+              <div className="h-full flex flex-col justify-between p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:bg-[var(--color-surface-2)] transition-colors space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1 text-[var(--color-warn)]">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="h-3.5 w-3.5 fill-current text-[var(--color-warn)]" />
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--color-ink-dim)] leading-relaxed">
+                    "{t.quote}"
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-[var(--color-line)]">
+                  <div className="text-xs font-semibold text-[var(--color-ink)]">{t.name}</div>
+                  <div className="label mt-0.5">{t.role}</div>
+                </div>
+              </div>
+            </ScrollReveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          6. FAQ SECTION (CLEAN HAIRLINE ACCORDION)
       ───────────────────────────────────────────────────────────────────────────── */}
       {homepageConfig.showFaqSection !== false && (
-        <section id="faq" className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 border-t border-white/[0.06]">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-            
-            {/* Left Column: Heading */}
-            <div className="lg:col-span-5 space-y-3">
-              <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block">
-                Frequently Asked Questions
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-                Questions & answers.
-              </h2>
-              <p className="text-[15px] text-zinc-400 font-normal leading-relaxed">
-                Everything you need to know about AetherPanel deployment speeds, node hardware, and data migration.
-              </p>
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('support')}
-                  className="text-xs font-mono text-amber-400 hover:text-amber-300 font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>Need help? Open a support ticket</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
+        <section id="faq" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-[var(--color-line)]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-5 space-y-2">
+              <ScrollReveal>
+                <h2 className="text-2xl font-bold text-[var(--color-ink)] tracking-tight">
+                  Frequently Asked Questions
+                </h2>
+                <p className="text-xs text-[var(--color-ink-mute)] mt-1 leading-relaxed">
+                  Common questions regarding infrastructure, resources, and billing.
+                </p>
+              </ScrollReveal>
             </div>
 
-            {/* Right Column: Clean Accordion */}
-            <div className="lg:col-span-7 divide-y divide-white/[0.06]">
-              {faqs.map((faq) => {
+            <div className="lg:col-span-7 divide-y divide-[var(--color-line)] border-t border-b border-[var(--color-line)]">
+              {faqs.map((faq, index) => {
                 const isOpen = openFaqId === faq.id;
                 return (
-                  <div key={faq.id} className="py-4">
-                    <button
-                      type="button"
-                      onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
-                      className="w-full flex items-center justify-between text-left text-sm sm:text-[15px] font-semibold text-white hover:text-amber-400 transition-colors cursor-pointer gap-4 py-1"
-                    >
-                      <span>{faq.question}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-amber-400' : ''}`}
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className="mt-2.5 text-xs sm:text-sm text-zinc-400 leading-relaxed font-normal pr-6">
-                        {faq.answer}
-                      </div>
-                    )}
-                  </div>
+                  <ScrollReveal key={faq.id} delayMs={index * 20}>
+                    <div className="py-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                        className="w-full py-3.5 flex items-center justify-between text-left text-xs sm:text-sm font-medium text-[var(--color-ink)] hover:text-white transition-colors cursor-pointer gap-4"
+                      >
+                        <span>{faq.question}</span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 text-[var(--color-ink-mute)] shrink-0 transition-transform duration-150 ${
+                            isOpen ? 'rotate-180 text-[var(--color-accent)]' : ''
+                          }`}
+                        />
+                      </button>
+                      {isOpen && (
+                        <div className="pb-3.5 text-xs text-[var(--color-ink-mute)] leading-relaxed pr-4 anim-fade-up">
+                          {faq.answer}
+                        </div>
+                      )}
+                    </div>
+                  </ScrollReveal>
                 );
               })}
             </div>
-
           </div>
         </section>
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          9. CLOSING CALL TO ACTION (COMPACT BRAND MOMENT, INNER GLOW)
+          7. FINAL CALL TO ACTION (FLAT SURFACE, SHARP BORDERS)
       ───────────────────────────────────────────────────────────────────────────── */}
       {homepageConfig.showCtaSection !== false && (
-        <section className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 border-t border-white/[0.06]">
-          <div className="rounded-3xl bg-zinc-950 border border-white/[0.08] p-8 sm:p-14 text-center relative overflow-hidden shadow-2xl">
-            
-            {/* Subtle soft ambient glow behind CTA box */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[250px] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-[var(--color-line)]">
+          <ScrollReveal>
+            <div className="rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] p-8 sm:p-12 text-center">
+              <div className="max-w-md mx-auto space-y-3">
+                <span className="label block">
+                  {homepageConfig.ctaEyebrow || 'Ready to Deploy?'}
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-bold text-[var(--color-ink)] tracking-tight">
+                  {homepageConfig.ctaHeading || 'Start hosting on bare-metal infrastructure.'}
+                </h2>
+                <p className="text-xs text-[var(--color-ink-mute)] leading-relaxed">
+                  {homepageConfig.ctaDescription || 'Get your server deployed in under 30 seconds with 99.99% verified SLA.'}
+                </p>
 
-            <div className="relative max-w-xl mx-auto space-y-4">
-              <span className="text-[12px] font-mono uppercase tracking-wider text-amber-400 font-semibold block">
-                {homepageConfig.ctaEyebrow || 'Ready To Deploy?'}
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
-                {homepageConfig.ctaHeading || 'Start building on modern infrastructure today.'}
-              </h2>
-              <p className="text-[15px] text-zinc-400 leading-relaxed font-normal">
-                {homepageConfig.ctaDescription || 'Get your Minecraft server or Discord bot up and running in under 30 seconds with 24/7 reliability.'}
-              </p>
-
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => onNavigate(homepageConfig.ctaPrimaryPage || 'register')}
-                  className="w-full sm:w-auto h-12 px-7 rounded-xl font-bold text-xs sm:text-sm text-zinc-950 bg-gradient-to-b from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20 active:scale-[0.98]"
-                >
-                  <span>{homepageConfig.ctaPrimaryText || 'Get Started Now'}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate(homepageConfig.ctaSecondaryPage || 'pricing')}
-                  className="w-full sm:w-auto h-12 px-7 rounded-xl font-medium text-xs sm:text-sm text-zinc-300 bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-white/[0.08] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>{homepageConfig.ctaSecondaryText || 'View All Plans'}</span>
-                </button>
+                <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(homepageConfig.ctaPrimaryPage || 'register')}
+                    className="btn btn-primary h-9 px-5 text-xs w-full sm:w-auto"
+                  >
+                    <span>{homepageConfig.ctaPrimaryText || 'Get Started'}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(homepageConfig.ctaSecondaryPage || 'pricing')}
+                    className="btn btn-ghost h-9 px-5 text-xs border border-[var(--color-line)] w-full sm:w-auto"
+                  >
+                    <span>{homepageConfig.ctaSecondaryText || 'View Plans'}</span>
+                  </button>
+                </div>
               </div>
             </div>
-
-          </div>
+          </ScrollReveal>
         </section>
       )}
 

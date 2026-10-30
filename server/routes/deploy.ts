@@ -113,7 +113,10 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
 
   const deployCheck = canUserDeployServer(db, freshUser);
   if (!deployCheck.allowed) {
-    throw new Error(deployCheck.errorMessage || 'Server allocation limit reached.');
+    const limitErr: any = new Error(deployCheck.errorMessage || 'Server allocation limit reached.');
+    limitErr.statusCode = 403;
+    limitErr.code = 'SERVER_LIMIT_REACHED';
+    throw limitErr;
   }
 
   const prod = db.products.find((p: any) => p.id === plan.productId);
@@ -205,13 +208,13 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
     freshUser.credits = parseFloat((freshUser.credits - finalAmount).toFixed(2));
   }
 
-  let alloc = db.allocations.find((a: any) => a.nodeId === targetNode.id && !a.isAssigned && !isPortReserved(a.port, targetNode));
+  let alloc = db.allocations.find((a: any) => a.nodeId === targetNode.id && !a.isAssigned && !isPortReserved(a.port));
   let assignedPort: number;
   if (alloc) {
     assignedPort = alloc.port;
   } else {
     let candidate = template?.defaultPort || 25565;
-    while (isPortReserved(candidate, targetNode) || db.allocations.some((a: any) => a.nodeId === targetNode.id && a.port === candidate)) {
+    while (isPortReserved(candidate) || db.allocations.some((a: any) => a.nodeId === targetNode.id && a.port === candidate)) {
       candidate = Math.floor(Math.random() * 4000) + 25565;
     }
     assignedPort = candidate;
@@ -428,7 +431,9 @@ router.post('/create', authMiddleware, async (req: AuthenticatedRequest, res: Re
         data: result
       });
     } catch (err: any) {
-      res.status(400).json({ success: false, error: { code: 'DEPLOYMENT_FAILED', message: err.message || 'Server deployment failed.' } });
+      const statusCode = err.statusCode || 400;
+      const errorCode = err.code || 'DEPLOYMENT_FAILED';
+      res.status(statusCode).json({ success: false, error: { code: errorCode, message: err.message || 'Server deployment failed.' } });
     }
   });
 });

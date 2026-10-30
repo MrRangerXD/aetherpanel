@@ -17,6 +17,17 @@ router.get('/tickets', authMiddleware, async (req: AuthenticatedRequest, res: Re
   res.json({ success: true, data: userTickets });
 });
 
+// GET /api/v1/support/activity-logs - Customer security audit & activity log trail
+router.get('/activity-logs', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const isAdmin = ['admin', 'super_admin', 'support', 'moderator'].includes(req.user!.role);
+  const logs = isAdmin
+    ? (db.auditLogs || [])
+    : (db.auditLogs || []).filter(l => l.actorId === req.user!.id || (l as any).userId === req.user!.id);
+
+  res.json({ success: true, data: logs });
+});
+
 // GET /api/v1/support/tickets/:id
 router.get('/tickets/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
