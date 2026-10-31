@@ -669,38 +669,133 @@ You may NOT use AetherPanel infrastructure for:
 ];
 
 export const defaultFaqs: FaqItem[] = [
+  // Getting Started
   {
-    id: 'faq_1',
-    question: 'AetherPanel server specifications kya hain?',
-    answer: 'AetherPanel premium compute nodes high-frequency AMD Ryzen 9 7950X/9950X processors, fast enterprise NVMe storage, and fully isolated memory & CPU limits utilize karte hain.',
+    id: 'faq_gs_1',
+    category: 'Getting Started',
+    question: 'How fast will my game or bot server be online after ordering?',
+    answer: 'Provisioning is completely automated. As soon as you select your software template and location, your isolated container is bootstrapped and online in less than 30 seconds.',
     sortOrder: 1,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
   {
-    id: 'faq_2',
-    question: 'Minecraft/Bot server deploy hone me kitna time lagta hai?',
-    answer: 'Deployment instantaneous hai! Template aur location select karne ke bad, aapka custom isolated container instance under 30 seconds ke andar active aur running ho jata hai.',
+    id: 'faq_gs_2',
+    category: 'Getting Started',
+    question: 'How do I connect to my server console and files?',
+    answer: 'You can access the live interactive terminal, web-based file manager, and SFTP credentials directly inside your server dashboard. Dedicated SFTP credentials are also provided for FileZilla or WinSCP.',
     sortOrder: 2,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
+
+  // Billing
   {
-    id: 'faq_3',
-    question: 'Kya automatic backup snapshots supported hain?',
-    answer: 'Haan, absolute secure backups systems live hain! Server tab me Backups section se aap manually snapshots generate kar sakte hain aur automation scheduler configure kar sakte hain.',
+    id: 'faq_bill_1',
+    category: 'Billing',
+    question: 'Can I upgrade or downgrade my hosting plan at any time?',
+    answer: 'Yes! You can scale your RAM, CPU cores, and storage dynamically from the Billing & Plans tab with zero data loss and automated pro-rated invoicing.',
     sortOrder: 3,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
   {
-    id: 'faq_4',
-    question: 'Direct link ya other panels se files migrate kaise karein?',
-    answer: 'Humare premium "Server Importer & Migration Engine" tab se direct URL download link (Google Drive, MediaFire, Discord attachments, zip/tar links) ya regular SFTP migration configure karke data easily migrate ho jata hai.',
+    id: 'faq_bill_2',
+    category: 'Billing',
+    question: 'What payment methods are supported on the platform?',
+    answer: 'We support all major credit/debit cards via Stripe, UPI, bank transfers, account credits earned through AFK rewards, and cryptocurrency (BTC, ETH, LTC, USDT, SOL).',
     sortOrder: 4,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Servers
+  {
+    id: 'faq_srv_1',
+    category: 'Servers',
+    question: 'Which Minecraft versions and software packages are supported?',
+    answer: 'We support all major Minecraft software including Paper, Purpur, Fabric, Forge, Spigot, and Vanilla across versions 1.7.10 through 1.21.4+, with automated Java version switching (Java 8 through Java 25).',
+    sortOrder: 5,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_srv_2',
+    category: 'Servers',
+    question: 'Can I host Discord bots, Python scripts, or Node.js web applications?',
+    answer: 'Yes. Our Bot & Application hosting tier features native runtimes for Node.js (v18, v20, v22 LTS), Python 3.12+, and Bun with 24/7 process supervision, auto-restarts on crash, and package managers.',
+    sortOrder: 6,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Technical
+  {
+    id: 'faq_tech_1',
+    category: 'Technical',
+    question: 'What hardware specifications do your hypervisor nodes use?',
+    answer: 'Our infrastructure runs on enterprise AMD Ryzen 9 7950X / 9950X silicon clocked up to 5.7 GHz, high-speed DDR5 ECC memory, and enterprise PCIe Gen4 NVMe arrays with 7,000 MB/s read/write speeds.',
+    sortOrder: 7,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_tech_2',
+    category: 'Technical',
+    question: 'How do automated backups and file restorations work?',
+    answer: 'You can generate instant snapshots or configure recurring backup schedules. Snapshots are compressed into secure tarballs and can be restored or downloaded with a single click.',
+    sortOrder: 8,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Security
+  {
+    id: 'faq_sec_1',
+    category: 'Security',
+    question: 'What level of DDoS protection is included with my server?',
+    answer: 'All instances benefit from enterprise Anycast edge scrubbing with 3.2 Tbps mitigation capacity, automatic Layer 4 (SYN, UDP, ICMP) filtering, and specialized game-layer packet inspection.',
+    sortOrder: 9,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_sec_2',
+    category: 'Security',
+    question: 'Are server files and memory isolated between different customers?',
+    answer: 'Yes. Every instance runs inside an isolated Linux container with strictly enforced kernel cgroups, namespace barriers, chroot filesystem jails, and unprivileged user IDs.',
+    sortOrder: 10,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Support
+  {
+    id: 'faq_sup_1',
+    category: 'Support',
+    question: 'How can I get technical assistance if my server crashes or encounters errors?',
+    answer: 'Our support team is available 24/7 through integrated in-panel support tickets and our official Discord community. We also offer automated crash diagnostics in the server console.',
+    sortOrder: 11,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'faq_sup_2',
+    category: 'Support',
+    question: 'Can I import worlds and files from another hosting provider or VPS?',
+    answer: 'Yes. Use our built-in "Server Importer & Migration Engine" tab to pull backups directly via remote SFTP or direct archive download links from Google Drive, MediaFire, or Dropbox.',
+    sortOrder: 12,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()

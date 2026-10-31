@@ -217,8 +217,8 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                 <label className="label block mb-1">
                   Username
                 </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+                <div className="relative flex items-center">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none" />
                   <input
                     type="text"
                     required
@@ -226,7 +226,7 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="user_name"
                     aria-invalid={Boolean(error && error.toLowerCase().includes('username'))}
-                    className="field w-full pl-9 text-xs"
+                    className="field w-full pl-10 text-xs"
                   />
                 </div>
               </div>
@@ -248,8 +248,8 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                 <label className="label block mb-1">
                   Email Address
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none" />
                   <input
                     type="email"
                     required
@@ -257,7 +257,7 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="user@domain.com"
                     aria-invalid={Boolean(error && error.toLowerCase().includes('email'))}
-                    className="field w-full pl-9 text-xs"
+                    className="field w-full pl-10 text-xs"
                   />
                 </div>
               </div>
@@ -266,8 +266,8 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                 <label className="label block mb-1">
                   Password
                 </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none" />
                   <input
                     type="password"
                     required
@@ -275,7 +275,7 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     aria-invalid={Boolean(error && error.toLowerCase().includes('password'))}
-                    className="field w-full pl-9 text-xs"
+                    className="field w-full pl-10 text-xs"
                   />
                 </div>
               </div>

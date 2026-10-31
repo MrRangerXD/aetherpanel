@@ -258,6 +258,10 @@ export interface Server {
   location: string;
   software: string; // e.g., 'Paper', 'Purpur', 'Spigot', 'Node.js', 'Python'
   version: string; // e.g. '1.20.4', 'Node 20', 'Python 3.11'
+  softwareId?: string;
+  versionId?: string;
+  software_id?: string;
+  version_id?: string;
   limits: ServerResourceLimits;
   resources?: ServerResources;
   startup?: ServerStartupConfig;
@@ -753,6 +757,7 @@ export interface SystemSettings {
   heroDescription?: string;
   footerDescription?: string;
   homepageConfig?: HomepageConfig;
+  panelCustomization?: any;
 }
 
 export interface HomepageConfig {
@@ -1382,6 +1387,7 @@ export interface UiDiagnosticStats {
 
 export interface FaqItem {
   id: string;
+  category?: 'Getting Started' | 'Billing' | 'Servers' | 'Technical' | 'Security' | 'Support' | string;
   question: string;
   answer: string;
   sortOrder: number;

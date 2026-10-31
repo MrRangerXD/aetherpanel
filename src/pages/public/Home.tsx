@@ -8,6 +8,7 @@ import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan, Product } from '../../types';
 import { Marquee } from '../../components/ui/Marquee';
+import { RotatingHero } from '../../components/home/RotatingHero';
 
 interface HomeProps {
   onNavigate: (page: string, params?: any) => void;
@@ -269,51 +270,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     <div className="relative overflow-x-hidden bg-[var(--color-bg)] min-h-screen text-[var(--color-ink)] selection:bg-[var(--color-accent)] selection:text-white">
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          1. CLEAN HERO (ONE HEADLINE, ONE SUB, TWO BUTTONS, NO DOT OVERLAYS)
+          1. ROTATING HERO BACKGROUND & SERVICE CAROUSEL (ORIHOST STYLE)
       ───────────────────────────────────────────────────────────────────────────── */}
-      <section className="relative py-20 sm:py-28 px-4 sm:px-6 lg:px-8 border-b border-[var(--color-line)] bg-[var(--color-bg)]">
-        <div className="max-w-3xl mx-auto text-center flex flex-col items-center">
-          
-          {/* Main Headline */}
-          <h1 className="text-3xl sm:text-5xl font-bold text-[var(--color-ink)] tracking-tight leading-[1.15] text-balance anim-fade-up">
-            Next-Generation Cloud & Game Server Hosting
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-sm sm:text-base text-[var(--color-ink-dim)] font-normal leading-relaxed max-w-xl mx-auto mt-4 mb-8 text-balance anim-fade-up">
-            {homepageConfig.heroDescription || heroDescription || 'High-performance Minecraft and Discord bot hosting on AMD Ryzen 9 7950X silicon, PCIe 4.0 NVMe arrays, and always-on 3.2 Tbps DDoS mitigation.'}
-          </p>
-
-          {/* Two Buttons */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto anim-fade-up">
-            <button
-              type="button"
-              onClick={() => onNavigate(homepageConfig.heroPrimaryCtaPage || 'register')}
-              className="btn btn-primary h-10 px-6 text-xs sm:text-sm font-semibold w-full sm:w-auto"
-            >
-              <span>{homepageConfig.heroPrimaryCtaText || 'Deploy Server Now'}</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                const target = homepageConfig.heroSecondaryCtaPage || 'hosting';
-                if (target === 'hosting') {
-                  const el = document.getElementById('plans-showcase');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  else onNavigate('pricing');
-                } else {
-                  onNavigate(target);
-                }
-              }}
-              className="btn btn-ghost h-10 px-6 text-xs sm:text-sm border border-[var(--color-line)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] text-[var(--color-ink)] w-full sm:w-auto"
-            >
-              <span>{homepageConfig.heroSecondaryCtaText || 'Explore Plans'}</span>
-            </button>
-          </div>
-
-        </div>
+      <section className="relative w-full">
+        <RotatingHero
+          onNavigate={onNavigate}
+          onSelectCategory={(cat) => {
+            if (cat === 'minecraft') setActiveCategoryTab('minecraft');
+            else setActiveCategoryTab('bot');
+          }}
+        />
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────────────────

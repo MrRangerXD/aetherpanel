@@ -1,5 +1,5 @@
-import React from 'react';
-import { Github, Twitter, Shield, Heart } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Github, Twitter, Shield, Heart, MousePointer } from 'lucide-react';
 import { AetherLogo } from './AetherLogo';
 import { useBranding } from '../lib/BrandingContext';
 
@@ -13,6 +13,22 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   const activeDiscord = socialLinks?.discord || discordUrl;
   const activeTwitter = socialLinks?.twitter;
   const activeGithub = socialLinks?.github;
+
+  const [cursorActive, setCursorActive] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('aether_custom_cursor') !== 'false';
+  });
+
+  useEffect(() => {
+    const handleToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{ enabled?: boolean }>;
+      if (customEvent.detail && typeof customEvent.detail.enabled === 'boolean') {
+        setCursorActive(customEvent.detail.enabled);
+      }
+    };
+    window.addEventListener('aether-cursor-toggle', handleToggle);
+    return () => window.removeEventListener('aether-cursor-toggle', handleToggle);
+  }, []);
 
   return (
     <footer id="platform_footer" className="border-t border-[var(--color-line)] bg-[var(--color-bg)] text-[var(--color-ink-dim)] select-none">
@@ -245,6 +261,21 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               className="hover:text-[var(--color-ink)] transition-colors cursor-pointer"
             >
               Status
+            </button>
+            <span className="hidden sm:inline text-[var(--color-line)]">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !cursorActive;
+                setCursorActive(next);
+                localStorage.setItem('aether_custom_cursor', next ? 'true' : 'false');
+                window.dispatchEvent(new CustomEvent('aether-cursor-toggle', { detail: { enabled: next } }));
+              }}
+              className="inline-flex items-center gap-1 hover:text-[var(--color-accent)] transition-colors cursor-pointer font-mono text-[11px]"
+              title={cursorActive ? 'Disable custom cursor' : 'Enable custom cursor'}
+            >
+              <MousePointer className={`h-3 w-3 ${cursorActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+              <span>Cursor: {cursorActive ? 'ON' : 'OFF'}</span>
             </button>
           </div>
           <p className="flex items-center gap-1.5 text-[var(--color-ink-mute)]">

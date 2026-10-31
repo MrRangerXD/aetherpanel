@@ -4,7 +4,7 @@ import {
   Server, Shield, Search, Menu, X, LayoutDashboard, CreditCard, LifeBuoy,
   Settings, LogOut, Sliders, Users, HardDrive, Package, Coins,
   Megaphone, Tag, Cpu, Mail, Disc as DiscordIcon, ExternalLink,
-  ChevronDown, Gamepad2, Bot, Activity
+  ChevronDown, Gamepad2, Bot, Activity, MousePointer
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useBranding } from '../lib/BrandingContext';
@@ -36,6 +36,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const activeDiscord = socialLinks?.discord || discordUrl || 'https://discord.gg/orihost';
   const activeEmail = supportEmail || 'support@orihost.com';
+
+  const [cursorActive, setCursorActive] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('aether_custom_cursor') !== 'false';
+  });
+
+  const toggleCursor = () => {
+    const next = !cursorActive;
+    setCursorActive(next);
+    localStorage.setItem('aether_custom_cursor', next ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('aether-cursor-toggle', { detail: { enabled: next } }));
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -276,6 +288,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right CTA & Account Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Custom Cursor Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleCursor}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md text-xs font-mono transition-colors border cursor-pointer ${
+              cursorActive
+                ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)] border-[var(--color-accent)]'
+                : 'bg-[var(--color-surface)] text-[var(--color-ink-mute)] border-[var(--color-line)] hover:text-[var(--color-ink)]'
+            }`}
+            title={cursorActive ? 'Disable Custom Cursor' : 'Enable Custom Cursor'}
+          >
+            <MousePointer className="h-3 w-3" />
+            <span className="text-[10px] uppercase font-semibold">{cursorActive ? 'Cursor ON' : 'Cursor OFF'}</span>
+          </button>
+
           {onOpenSearch && (
             <button
               type="button"
@@ -430,6 +457,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <kbd className="px-1 py-0.5 text-[9px] font-mono text-[var(--color-ink-mute)] bg-[var(--color-bg)] rounded border border-[var(--color-line)]">⌘K</kbd>
                 </button>
               )}
+
+              {/* Cursor Toggle in Mobile Drawer */}
+              <button
+                type="button"
+                onClick={toggleCursor}
+                className="w-full flex items-center justify-between px-3 h-10 rounded-md text-xs font-medium text-[var(--color-ink-dim)] bg-[var(--color-surface-2)] border border-[var(--color-line)] hover:text-[var(--color-ink)] transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <MousePointer className={`h-3.5 w-3.5 ${cursorActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+                  <span>Custom Orange Cursor</span>
+                </div>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                  cursorActive
+                    ? 'bg-[var(--color-surface-3)] text-[var(--color-accent)] border-[var(--color-accent)]'
+                    : 'bg-[var(--color-bg)] text-[var(--color-ink-mute)] border-[var(--color-line)]'
+                }`}>
+                  {cursorActive ? 'ENABLED' : 'DISABLED'}
+                </span>
+              </button>
 
               {/* Server Switcher in Mobile Drawer */}
               {user && !isAdminRoute && userServers.length > 0 && (

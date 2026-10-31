@@ -298,6 +298,15 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
   const handleSelectSoftware = (software: SoftwareOption) => {
     setSelectedSoftware(software);
 
+    // Hard dependency: Immediately reset dynamic versions and selected version to this software only
+    const initialVersions = software.versions && software.versions.length > 0 ? software.versions : [software.defaultVersion];
+    setDynamicVersions(initialVersions);
+    setSelectedVersion(software.defaultVersion || initialVersions[0]);
+
+    if (software.recommendedJava) {
+      setSelectedJavaVersion(software.recommendedJava);
+    }
+
     const nameLower = software.name.toLowerCase();
     if (nameLower.includes('node')) {
       setSelectedServerTypeId('st_nodejs');
@@ -311,11 +320,11 @@ export const ServerDeployWizard: React.FC<ServerDeployWizardProps> = ({
 
     if (software.category === 'minecraft') {
       loadMinecraftVersions(software.name);
-    } else if (software.category === 'bot' && runtimesMap) {
+    } else if (software.category === 'bot') {
       const key = software.id.toLowerCase();
-      if (runtimesMap[key]) {
+      if (runtimesMap && runtimesMap[key] && Array.isArray(runtimesMap[key].versions) && runtimesMap[key].versions.length > 0) {
         setDynamicVersions(runtimesMap[key].versions);
-        setSelectedVersion(runtimesMap[key].defaultVersion);
+        setSelectedVersion(runtimesMap[key].defaultVersion || runtimesMap[key].versions[0]);
       }
     }
   };

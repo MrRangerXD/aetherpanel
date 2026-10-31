@@ -249,11 +249,33 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
   };
 
   const selectedSoftware = software || template?.name || (category === 'minecraft' ? 'Paper' : 'Node.js');
-  const selectedVersion = version || template?.defaultVersion || (category === 'minecraft' ? '1.21.4' : 'Node 22 (LTS)');
+  let selectedVersion = version || template?.defaultVersion || (category === 'minecraft' ? '1.21.4' : 'Node 22 (LTS)');
+
+  // Strict Server-Side Software & Version Validation
+  const swLower = (selectedSoftware || '').toLowerCase();
+  const verStr = String(selectedVersion || '').trim();
+
+  if (category === 'minecraft' || swLower.includes('paper') || swLower.includes('purpur') || swLower.includes('vanilla') || swLower.includes('fabric') || swLower.includes('forge')) {
+    // Version must look like a Minecraft version (e.g. 1.21.4)
+    if (!verStr.match(/^1\.\d+(\.\d+)?$/) && !verStr.match(/^\d+(\.\d+)?$/)) {
+      throw new Error(`Invalid version '${selectedVersion}' specified for Minecraft software '${selectedSoftware}'. Expected format like '1.21.4'.`);
+    }
+  } else if (swLower.includes('node')) {
+    if (!verStr.toLowerCase().includes('node') && !verStr.match(/^\d+$/)) {
+      throw new Error(`Invalid version '${selectedVersion}' specified for Node.js runtime. Expected format like 'Node 22 (LTS)' or '22'.`);
+    }
+  } else if (swLower.includes('python')) {
+    if (!verStr.toLowerCase().includes('python') && !verStr.match(/^3\.\d+/)) {
+      throw new Error(`Invalid version '${selectedVersion}' specified for Python runtime. Expected format like 'Python 3.12 (Latest)' or '3.12'.`);
+    }
+  } else if (swLower.includes('bun')) {
+    if (!verStr.toLowerCase().includes('bun') && !verStr.match(/^1\.\d+/)) {
+      throw new Error(`Invalid version '${selectedVersion}' specified for Bun runtime. Expected format like 'Bun 1.2 (Latest)'.`);
+    }
+  }
 
   let resolvedServerTypeId = serverTypeId;
   if (!resolvedServerTypeId) {
-    const swLower = (selectedSoftware || '').toLowerCase();
     if (swLower.includes('node')) resolvedServerTypeId = 'st_nodejs';
     else if (swLower.includes('bun')) resolvedServerTypeId = 'st_bun';
     else if (swLower.includes('python')) resolvedServerTypeId = 'st_python';
@@ -313,6 +335,10 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
     location: targetNode.locationName,
     software: selectedSoftware,
     version: selectedVersion,
+    softwareId: selectedSoftware.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    versionId: selectedVersion.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    software_id: selectedSoftware.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    version_id: selectedVersion.toLowerCase().replace(/[^a-z0-9]/g, '_'),
     startup: startupConfig as any,
     limits: resourceLimits,
     resources: {

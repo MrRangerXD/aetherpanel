@@ -193,6 +193,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Apply Font Family
   useEffect(() => {
     localStorage.setItem('aether_active_font_id', activeFontId);
+    document.documentElement.style.setProperty('--font-active', activeFont.fontFamily);
+    document.documentElement.style.fontFamily = activeFont.fontFamily;
     document.body.style.fontFamily = activeFont.fontFamily;
   }, [activeFontId, activeFont]);
 

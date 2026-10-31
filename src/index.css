@@ -10,8 +10,9 @@
   --color-ink:       #e8e9ea;
   --color-ink-dim:   #9a9ca1;
   --color-ink-mute:  #6a6d73;
-  --color-accent:    #4f7cff;
-  --color-accent-dim:#2b4a9e;
+  --color-accent:    #FF6A00;
+  --color-accent-hover: #E85D00;
+  --color-accent-dim:#CC5200;
   --color-ok:        #3fb950;
   --color-warn:      #d29922;
   --color-err:       #f85149;
@@ -33,6 +34,7 @@
   }
 
   html, body {
+    font-family: var(--font-active, "Plus Jakarta Sans", sans-serif);
     background-color: var(--color-bg);
     color: var(--color-ink);
     overflow-x: hidden;
@@ -42,6 +44,10 @@
     text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  .font-sans {
+    font-family: var(--font-active, "Plus Jakarta Sans", sans-serif) !important;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -154,6 +160,17 @@
   outline: none;
 }
 
+/* Ensure icon padding classes strictly override default 12px field padding */
+.field.pl-8, input.field.pl-8 { padding-left: 2rem !important; }
+.field.pl-9, input.field.pl-9 { padding-left: 2.25rem !important; }
+.field.pl-10, input.field.pl-10 { padding-left: 2.5rem !important; }
+.field.pl-11, input.field.pl-11 { padding-left: 2.75rem !important; }
+.field.pl-12, input.field.pl-12 { padding-left: 3rem !important; }
+.field.pr-8, input.field.pr-8 { padding-right: 2rem !important; }
+.field.pr-9, input.field.pr-9 { padding-right: 2.25rem !important; }
+.field.pr-10, input.field.pr-10 { padding-right: 2.5rem !important; }
+.field.pr-12, input.field.pr-12 { padding-right: 3rem !important; }
+
 .field:focus {
   border-color: var(--color-accent);
 }
@@ -208,12 +225,19 @@
 .btn-primary {
   background-color: var(--color-accent);
   border-color: var(--color-accent);
-  color: #ffffff;
+  color: #0b0b0c;
+  font-weight: 600;
 }
 
 .btn-primary:hover {
-  background-color: #3d6ae8;
-  border-color: #3d6ae8;
+  background-color: var(--color-accent-hover, #E85D00);
+  border-color: var(--color-accent-hover, #E85D00);
+  color: #0b0b0c;
+}
+
+.btn-primary:active {
+  background-color: var(--color-accent-dim, #CC5200);
+  border-color: var(--color-accent-dim, #CC5200);
 }
 
 .btn-danger {
