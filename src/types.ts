@@ -304,53 +304,67 @@ export interface Location {
 }
 
 export interface Node {
-  id: string;
+  id: string;              // uuid, or literal "local"
+  name: string;
+  hostname: string;        // FQDN or IPv4 or IPv6 — "node.example.com"
+  apiPort: number;         // 8080 default, 8443 when ssl
+  apiUrl?: string;         // overrides scheme+host+port (proxy / playit tunnel)
+  ssl: boolean;
+  token?: string;          // wings bearer, hashed at rest, never returned after creation
+  isLocal: boolean;
+  behindProxy: boolean;
+  maintenanceMode: boolean;
+  memory: number;          // Total RAM in MB
+  disk: number;            // Total Disk in GB (or MB)
+  cpu: number;             // Total CPU in % or cores
+  maxServers: number;
+  memoryOverallocate: number;
+  diskOverallocate: number;
+  tags: string[];
+  lastHeartbeatAt: string | null;
+  createdAt: string;
+
+  // Compatibility and runtime telemetry properties
   uuid?: string;
   installationId?: string;
-  name: string;
   description?: string;
-  hostname: string;
-  ip: string; // Internal or primary IP
-  publicIpv4?: string; // Optional!
-  publicIpv6?: string; // Optional!
+  ip?: string;
+  publicIpv4?: string;
+  publicIpv6?: string;
   fqdn?: string;
-  bindAddress?: string; // Internal bind address (e.g. 0.0.0.0)
-  daemonListenIp?: string; // Alias for bindAddress
-  daemonPort: number; // Default 8443 (SSL) or 8080 (Internal API)
+  bindAddress?: string;
+  daemonListenIp?: string;
+  daemonPort?: number;
   daemonScheme?: 'http' | 'https';
-  scheme?: 'http' | 'https'; // Alias for daemonScheme
+  scheme?: 'http' | 'https';
   daemonSslEnabled?: boolean;
-  sslEnabled?: boolean; // Alias for daemonSslEnabled
-  sftpPort: number; // Default 2022
-  location: string;
-  locationName: string;
-  flagCode: string; // ISO country code for UI flags
-  totalRamMB: number;
-  usedRamMB: number;
-  totalCpuCores: number;
-  usedCpuCores: number;
-  totalDiskGB: number;
-  usedDiskGB: number;
-  ramOverallocatePercent: number;
-  cpuOverallocatePercent: number;
-  diskOverallocatePercent: number;
-  maxServers: number;
-  allowedProducts: string[];
-  tags?: string[];
-  status: 'online' | 'offline' | 'degraded' | 'maintenance' | 'installing' | 'pending' | 'error' | 'uninstalling';
-  isMaintenanceMode: boolean;
-  serverCount: number;
+  sslEnabled?: boolean;
+  sftpPort?: number;
+  sftpFqdn?: string;
+  location?: string;
+  locationName?: string;
+  flagCode?: string;
+  totalRamMB?: number;
+  usedRamMB?: number;
+  totalCpuCores?: number;
+  usedCpuCores?: number;
+  totalDiskGB?: number;
+  usedDiskGB?: number;
+  ramOverallocatePercent?: number;
+  cpuOverallocatePercent?: number;
+  diskOverallocatePercent?: number;
+  allowedProducts?: string[];
+  status?: 'online' | 'offline' | 'degraded' | 'maintenance' | 'installing' | 'pending' | 'error' | 'uninstalling';
+  isMaintenanceMode?: boolean;
+  serverCount?: number;
   daemonToken?: string;
   installationToken?: string;
-  lastHeartbeatAt?: string;
-  createdAt?: string;
   updatedAt?: string;
   isSecure?: boolean;
   isLocalNode?: boolean;
   reservedRamMB?: number;
   reservedCpuCores?: number;
   reservedDiskGB?: number;
-  sftpFqdn?: string;
 }
 
 export interface SftpActiveSessionDTO {
@@ -400,9 +414,11 @@ export interface Allocation {
   nodeId: string;
   ip: string;
   port: number;
+  ip_alias?: string;
   alias?: string;
   notes?: string;
-  serverId?: string;
+  serverId?: string | null;
+  assigned?: boolean;
   isAssigned: boolean;
   isReserved?: boolean;
   createdAt?: string;

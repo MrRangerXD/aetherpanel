@@ -1137,7 +1137,7 @@ setup_service_manager() {
   mkdir -p "${install_dir}/bin"
   cat <<'SUPERVISOR_EOF' > "${install_dir}/bin/aetherpanel-supervisor.sh"
 #!/usr/bin/env bash
-# AetherPanel Standalone Background Process Supervisor
+# AetherPanel Standalone Background Process Supervisor (Sandbox & VPS Hardened)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="${SCRIPT_DIR}/data/aetherpanel.pid"
 LOG_FILE="${SCRIPT_DIR}/data/logs/panel.log"
@@ -1148,14 +1148,31 @@ export NODE_ENV=production
 
 while true; do
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] Starting AetherPanel process..." >> "${LOG_FILE}"
-  npm start >> "${LOG_FILE}" 2>&1 &
+  START_TS=$(date +%s)
+  
+  if [ -f "${SCRIPT_DIR}/dist/server.cjs" ]; then
+    node "${SCRIPT_DIR}/dist/server.cjs" >> "${LOG_FILE}" 2>&1 &
+  else
+    npm start >> "${LOG_FILE}" 2>&1 &
+  fi
   PANEL_PID=$!
   echo "$PANEL_PID" > "${PID_FILE}"
 
-  wait "$PANEL_PID" || true
+  wait "$PANEL_PID" 2>/dev/null || true
   EXIT_STATUS=$?
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] AetherPanel exited with status ${EXIT_STATUS}. Restarting in 3 seconds..." >> "${LOG_FILE}"
-  sleep 3
+  rm -f "${PID_FILE}"
+  
+  END_TS=$(date +%s)
+  RUN_TIME=$((END_TS - START_TS))
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] AetherPanel exited with status ${EXIT_STATUS} after ${RUN_TIME}s." >> "${LOG_FILE}"
+  
+  # Protect against sandbox runaway crash loops
+  if [ "$RUN_TIME" -lt 5 ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] Rapid exit detected. Backing off 6s before retry to prevent sandbox PID overload..." >> "${LOG_FILE}"
+    sleep 6
+  else
+    sleep 2
+  fi
 done
 SUPERVISOR_EOF
   chmod +x "${install_dir}/bin/aetherpanel-supervisor.sh"
@@ -1168,14 +1185,25 @@ PID_FILE="\${INSTALL_DIR}/data/aetherpanel.pid"
 LOG_FILE="\${INSTALL_DIR}/data/logs/panel.log"
 INIT_SYS="${INIT_SYSTEM}"
 
+check_pid_alive() {
+  local p="\$1"
+  if [ -z "\$p" ]; then return 1; fi
+  if [ -d "/proc/\$p" ]; then return 0; fi
+  if ps -p "\$p" >/dev/null 2>&1; then return 0; fi
+  if kill -0 "\$p" 2>/dev/null; then return 0; fi
+  return 1
+}
+
 case "\${1:-status}" in
   start)
     if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
       systemctl start aetherpanel
     else
-      if [ -f "\$PID_FILE" ] && kill -0 "\$(cat "\$PID_FILE")" 2>/dev/null; then
-        echo "AetherPanel is already running (PID \$(cat "\$PID_FILE"))."
+      ACTIVE_PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
+      if check_pid_alive "\$ACTIVE_PID"; then
+        echo "AetherPanel is already running (PID \$ACTIVE_PID)."
       else
+        rm -f "\$PID_FILE"
         nohup "\${INSTALL_DIR}/bin/aetherpanel-supervisor.sh" >/dev/null 2>&1 &
         sleep 2
         echo "AetherPanel started in background supervisor mode."
@@ -1184,18 +1212,20 @@ case "\${1:-status}" in
     ;;
   stop)
     if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
-      systemctl stop aetherpanel
-    else
-      if [ -f "\$PID_FILE" ]; then
-        PID=\$(cat "\$PID_FILE")
-        pkill -P "\$PID" 2>/dev/null || true
-        kill "\$PID" 2>/dev/null || true
-        rm -f "\$PID_FILE"
-        echo "AetherPanel stopped."
-      else
-        echo "No PID file found."
-      fi
+      systemctl stop aetherpanel 2>/dev/null || true
     fi
+    if [ -f "\$PID_FILE" ]; then
+      PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
+      if [ -n "\$PID" ]; then
+        kill -TERM "\$PID" 2>/dev/null || true
+        sleep 1
+        kill -9 "\$PID" 2>/dev/null || true
+      fi
+      rm -f "\$PID_FILE"
+    fi
+    pkill -f "aetherpanel-supervisor.sh" 2>/dev/null || true
+    pkill -f "dist/server.cjs" 2>/dev/null || true
+    echo "AetherPanel stopped."
     ;;
   restart)
     "\$0" stop
@@ -1206,8 +1236,9 @@ case "\${1:-status}" in
     if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
       systemctl status aetherpanel
     else
-      if [ -f "\$PID_FILE" ] && kill -0 "\$(cat "\$PID_FILE")" 2>/dev/null; then
-        echo "AetherPanel is RUNNING (PID \$(cat "\$PID_FILE"))."
+      ACTIVE_PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
+      if check_pid_alive "\$ACTIVE_PID"; then
+        echo "AetherPanel is RUNNING (PID \$ACTIVE_PID)."
       else
         echo "AetherPanel is STOPPED."
       fi
@@ -1496,8 +1527,17 @@ EOF
   echo -e "${YELLOW}[7/8] Building application and provisioning runtimes...${NC}"
   cd "$INSTALL_DIR"
   log_msg "Installing npm packages in $INSTALL_DIR"
-  echo -e "${CYAN}    Installing npm dependencies...${NC}"
-  npm install --production=false >> "$LOG_FILE" 2>&1 || npm install >> "$LOG_FILE" 2>&1 || true
+  echo -e "${CYAN}    Resolving and installing full package dependencies...${NC}"
+  if ! npm install --production=false >> "$LOG_FILE" 2>&1; then
+    echo -e "${YELLOW}    Retrying npm install with --legacy-peer-deps...${NC}"
+    npm install --production=false --legacy-peer-deps >> "$LOG_FILE" 2>&1 || true
+  fi
+
+  # Verify core build dependencies exist
+  if [ ! -d "$INSTALL_DIR/node_modules" ] || [ ! -f "$INSTALL_DIR/node_modules/.bin/vite" ]; then
+    echo -e "${YELLOW}    Installing required build toolchain...${NC}"
+    npm install --include=dev --legacy-peer-deps >> "$LOG_FILE" 2>&1 || true
+  fi
 
   echo -e "${CYAN}    Compiling frontend and backend bundles (npm run build)...${NC}"
   log_msg "Building production bundle"

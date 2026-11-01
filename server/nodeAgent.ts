@@ -50,18 +50,35 @@ export async function ensureLocalNode(): Promise<Node> {
 
   if (!localNode) {
     localNode = {
-      id: 'node_local',
+      id: 'local',
       uuid: 'local-node-00000000-0000-000000000000',
       name: 'Local Node (Primary Host)',
       description: 'Default local compute host co-located on control plane VPS.',
-      hostname: hostName,
+      hostname: 'localhost',
+      apiPort: 3000,
+      apiUrl: 'http://127.0.0.1:3000',
+      ssl: false,
+      isLocal: true,
+      behindProxy: false,
+      maintenanceMode: false,
+      memory: hostRamMB,
+      disk: totalDiskGB * 1024,
+      cpu: hostCpuCores * 100,
+      maxServers: 100,
+      memoryOverallocate: 0,
+      diskOverallocate: 0,
+      tags: ['local', 'primary', 'bare-metal'],
+      lastHeartbeatAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+
+      // Compatibility fields
       ip: primaryIp,
       publicIpv4: detectedPublicIp || undefined,
       fqdn: hostName.includes('.') ? hostName : `${hostName}.local`,
       bindAddress: '0.0.0.0',
       scheme: 'http',
       sslEnabled: false,
-      daemonPort: 8080,
+      daemonPort: 3000,
       daemonListenIp: '0.0.0.0',
       daemonScheme: 'http',
       daemonSslEnabled: false,
@@ -82,29 +99,26 @@ export async function ensureLocalNode(): Promise<Node> {
       ramOverallocatePercent: 0,
       cpuOverallocatePercent: 0,
       diskOverallocatePercent: 0,
-      maxServers: 100,
       allowedProducts: ['prod_minecraft', 'prod_bot'],
-      tags: ['local', 'primary', 'bare-metal'],
       status: 'online',
       isMaintenanceMode: false,
       isLocalNode: true,
       serverCount: 0,
-      daemonToken: 'daemon_token_local_node_secret_82910',
-      lastHeartbeatAt: new Date().toISOString(),
       isSecure: true
     };
     db.nodes.unshift(localNode);
 
     // Ensure initial port allocations for Local Node
     for (let p = 25565; p <= 25575; p++) {
-      const exists = db.allocations.some(a => a.nodeId === 'node_local' && a.port === p);
+      const exists = db.allocations.some(a => a.nodeId === 'local' && a.port === p);
       if (!exists) {
         db.allocations.push({
           id: `alloc_local_${p}`,
-          nodeId: 'node_local',
+          nodeId: 'local',
           ip: primaryIp,
           port: p,
           isAssigned: false,
+          assigned: false,
           createdAt: new Date().toISOString()
         });
       }
@@ -112,13 +126,27 @@ export async function ensureLocalNode(): Promise<Node> {
     saveDbSync();
   } else {
     // Update live hardware capacity & preserve user settings
+    localNode.id = 'local';
+    localNode.isLocal = true;
+    localNode.hostname = localNode.hostname || 'localhost';
+    localNode.apiPort = localNode.apiPort || 3000;
+    localNode.ssl = localNode.ssl ?? false;
+    localNode.behindProxy = localNode.behindProxy ?? false;
+    localNode.maintenanceMode = localNode.maintenanceMode ?? localNode.isMaintenanceMode ?? false;
+    localNode.memory = localNode.memory || hostRamMB;
+    localNode.disk = localNode.disk || (totalDiskGB * 1024);
+    localNode.cpu = localNode.cpu || (hostCpuCores * 100);
+    localNode.maxServers = localNode.maxServers || 100;
+    localNode.memoryOverallocate = localNode.memoryOverallocate ?? 0;
+    localNode.diskOverallocate = localNode.diskOverallocate ?? 0;
+    localNode.tags = localNode.tags || ['local', 'primary', 'bare-metal'];
+    localNode.createdAt = localNode.createdAt || new Date().toISOString();
     localNode.uuid = localNode.uuid || 'local-node-00000000-0000-000000000000';
     localNode.bindAddress = localNode.bindAddress || '0.0.0.0';
     localNode.scheme = localNode.scheme || (localNode.sslEnabled ? 'https' : 'http');
     localNode.sslEnabled = localNode.sslEnabled ?? false;
-    localNode.daemonPort = localNode.daemonPort || 8080;
+    localNode.daemonPort = localNode.daemonPort || 3000;
     localNode.sftpPort = localNode.sftpPort || 2022;
-    localNode.hostname = localNode.hostname || hostName;
     if (!localNode.fqdn) localNode.fqdn = hostName.includes('.') ? hostName : `${hostName}.local`;
     if (detectedPublicIp && (!localNode.publicIpv4 || localNode.ip === '127.0.0.1')) {
       localNode.publicIpv4 = detectedPublicIp;

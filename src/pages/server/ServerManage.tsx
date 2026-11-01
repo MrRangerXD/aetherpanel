@@ -21,6 +21,8 @@ import { ServerImporterTab } from '../../components/server/ServerImporterTab';
 import { ServerConsoleTab } from '../../components/server/ServerConsoleTab';
 import { ServerFileManagerTab } from '../../components/server/ServerFileManagerTab';
 import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
+import { ServerSidebar } from '../../components/server/ServerSidebar';
+import { ServerHeader } from '../../components/server/ServerHeader';
 import { TabTransition } from '../../components/animation/TabTransition';
 import { buildBotStartupCommand } from '../../lib/startup';
 import { normalizeServer, formatMemory } from '../../lib/serverNormalize';
@@ -1249,485 +1251,67 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const canKill = !server?.isSubuser || server?.permissions?.includes('server.kill') || hasPerm('power.kill');
 
   return (
-    <div className="space-y-5 p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          PTERODACTYL SERVER HEADER & CONTROL HERO
-      ───────────────────────────────────────────────────────────────────────────── */}
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          PTERODACTYL SERVER HEADER & CONTROL HERO
-      ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="p-4 sm:p-5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-3.5">
-        {/* Top Breadcrumb row */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--color-ink-mute)]">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onNavigate('dashboard')}
-              className="inline-flex items-center gap-1.5 text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer font-medium"
-            >
-              <ArrowLeft className="h-3.5 w-3.5 text-[var(--color-accent)]" />
-              <span>Servers</span>
-            </button>
-            <span className="text-[var(--color-ink-mute)]">/</span>
-            <span className="text-[var(--color-ink)] font-semibold truncate max-w-xs">{server.name}</span>
-          </div>
+    <div className="flex-1 w-full h-full min-h-0 flex flex-col lg:flex-row overflow-hidden bg-[var(--color-bg)]">
+      <ServerSidebar
+        server={server}
+        activeTab={activeTab}
+        onTabSelect={handleTabSelect}
+        hasPerm={hasPerm}
+        canManageSubusers={canManageSubusers}
+        isMinecraft={isMinecraft}
+        isBot={isBot}
+        isPython={isPython}
+        databasesCount={databases.length}
+        schedulesCount={schedules.length}
+        backupsCount={backups.length}
+        onNavigate={onNavigate}
+      />
 
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] text-[var(--color-ink-mute)] bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-line)]">
-              ID: {server.id.substring(0, 8)}
-            </span>
-            {server.isSubuser && (
-              <span className="font-mono text-[10px] text-[var(--color-accent)] bg-[var(--color-accent)]/10 px-2 py-0.5 rounded border border-[var(--color-accent)]/30">
-                Shared Access
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Server Title, Status, Real Specs, and Pterodactyl Power Buttons */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
-          {/* Left: Icon, Server Name & Real Specs */}
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border border-[var(--color-line)] bg-[var(--color-surface-2)] text-[var(--color-accent)]">
-              {isMinecraft ? <Box className="h-5 w-5" /> : isPython ? <FileText className="h-5 w-5" /> : <TerminalIcon className="h-5 w-5" />}
-            </div>
-
-            <div className="space-y-0.5 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold text-[var(--color-ink)] tracking-tight break-words">
-                  {server.name}
-                </h1>
-
-                {/* Real-time Status Badge */}
-                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                  server.status === 'running'
-                    ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/40'
-                    : server.status === 'starting' || server.status === 'stopping'
-                    ? 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/40'
-                    : 'bg-[var(--color-surface-2)] text-[var(--color-ink-mute)] border-[var(--color-line)]'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    server.status === 'running'
-                      ? 'bg-[var(--color-ok)] animate-pulse'
-                      : server.status === 'starting' || server.status === 'stopping'
-                      ? 'bg-[var(--color-warn)] animate-spin'
-                      : 'bg-[var(--color-ink-mute)]'
-                  }`} />
-                  <span className="uppercase tracking-wider font-mono">
-                    {server.status}
-                  </span>
-                </span>
-              </div>
-
-              {/* Real Server Specs & Node Info */}
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-mute)]">
-                <span className="text-[var(--color-ink-dim)] font-medium">{server.software} ({server.version || 'Latest'})</span>
-                <span>·</span>
-                <span className="font-mono">Node: {server.location || 'Local Node'}</span>
-                <span>·</span>
-                <span className="font-mono">
-                  {formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)} RAM
-                </span>
-                <span>·</span>
-                <span className="font-mono">
-                  {server.limits?.cpuCores || 1} CPU Core{server.limits?.cpuCores && server.limits.cpuCores > 1 ? 's' : ''}
-                </span>
-                <span>·</span>
-                <span className="font-mono">
-                  {server.limits?.diskGB || 10} GB NVMe
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Address Quick Copy & Pterodactyl Power Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* 1-click Address Pill */}
-            <div
-              onClick={() => handleCopy(fullIp)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono text-[var(--color-ink-dim)] hover:border-[var(--color-accent)] transition-colors cursor-pointer group"
-              title="Click to copy server address"
-            >
-              <Wifi className="h-3.5 w-3.5 text-[var(--color-ink-mute)] group-hover:text-[var(--color-accent)] transition-colors" />
-              <span className="truncate max-w-[180px] sm:max-w-[220px]">
-                <strong className="text-[var(--color-ink)] font-mono">{fullIp}</strong>
-              </span>
-              <button
-                type="button"
-                className="p-0.5 hover:text-[var(--color-ink)] text-[var(--color-ink-mute)] transition-colors shrink-0"
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" /> : <Copy className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-
-            {/* Pterodactyl Power Buttons Group */}
-            <div className="flex items-center gap-1 p-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)]">
-              {!isRunning && server.status !== 'starting' ? (
-                <button
-                  type="button"
-                  disabled={powerLoadingAction !== null || !canStart}
-                  onClick={() => handlePowerAction('start')}
-                  className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
-                  title="Start Server"
-                >
-                  {powerLoadingAction === 'start' ? (
-                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5 fill-current" />
-                  )}
-                  <span>Start</span>
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={powerLoadingAction !== null || !canRestart}
-                    onClick={() => handlePowerAction('restart')}
-                    className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-warn)] hover:text-[var(--color-warn)] hover:bg-[var(--color-warn)]/10"
-                    title="Restart Server"
-                  >
-                    {powerLoadingAction === 'restart' ? (
-                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCw className="h-3.5 w-3.5" />
-                    )}
-                    <span>Restart</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={powerLoadingAction !== null || !canStop}
-                    onClick={() => handlePowerAction('stop')}
-                    className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-err)] hover:text-[var(--color-err)] hover:bg-[var(--color-err)]/10"
-                    title="Gracefully Stop Server"
-                  >
-                    {powerLoadingAction === 'stop' ? (
-                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Square className="h-3.5 w-3.5 fill-current" />
-                    )}
-                    <span>Stop</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={powerLoadingAction !== null || !canKill}
-                    onClick={() => handlePowerAction('kill')}
-                    className="btn btn-danger text-xs py-1.5 px-2.5 flex items-center gap-1.5"
-                    title="Force Kill Process (Immediate SIGKILL)"
-                  >
-                    {powerLoadingAction === 'kill' ? (
-                      <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Skull className="h-3.5 w-3.5" />
-                    )}
-                    <span>Kill</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          PTERODACTYL 2-COLUMN LAYOUT: SIDEBAR SUB-NAVIGATION + TAB CONTENT
-      ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row gap-5 items-start">
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-y-auto">
+        <ServerHeader
+          server={server}
+          isMinecraft={isMinecraft}
+          isPython={isPython}
+          fullIp={fullIp}
+          copied={copied}
+          onCopy={handleCopy}
+          onNavigate={onNavigate}
+          isRunning={isRunning}
+          canStart={canStart}
+          canRestart={canRestart}
+          canStop={canStop}
+          canKill={canKill}
+          powerLoadingAction={powerLoadingAction}
+          onPowerAction={handlePowerAction}
+        />
         {/* Mobile / Compact screens quick select dropdown */}
-        <div className="w-full lg:hidden p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+        <div className="w-full lg:hidden p-3 border-b border-[var(--color-line)] bg-[var(--color-surface-2)] shrink-0">
           <label className="block text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)] mb-1">Server Navigation</label>
           <select
             value={activeTab}
             onChange={(e) => handleTabSelect(e.target.value as any)}
-            className="w-full bg-[var(--color-surface-2)] border border-[var(--color-line)] text-[var(--color-ink)] text-xs font-medium rounded-md px-3 py-2 focus:outline-none focus:border-[var(--color-accent)]"
+            className="w-full bg-[var(--color-surface)] border border-[var(--color-line)] text-[var(--color-ink)] text-xs font-medium rounded-md px-3 py-2 focus:outline-none focus:border-[var(--color-accent)]"
           >
-            {hasPerm('console.view') && <option value="console">Console</option>}
-            {hasPerm('files.view') && <option value="files">File Manager</option>}
-            {hasPerm('databases.view') && <option value="databases">Databases ({databases.length})</option>}
-            {hasPerm('schedules.view') && <option value="schedules">Schedules ({schedules.length})</option>}
+            {hasPerm("console.view") && <option value="console">Console</option>}
+            {hasPerm("files.view") && <option value="files">File Manager</option>}
+            {hasPerm("databases.view") && <option value="databases">Databases ({databases.length})</option>}
+            {hasPerm("schedules.view") && <option value="schedules">Schedules ({schedules.length})</option>}
             {canManageSubusers && <option value="subusers">Users</option>}
-            {hasPerm('backups.view') && <option value="backups">Backups ({backups.length})</option>}
-            {hasPerm('files.view') && <option value="network">Network & SFTP</option>}
-            {hasPerm('startup.update') && <option value="settings">Startup & Settings</option>}
-            {(hasPerm('console.view') || hasPerm('monitoring.view')) && <option value="monitoring">Monitoring & Metrics</option>}
-            {isMinecraft && hasPerm('plugins.view') && <option value="plugins">Plugins Manager</option>}
-            {isMinecraft && hasPerm('startup.update') && <option value="properties">Server Properties</option>}
-            {isBot && hasPerm('startup.update') && <option value="env">Environment (.env)</option>}
-            {hasPerm('files.create') && <option value="importer">Server Importer</option>}
-            {hasPerm('discord.manage') && <option value="discord">Discord Bot</option>}
-            {hasPerm('activity.view') && <option value="activity">Audit Activity</option>}
+            {hasPerm("backups.view") && <option value="backups">Backups ({backups.length})</option>}
+            {hasPerm("files.view") && <option value="network">Network & SFTP</option>}
+            {hasPerm("startup.update") && <option value="settings">Startup & Settings</option>}
+            {(hasPerm("console.view") || hasPerm("monitoring.view")) && <option value="monitoring">Monitoring & Metrics</option>}
+            {isMinecraft && hasPerm("plugins.view") && <option value="plugins">Plugins Manager</option>}
+            {isMinecraft && hasPerm("startup.update") && <option value="properties">Server Properties</option>}
+            {isBot && hasPerm("startup.update") && <option value="env">Environment (.env)</option>}
+            {hasPerm("files.create") && <option value="importer">Server Importer</option>}
+            {hasPerm("discord.manage") && <option value="discord">Discord Bot</option>}
+            {hasPerm("activity.view") && <option value="activity">Audit Activity</option>}
           </select>
         </div>
 
-        {/* Desktop Pterodactyl Left Sidebar Sub-Navigation */}
-        <aside className="hidden lg:block w-56 shrink-0 p-1.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-0.5 sticky top-6">
-          <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)]">Management</div>
-          {hasPerm('console.view') && (
-            <button
-              onClick={() => handleTabSelect('console')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'console'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <TerminalIcon className={`h-3.5 w-3.5 ${activeTab === 'console' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Console</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('files.view') && (
-            <button
-              onClick={() => handleTabSelect('files')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'files'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Folder className={`h-3.5 w-3.5 ${activeTab === 'files' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>File Manager</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('databases.view') && (
-            <button
-              onClick={() => handleTabSelect('databases')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'databases'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Database className={`h-3.5 w-3.5 ${activeTab === 'databases' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Databases</span>
-              </div>
-              {databases.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
-                  {databases.length}
-                </span>
-              )}
-            </button>
-          )}
-
-          {hasPerm('schedules.view') && (
-            <button
-              onClick={() => handleTabSelect('schedules')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'schedules'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Clock className={`h-3.5 w-3.5 ${activeTab === 'schedules' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Schedules</span>
-              </div>
-              {schedules.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
-                  {schedules.length}
-                </span>
-              )}
-            </button>
-          )}
-
-          {canManageSubusers && (
-            <button
-              onClick={() => handleTabSelect('subusers')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'subusers'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Shield className={`h-3.5 w-3.5 ${activeTab === 'subusers' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Users</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('backups.view') && (
-            <button
-              onClick={() => handleTabSelect('backups')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'backups'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <HardDrive className={`h-3.5 w-3.5 ${activeTab === 'backups' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Backups</span>
-              </div>
-              {backups.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] border border-[var(--color-line)]">
-                  {backups.length}
-                </span>
-              )}
-            </button>
-          )}
-
-          {hasPerm('files.view') && (
-            <button
-              onClick={() => handleTabSelect('network')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'network'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Globe className={`h-3.5 w-3.5 ${activeTab === 'network' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Network</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('settings')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'settings'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <SettingsIcon className={`h-3.5 w-3.5 ${activeTab === 'settings' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Startup & Settings</span>
-              </div>
-            </button>
-          )}
-
-          {(hasPerm('console.view') || hasPerm('monitoring.view')) && (
-            <button
-              onClick={() => handleTabSelect('monitoring')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'monitoring'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Activity className={`h-3.5 w-3.5 ${activeTab === 'monitoring' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Monitoring</span>
-              </div>
-            </button>
-          )}
-
-          {/* Configuration sub-section */}
-          {(isMinecraft || isBot || hasPerm('files.create') || hasPerm('discord.manage') || hasPerm('activity.view')) && (
-            <div className="pt-2 pb-1 px-2.5 text-[10px] font-mono uppercase tracking-wider text-[var(--color-ink-mute)] border-t border-[var(--color-line)] mt-2">
-              Configuration
-            </div>
-          )}
-
-          {isMinecraft && hasPerm('plugins.view') && (
-            <button
-              onClick={() => handleTabSelect('plugins')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'plugins'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Box className={`h-3.5 w-3.5 ${activeTab === 'plugins' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Plugins</span>
-              </div>
-            </button>
-          )}
-
-          {isMinecraft && hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('properties')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'properties'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sliders className={`h-3.5 w-3.5 ${activeTab === 'properties' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Properties</span>
-              </div>
-            </button>
-          )}
-
-          {isBot && hasPerm('startup.update') && (
-            <button
-              onClick={() => handleTabSelect('env')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'env'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Key className={`h-3.5 w-3.5 ${activeTab === 'env' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>.env Config</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('files.create') && (
-            <button
-              onClick={() => handleTabSelect('importer')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'importer'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FolderInput className={`h-3.5 w-3.5 ${activeTab === 'importer' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Importer</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('discord.manage') && (
-            <button
-              onClick={() => handleTabSelect('discord')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'discord'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageSquare className={`h-3.5 w-3.5 ${activeTab === 'discord' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Discord</span>
-              </div>
-            </button>
-          )}
-
-          {hasPerm('activity.view') && (
-            <button
-              onClick={() => handleTabSelect('activity')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'activity'
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
-                  : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileText className={`h-3.5 w-3.5 ${activeTab === 'activity' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
-                <span>Audit Log</span>
-              </div>
-            </button>
-          )}
-        </aside>
-
-        {/* Right Main Content Area */}
-        <div className="flex-1 min-w-0 w-full">
+        {/* Tab Content Canvas */}
+        <div className="flex-1 min-w-0 w-full p-4 sm:p-6 lg:p-8">
 
       {/* TAB 1: CONSOLE LOGS */}
       {activeTab === 'console' && (

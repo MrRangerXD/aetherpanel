@@ -1327,23 +1327,69 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         dbCache.orders = dbCache.orders.filter(o => !demoUserIds.includes(o.userId));
         dbCache.tickets = dbCache.tickets.filter(t => !demoUserIds.includes(t.userId));
 
+        // Migrate legacy node_local to canonical local node id
+        if (dbCache.servers) {
+          dbCache.servers.forEach(s => {
+            if (s.nodeId === 'node_local') s.nodeId = 'local';
+          });
+        }
+        if (dbCache.allocations) {
+          dbCache.allocations.forEach(a => {
+            if (a.nodeId === 'node_local') a.nodeId = 'local';
+          });
+        }
+
         // Filter out fake demo nodes if any existed
         const fakeNodeIds = ['node_us_east', 'node_eu_central', 'node_ap_southeast', 'demo_node', 'test_node'];
-        dbCache.nodes = dbCache.nodes.filter(n => !fakeNodeIds.includes(n.id) && !n.name.toLowerCase().includes('demo') && !n.name.toLowerCase().includes('test'));
+        dbCache.nodes = (dbCache.nodes || []).filter(n => !fakeNodeIds.includes(n.id) && !n.name.toLowerCase().includes('demo') && !n.name.toLowerCase().includes('test'));
 
-        // If no node remains, auto create Local Node with auto-detected OS hardware telemetry
-        if (dbCache.nodes.length === 0) {
-          const hostRamMB = Math.round(os.totalmem() / (1024 * 1024));
-          const hostCpuCores = os.cpus()?.length || 4;
-          const hostName = os.hostname() || 'local-vps';
+        // Migrate existing node_local in nodes array
+        const existingLocal = dbCache.nodes.find(n => n.id === 'local' || n.id === 'node_local' || n.isLocal || n.isLocalNode);
+        const hostRamMB = Math.round(os.totalmem() / (1024 * 1024));
+        const hostCpuCores = os.cpus()?.length || 4;
 
+        if (existingLocal) {
+          existingLocal.id = 'local';
+          existingLocal.isLocal = true;
+          existingLocal.hostname = existingLocal.hostname || 'localhost';
+          existingLocal.apiPort = existingLocal.apiPort || 3000;
+          existingLocal.ssl = existingLocal.ssl || false;
+          existingLocal.behindProxy = existingLocal.behindProxy || false;
+          existingLocal.maintenanceMode = existingLocal.maintenanceMode || false;
+          existingLocal.memory = existingLocal.memory || existingLocal.totalRamMB || hostRamMB;
+          existingLocal.disk = existingLocal.disk || existingLocal.totalDiskGB || 200;
+          existingLocal.cpu = existingLocal.cpu || existingLocal.totalCpuCores || hostCpuCores;
+          existingLocal.maxServers = existingLocal.maxServers || 100;
+          existingLocal.memoryOverallocate = existingLocal.memoryOverallocate ?? 0;
+          existingLocal.diskOverallocate = existingLocal.diskOverallocate ?? 0;
+          existingLocal.tags = existingLocal.tags || ['local', 'in-process'];
+          existingLocal.createdAt = existingLocal.createdAt || new Date().toISOString();
+          existingLocal.lastHeartbeatAt = new Date().toISOString();
+          // Ensure it is first
+          dbCache.nodes = [existingLocal, ...dbCache.nodes.filter(n => n.id !== 'local')];
+        } else {
           const localNode: Node = {
-            id: 'node_local',
+            id: 'local',
             name: 'Local Node',
-            hostname: hostName,
+            hostname: 'localhost',
+            apiPort: 3000,
+            ssl: false,
+            token: 'in-process-token',
+            isLocal: true,
+            behindProxy: false,
+            maintenanceMode: false,
+            memory: hostRamMB,
+            disk: 200,
+            cpu: hostCpuCores,
+            maxServers: 100,
+            memoryOverallocate: 0,
+            diskOverallocate: 0,
+            tags: ['local', 'in-process'],
+            lastHeartbeatAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            // Compatibility aliases
             ip: '127.0.0.1',
-            fqdn: hostName,
-            daemonPort: 8080,
+            daemonPort: 3000,
             sftpPort: 2022,
             location: 'local',
             locationName: 'Primary Control Plane VPS',
@@ -1354,23 +1400,12 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
             usedCpuCores: 0,
             totalDiskGB: 200,
             usedDiskGB: 5,
-            reservedRamMB: 2048,
-            reservedCpuCores: 1,
-            reservedDiskGB: 10,
-            ramOverallocatePercent: 100,
-            cpuOverallocatePercent: 0,
-            diskOverallocatePercent: 0,
-            maxServers: 100,
-            allowedProducts: ['prod_minecraft', 'prod_bot'],
             status: 'online',
             isMaintenanceMode: false,
             isLocalNode: true,
-            serverCount: dbCache.servers.length,
-            daemonToken: 'daemon_token_local_node_secret_82910',
-            lastHeartbeatAt: new Date().toISOString(),
-            isSecure: true
+            serverCount: dbCache.servers.length
           };
-          dbCache.nodes.push(localNode);
+          dbCache.nodes.unshift(localNode);
         }
 
         if (!dbCache.passwords) {
@@ -1811,12 +1846,29 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
 
   const nodes: Node[] = [
     {
-      id: 'node_local',
+      id: 'local',
       name: 'Local Node',
-      hostname: hostName,
+      hostname: 'localhost',
+      apiPort: 3000,
+      apiUrl: 'http://127.0.0.1:3000',
+      ssl: false,
+      isLocal: true,
+      behindProxy: false,
+      maintenanceMode: false,
+      memory: hostRamMB,
+      disk: 204800,
+      cpu: hostCpuCores * 100,
+      maxServers: 100,
+      memoryOverallocate: 100,
+      diskOverallocate: 100,
+      tags: ['local', 'in-process'],
+      lastHeartbeatAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+
+      // Compatibility fields
       ip: '127.0.0.1',
       fqdn: hostName,
-      daemonPort: 8080,
+      daemonPort: 3000,
       sftpPort: 2022,
       location: 'local',
       locationName: 'Primary Control Plane VPS',
@@ -1833,25 +1885,22 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       ramOverallocatePercent: 100,
       cpuOverallocatePercent: 100,
       diskOverallocatePercent: 100,
-      maxServers: 100,
       allowedProducts: ['prod_minecraft', 'prod_bot'],
       status: 'online',
       isMaintenanceMode: false,
       isLocalNode: true,
       serverCount: 0,
-      daemonToken: 'daemon_token_local_node_secret_82910',
-      lastHeartbeatAt: new Date().toISOString(),
       isSecure: true,
       installationId: currentInstId
     }
   ];
 
   const allocations: Allocation[] = [
-    { id: 'alloc_1', nodeId: 'node_local', ip: '127.0.0.1', port: 25565, isAssigned: false, installationId: currentInstId },
-    { id: 'alloc_2', nodeId: 'node_local', ip: '127.0.0.1', port: 25566, isAssigned: false, installationId: currentInstId },
-    { id: 'alloc_3', nodeId: 'node_local', ip: '127.0.0.1', port: 25567, isAssigned: false, installationId: currentInstId },
-    { id: 'alloc_4', nodeId: 'node_local', ip: '127.0.0.1', port: 8080, isAssigned: false, installationId: currentInstId },
-    { id: 'alloc_5', nodeId: 'node_local', ip: '127.0.0.1', port: 3001, isAssigned: false, installationId: currentInstId }
+    { id: 'alloc_1', nodeId: 'local', ip: '127.0.0.1', port: 25565, isAssigned: false, assigned: false, createdAt: new Date().toISOString(), installationId: currentInstId },
+    { id: 'alloc_2', nodeId: 'local', ip: '127.0.0.1', port: 25566, isAssigned: false, assigned: false, createdAt: new Date().toISOString(), installationId: currentInstId },
+    { id: 'alloc_3', nodeId: 'local', ip: '127.0.0.1', port: 25567, isAssigned: false, assigned: false, createdAt: new Date().toISOString(), installationId: currentInstId },
+    { id: 'alloc_4', nodeId: 'local', ip: '127.0.0.1', port: 25568, isAssigned: false, assigned: false, createdAt: new Date().toISOString(), installationId: currentInstId },
+    { id: 'alloc_5', nodeId: 'local', ip: '127.0.0.1', port: 3001, isAssigned: false, assigned: false, createdAt: new Date().toISOString(), installationId: currentInstId }
   ];
 
   const coupons: Coupon[] = [
