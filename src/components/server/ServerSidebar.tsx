@@ -1,8 +1,8 @@
-import React from 'react';
 import {
   Terminal as TerminalIcon, Folder, Database, Clock, Shield,
   HardDrive, Globe, Settings as SettingsIcon, Activity, Box,
-  Sliders, Key, FolderInput, MessageSquare, FileText, ArrowLeft
+  Sliders, Key, FolderInput, MessageSquare, FileText, ArrowLeft,
+  Boxes, Users, Compass
 } from 'lucide-react';
 import { Server } from '../../types';
 
@@ -257,6 +257,54 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
             <div className="flex items-center gap-2.5">
               <Box className={`h-3.5 w-3.5 ${activeTab === 'plugins' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
               <span>Plugins</span>
+            </div>
+          </button>
+        )}
+
+        {isMinecraft && hasPerm('plugins.view') && (
+          <button
+            onClick={() => onTabSelect('mods')}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === 'mods'
+                ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Boxes className={`h-3.5 w-3.5 ${activeTab === 'mods' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+              <span>Mod Manager</span>
+            </div>
+          </button>
+        )}
+
+        {isMinecraft && (
+          <button
+            onClick={() => onTabSelect('players')}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === 'players'
+                ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Users className={`h-3.5 w-3.5 ${activeTab === 'players' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+              <span>Player Manager</span>
+            </div>
+          </button>
+        )}
+
+        {isMinecraft && (
+          <button
+            onClick={() => onTabSelect('worlds')}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === 'worlds'
+                ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)] pl-2.5'
+                : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Compass className={`h-3.5 w-3.5 ${activeTab === 'worlds' ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-mute)]'}`} />
+              <span>Worlds</span>
             </div>
           </button>
         )}

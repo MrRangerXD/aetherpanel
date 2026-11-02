@@ -289,6 +289,10 @@ export interface ServerSubuser {
   serverId: string;
   userId: string;
   permissions: string[];
+  expiresAt?: string | null;
+  lastSeenAt?: string | null;
+  email?: string;
+  username?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1411,3 +1415,229 @@ export interface FaqItem {
   createdAt: string;
   updatedAt: string;
 }
+
+// =============================================================================
+// PLUGIN & MOD MANAGEMENT TYPES (MODRINTH & HANGAR)
+// =============================================================================
+
+export interface InstalledPlugin {
+  filename: string;
+  size: number;
+  modified: string;
+  enabled: boolean;
+  projectId?: string;
+  version?: string;
+  name?: string;
+  author?: string;
+  description?: string;
+  iconUrl?: string;
+}
+
+export interface PluginSidecarEntry {
+  projectId?: string;
+  version?: string;
+  name?: string;
+  source?: 'modrinth' | 'hangar' | 'direct';
+  installedAt?: string;
+}
+
+export interface PluginUpdate {
+  filename: string;
+  currentVersion?: string;
+  latestVersion: string;
+  updateUrl: string;
+  releaseName: string;
+}
+
+export interface ModrinthProject {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  client_side: string;
+  server_side: string;
+  categories: string[];
+  downloads: number;
+  icon_url: string;
+  loaders: string[];
+  versions: string[];
+}
+
+export interface ModrinthVersionFile {
+  url: string;
+  filename: string;
+  primary: boolean;
+  size: number;
+}
+
+export interface ModrinthVersion {
+  id: string;
+  project_id: string;
+  name: string;
+  version_number: string;
+  game_versions: string[];
+  loaders: string[];
+  date_published: string;
+  downloads: number;
+  files: ModrinthVersionFile[];
+  dependencies: Array<{
+    version_id?: string;
+    project_id?: string;
+    dependency_type: 'required' | 'optional' | 'incompatible' | 'embedded';
+  }>;
+}
+
+export interface InstalledMod {
+  filename: string;
+  size: number;
+  modified: string;
+  enabled: boolean;
+  projectId?: string;
+  version?: string;
+  name?: string;
+  description?: string;
+  iconUrl?: string;
+}
+
+export interface ModDependency {
+  projectId: string;
+  name: string;
+  type: 'required' | 'optional' | 'incompatible';
+  isInstalled: boolean;
+  installedVersion?: string;
+}
+
+// =============================================================================
+// MINECRAFT PLAYER MANAGEMENT TYPES
+// =============================================================================
+
+export interface OnlinePlayer {
+  name: string;
+  uuid?: string;
+  ping?: number;
+  gamemode?: string;
+  avatarUrl?: string;
+}
+
+export interface OpPlayer {
+  uuid: string;
+  name: string;
+  level: number;
+  bypassesPlayerLimit: boolean;
+}
+
+export interface WhitelistPlayer {
+  uuid: string;
+  name: string;
+}
+
+export interface BannedPlayer {
+  uuid: string;
+  name: string;
+  created: string;
+  source: string;
+  expires: string;
+  reason: string;
+}
+
+export interface BannedIp {
+  ip: string;
+  created: string;
+  source: string;
+  expires: string;
+  reason: string;
+}
+
+// =============================================================================
+// WORLD MANAGEMENT TYPES
+// =============================================================================
+
+export interface WorldItem {
+  name: string;
+  size: number;
+  lastModified: string;
+  levelName: string;
+  isActive: boolean;
+  version?: string;
+  dataVersion?: number;
+  isCompatible?: boolean;
+  versionStatus?: 'compatible' | 'older' | 'newer';
+}
+
+export type GameruleValue = boolean | number | string;
+
+// =============================================================================
+// SERVER PROPERTIES TYPES
+// =============================================================================
+
+export interface ServerPropertyField {
+  key: string;
+  value: string | boolean | number;
+  type: 'boolean' | 'number' | 'string' | 'enum' | 'textarea';
+  category: 'Gameplay' | 'Network' | 'Performance' | 'World' | 'Advanced' | 'Unknown';
+  default?: string | boolean | number;
+  description?: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+  locked?: boolean;
+}
+
+// =============================================================================
+// SUB-USER MANAGEMENT TYPES
+// =============================================================================
+
+export interface SubUser {
+  id: string;
+  userId: string;
+  serverId: string;
+  email: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+  permissions: string[];
+  expiresAt?: string | null;
+  lastSeenAt?: string | null;
+  createdAt: string;
+}
+
+export interface SubUserCandidate {
+  id: string;
+  email: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+// =============================================================================
+// SERVER IMPORTER TYPES
+// =============================================================================
+
+export interface ImportPreflightRequest {
+  source: 'pterodactyl' | 'sftp' | 'url' | 'upload';
+  config: Record<string, any>;
+}
+
+export interface ImportPreflightResponse {
+  reachable: boolean;
+  supported: boolean;
+  detectedSoftware?: string;
+  detectedVersion?: string;
+  diskRequiredMB?: number;
+  warnings: string[];
+  serverName?: string;
+}
+
+export interface ImportJob {
+  id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  stage: 'preflight' | 'fetching' | 'verifying' | 'extracting' | 'mapping' | 'finalizing';
+  percent: number;
+  log: string[];
+  createdServerId?: string;
+  error?: string;
+  cancelled?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+

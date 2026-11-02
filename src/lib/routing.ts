@@ -48,6 +48,12 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   if (first === 'activity') return { page: 'activity', params: queryObj };
   if (first === 'settings') return { page: 'settings', params: queryObj };
   if (first === 'rewards' || first === 'afk') return { page: 'afk-rewards', params: queryObj };
+  if (first === 'api-keys' || first === 'keys') return { page: 'api-keys', params: queryObj };
+  if (first === 'account') {
+    const sub = pathParts[1]?.toLowerCase();
+    if (sub === 'api-keys' || sub === 'keys') return { page: 'api-keys', params: queryObj };
+    return { page: 'settings', params: queryObj };
+  }
 
   // Servers routes: /servers, /servers/new, /servers/:serverId, /servers/:serverId/:tab, /server/:serverId, /server/:serverId/:tab
   if (first === 'servers' || first === 'server') {
@@ -90,6 +96,8 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'panel-customization' || sub === 'customization' || sub === 'panel' || sub === 'homepage' || sub === 'homepage-builder' || sub === 'appearance') return { page: 'admin-panel-customization', params: queryObj };
     if (sub === 'support') return { page: 'admin-support', params: queryObj };
     if (sub === 'audit-logs' || sub === 'logs') return { page: 'admin-audit-logs', params: queryObj };
+    if (sub === 'api-keys' || sub === 'keys') return { page: 'admin-api-keys', params: queryObj };
+    if (sub === 'importer' || sub === 'import') return { page: 'admin-importer', params: queryObj };
     if (sub === 'legal' || sub === 'content' || sub === 'legal-pages') return { page: 'admin-legal', params: queryObj };
     if (sub === 'settings') return { page: 'admin-settings', params: queryObj };
     return { page: 'admin-dashboard', params: queryObj };
@@ -147,6 +155,7 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'activity': return `/activity${formatQuery(params)}`;
     case 'settings': return `/settings${formatQuery(params)}`;
     case 'afk-rewards': return `/rewards${formatQuery(params)}`;
+    case 'api-keys': return `/account/api-keys${formatQuery(params)}`;
 
     case 'admin-dashboard': return `/admin${formatQuery(params)}`;
     case 'admin-users': return `/admin/users${formatQuery(params)}`;
@@ -171,6 +180,8 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-legal': return `/admin/legal${formatQuery(params)}`;
     case 'admin-support': return `/admin/support${formatQuery(params)}`;
     case 'admin-audit-logs': return `/admin/audit-logs${formatQuery(params)}`;
+    case 'admin-api-keys': return `/admin/api-keys${formatQuery(params)}`;
+    case 'admin-importer': return `/admin/importer${formatQuery(params)}`;
     case 'admin-settings': return `/admin/settings${formatQuery(params)}`;
 
     default:

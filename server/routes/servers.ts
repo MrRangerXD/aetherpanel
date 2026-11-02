@@ -42,8 +42,22 @@ import {
   readUploadSession,
   abortChunkedUpload
 } from '../services/chunkedUploadService';
+import { pluginsRouter } from './plugins';
+import { modsRouter } from './mods';
+import { playersRouter } from './players';
+import { worldsRouter } from './worlds';
+import { propertiesRouter } from './properties';
+import { subusersRouter } from './subusers';
 
 const router = Router();
+
+// Mount server-scoped subrouters
+router.use('/:id/plugins', pluginsRouter);
+router.use('/:id/mods', modsRouter);
+router.use('/:id/players', playersRouter);
+router.use('/:id/worlds', worldsRouter);
+router.use('/:id/properties', propertiesRouter);
+router.use('/:id/subusers', subusersRouter);
 
 // Multer storage for server file upload
 const storage = multer.diskStorage({

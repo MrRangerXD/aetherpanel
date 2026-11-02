@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ShieldAlert, Users, Server, Package, HardDrive, ShoppingBag,
   Tag, Megaphone, LifeBuoy, FileText, Sliders, ArrowLeft, LogOut,
-  Sparkles, Coins, Layers, Archive, MessageSquare, Activity, Scale, Key, LayoutTemplate, Palette
+  Sparkles, Coins, Layers, Archive, MessageSquare, Activity, Scale, Key, LayoutTemplate, Palette, FolderInput
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
@@ -33,6 +33,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
     { page: 'admin-panel-customization', label: 'Panel Customization', icon: Palette },
     { page: 'admin-support', label: 'Support Queue', icon: LifeBuoy },
     { page: 'admin-audit-logs', label: 'Audit Trail', icon: FileText },
+    { page: 'admin-importer', label: 'Server Importer', icon: FolderInput },
     { page: 'admin-api-keys', label: 'REST API Keys', icon: Key },
     { page: 'admin-legal', label: 'Legal & Policies', icon: Scale },
     { page: 'admin-settings', label: 'Platform Settings', icon: Sliders },

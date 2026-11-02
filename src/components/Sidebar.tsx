@@ -1,7 +1,6 @@
-import React from 'react';
 import {
   LayoutDashboard, Server, PlusCircle, CreditCard, LifeBuoy,
-  Activity, Settings, LogOut, ShieldCheck, ChevronDown, Cpu, Coins
+  Activity, Settings, LogOut, ShieldCheck, ChevronDown, Cpu, Coins, Key
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
@@ -180,6 +179,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Settings className={`h-3.5 w-3.5 ${currentPage === 'settings' ? 'text-[var(--color-accent)]' : ''}`} />
           <span>Settings</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate('api-keys')}
+          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
+            currentPage === 'api-keys'
+              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
+              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
+          }`}
+        >
+          <Key className={`h-3.5 w-3.5 ${currentPage === 'api-keys' ? 'text-[var(--color-accent)]' : ''}`} />
+          <span>API Credentials</span>
         </button>
       </div>
 

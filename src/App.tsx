@@ -46,6 +46,7 @@ import { SupportTickets } from './pages/customer/SupportTickets';
 import { ActivityLog } from './pages/customer/ActivityLog';
 import { UserSettings } from './pages/customer/UserSettings';
 import { AfkRewards } from './pages/customer/AfkRewards';
+import { ApiKeys } from './pages/account/ApiKeys';
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -71,6 +72,7 @@ import { AdminLegal } from './pages/admin/AdminLegal';
 import { AdminDiagnostics } from './pages/admin/AdminDiagnostics';
 import { AdminHomepageBuilder } from './pages/admin/AdminHomepageBuilder';
 import { AdminPanelCustomization } from './pages/admin/AdminPanelCustomization';
+import { ServerImporter } from './pages/admin/ServerImporter';
 
 
 function AppContent() {
@@ -354,9 +356,10 @@ function AppContent() {
                     {currentPage === 'activity' && <ActivityLog />}
                     {currentPage === 'settings' && <UserSettings />}
                     {currentPage === 'afk-rewards' && <AfkRewards />}
+                    {currentPage === 'api-keys' && <ApiKeys onNavigate={handleNavigate} />}
 
                     {/* Admin Views */}
-                    {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={handleNavigate} />}
+                    {currentPage === 'admin-dashboard' && <AdminDashboard onNavigate={(p) => handleNavigate(p)} />}
                     {currentPage === 'admin-users' && <AdminUsers />}
                     {currentPage === 'admin-servers' && <AdminServers />}
                     {currentPage === 'admin-products' && <AdminProducts />}
@@ -371,6 +374,7 @@ function AppContent() {
                     {currentPage === 'admin-support' && <AdminSupport />}
                     {currentPage === 'admin-audit-logs' && <AdminAuditLogs />}
                     {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
+                    {currentPage === 'admin-importer' && <ServerImporter onNavigate={handleNavigate} />}
                     {currentPage === 'admin-legal' && <AdminLegal />}
                     {currentPage === 'admin-diagnostics' && <AdminDiagnostics />}
                     {currentPage === 'admin-settings' && <AdminSettings />}

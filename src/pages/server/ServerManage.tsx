@@ -23,6 +23,12 @@ import { ServerFileManagerTab } from '../../components/server/ServerFileManagerT
 import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
 import { ServerSidebar } from '../../components/server/ServerSidebar';
 import { ServerHeader } from '../../components/server/ServerHeader';
+import { PluginManager } from '../../components/server/PluginManager';
+import { ModManager } from '../../components/server/ModManager';
+import { PlayerManager } from '../../components/server/PlayerManager';
+import { WorldManager } from '../../components/server/WorldManager';
+import { ServerProperties } from '../../components/server/ServerProperties';
+import { SubUsers } from '../../components/server/SubUsers';
 import { TabTransition } from '../../components/animation/TabTransition';
 import { buildBotStartupCommand } from '../../lib/startup';
 import { normalizeServer, formatMemory } from '../../lib/serverNormalize';
@@ -53,17 +59,17 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const { accentClasses } = useTheme();
 
   const [server, setServer] = useState<Server | null>(null);
-  const [activeTab, setActiveTab] = useState<'console' | 'monitoring' | 'importer' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers'>(
+  const [activeTab, setActiveTab] = useState<string>(
     (initialTab as any) || 'console'
   );
 
   useEffect(() => {
-    if (initialTab && ['console', 'monitoring', 'importer', 'network', 'files', 'plugins', 'properties', 'env', 'backups', 'databases', 'schedules', 'discord', 'settings', 'activity', 'subusers'].includes(initialTab)) {
-      setActiveTab(initialTab as any);
+    if (initialTab) {
+      setActiveTab(initialTab);
     }
   }, [initialTab]);
 
-  const handleTabSelect = (tab: 'console' | 'monitoring' | 'importer' | 'network' | 'files' | 'plugins' | 'properties' | 'env' | 'backups' | 'databases' | 'schedules' | 'discord' | 'settings' | 'activity' | 'subusers') => {
+  const handleTabSelect = (tab: any) => {
     if (activeTab === 'env' && isEnvDirty) {
       const confirmLeave = window.confirm("You have unsaved environment variable changes. Are you sure you want to leave and discard these changes?");
       if (!confirmLeave) return;
@@ -1327,7 +1333,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB: SUBUSERS */}
       {activeTab === 'subusers' && (
         <TabTransition>
-          <ServerSubusersTab server={server} />
+          <SubUsers server={server} />
         </TabTransition>
       )}
 
@@ -1360,566 +1366,38 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       )}
 
       {/* TAB 3: MINECRAFT PLUGINS MANAGER */}
-      {activeTab === 'plugins' && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-800 pb-3 gap-3">
-            <div className="flex border-b sm:border-b-0 border-zinc-800 gap-4 text-xs font-semibold">
-              <button
-                onClick={() => setPluginTab('installed')}
-                className={`pb-2 transition-colors ${pluginTab === 'installed' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Installed Plugins ({installedPlugins.length})
-              </button>
-              <button
-                onClick={() => setPluginTab('search')}
-                className={`pb-2 transition-colors ${pluginTab === 'search' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Plugin Repository & Search
-              </button>
-            </div>
+      {activeTab === "plugins" && (
+        <TabTransition>
+          <PluginManager server={server} />
+        </TabTransition>
+      )}
 
-            {pluginTab === 'installed' && (
-              <label className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-2 cursor-pointer shrink-0 shadow-md transition-all">
-                <Upload className="h-3.5 w-3.5" />
-                <span>{isUploadingPlugin ? 'Uploading .jar...' : 'Upload Plugin .jar'}</span>
-                <input
-                  type="file"
-                  accept=".jar"
-                  onChange={handleUploadPluginJar}
-                  disabled={isUploadingPlugin}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
+      {/* TAB: MOD MANAGER */}
+      {activeTab === "mods" && (
+        <TabTransition>
+          <ModManager server={server} />
+        </TabTransition>
+      )}
 
-          {pluginNotice && (
-            <div className={`p-3.5 rounded-xl border flex items-start justify-between gap-3 text-xs ${
-              pluginNotice.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-            }`}>
-              <div className="flex items-center gap-2">
-                {pluginNotice.type === 'success' ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
-                )}
-                <span className="font-medium">{pluginNotice.message}</span>
-              </div>
-              <button
-                onClick={() => setPluginNotice(null)}
-                className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                title="Dismiss"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+      {/* TAB: PLAYER MANAGER */}
+      {activeTab === "players" && (
+        <TabTransition>
+          <PlayerManager server={server} />
+        </TabTransition>
+      )}
 
-          {pluginTab === 'installed' ? (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
-                    <tr>
-                      <th className="p-3">Plugin Name</th>
-                      <th className="p-3">File & Size</th>
-                      <th className="p-3">Integrity & Status</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
-                    {installedPlugins.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-zinc-500 space-y-2">
-                          <Box className="h-8 w-8 text-zinc-600 mx-auto" />
-                          <p className="font-semibold text-zinc-400">No plugins installed in <code className="text-violet-400 font-mono">plugins/</code> folder yet.</p>
-                          <p className="text-xs text-zinc-500">Search the repository or upload a custom <code className="font-mono text-zinc-400">.jar</code> file to get started.</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      installedPlugins.map((plug, idx) => (
-                        <tr key={idx} className="hover:bg-zinc-900 transition-colors">
-                          <td className="p-3 font-bold text-white">
-                            <div className="flex items-center gap-2.5">
-                              <Box className={`h-4 w-4 shrink-0 ${plug.integrityStatus && plug.integrityStatus !== 'VALID' ? 'text-rose-400' : 'text-violet-400'}`} />
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span>{plug.name}</span>
-                                  {plug.version && plug.version !== 'Corrupted' && (
-                                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700/50">v{plug.version}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-3 font-mono text-zinc-400 text-[11px]">
-                            <div>{plug.filename}</div>
-                            {plug.size !== undefined && plug.size > 0 && (
-                              <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{(plug.size / 1024).toFixed(1)} KB</div>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            {plug.integrityStatus && plug.integrityStatus !== 'VALID' ? (
-                              <div className="space-y-1">
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-rose-500/10 text-rose-400 border-rose-500/20 inline-flex items-center gap-1">
-                                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                                  Corrupted JAR
-                                </span>
-                                <p className="text-[10px] text-rose-400 font-mono max-w-xs truncate" title={plug.integrityError}>
-                                  {plug.integrityError || 'zip END header not found'}
-                                </p>
-                              </div>
-                            ) : plug.paperStatus === 'FAILED_TO_LOAD' ? (
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/10 text-amber-400 border-amber-500/20 inline-flex items-center gap-1">
-                                    <AlertTriangle className="h-3 w-3 shrink-0" />
-                                    Paper failed to load plugin
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 font-mono border border-zinc-700 inline-flex items-center gap-1">
-                                    <Check className="w-2.5 h-2.5 text-zinc-400" /> Valid JAR
-                                  </span>
-                                </div>
-                                {plug.paperError && (
-                                  <p className="text-[10px] text-amber-400 font-mono max-w-xs truncate" title={plug.paperError}>
-                                    {plug.paperError}
-                                  </p>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                                    plug.isEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                                  }`}>
-                                    {plug.isEnabled ? 'Installed' : 'Disabled'}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 font-mono border border-emerald-500/20 inline-flex items-center gap-1">
-                                    <Check className="w-2.5 h-2.5 text-emerald-400" /> Valid JAR
-                                  </span>
-                                </div>
-                                {plug.paperStatus === 'LOADED' && (
-                                  <p className="text-[10px] text-emerald-400 font-mono">Paper: Active</p>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleTogglePlugin(plug.filename!)}
-                                className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold"
-                              >
-                                {plug.isEnabled ? 'Disable' : 'Enable'}
-                              </button>
-                              <button
-                                onClick={() => handleDeletePlugin(plug.filename!)}
-                                className="p-1.5 text-zinc-400 hover:text-rose-400"
-                                title="Delete Plugin"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
-                  <input
-                    type="text"
-                    value={pluginQuery}
-                    onChange={(e) => {
-                      setPluginQuery(e.target.value);
-                      handleSearchPlugins(e.target.value);
-                    }}
-                    placeholder="Search LuckPerms, EssentialsX, WorldEdit, GeyserMC, Vault..."
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-                  />
-                </div>
-                <button
-                  onClick={() => handleSearchPlugins(pluginQuery)}
-                  className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold"
-                >
-                  Search
-                </button>
-              </div>
-
-              {installingPluginId && installProgressStep && (
-                <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 text-xs text-violet-300 font-mono flex items-center gap-3 animate-pulse">
-                  <RefreshCw className="h-4 w-4 animate-spin text-violet-400" />
-                  <span>{installProgressStep}</span>
-                </div>
-              )}
-
-              {isSearchingPlugins ? (
-                <div className="p-12 text-center text-xs text-zinc-400 space-y-2">
-                  <RefreshCw className="h-6 w-6 animate-spin text-violet-400 mx-auto" />
-                  <p>Searching Modrinth and Hangar plugin repositories...</p>
-                </div>
-              ) : searchResults.length === 0 ? (
-                <div className="p-12 text-center text-zinc-500 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
-                  <Box className="h-10 w-10 text-zinc-600 mx-auto" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-zinc-300 text-sm">No compatible plugins found.</p>
-                    <p className="text-xs text-zinc-500">Try searching for keywords like "LuckPerms", "Essentials", or "Geyser".</p>
-                  </div>
-                  <button
-                    onClick={() => handleSearchPlugins('LuckPerms')}
-                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 font-semibold"
-                  >
-                    Retry Default Search
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {searchResults.map((item, i) => (
-                    <div
-                      key={i}
-                      className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 flex justify-between gap-4 hover:border-zinc-700 transition-all cursor-pointer group"
-                      onClick={() => setSelectedPluginDetails(item)}
-                    >
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {item.iconUrl ? (
-                            <img src={item.iconUrl} alt={item.name} className="h-5 w-5 rounded object-contain shrink-0" />
-                          ) : (
-                            <Box className="h-4 w-4 text-violet-400 shrink-0" />
-                          )}
-                          <span className="text-sm font-bold text-white group-hover:text-violet-400 transition-colors truncate">{item.name}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-violet-500/10 text-violet-400 font-mono shrink-0">{item.provider}</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 line-clamp-2">{item.description}</p>
-                        <div className="text-[11px] text-zinc-500 font-mono flex items-center gap-3">
-                          <span>By {item.author}</span>
-                          <span>•</span>
-                          <span>{(item.downloads || 0).toLocaleString()} downloads</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInstallPlugin(item);
-                        }}
-                        disabled={installingPluginId === item.id}
-                        className="self-center px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-xs shrink-0 shadow-md transition-all"
-                      >
-                        {installingPluginId === item.id ? 'Installing...' : 'Install'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Plugin Details Modal */}
-          {selectedPluginDetails && (
-            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    {selectedPluginDetails.iconUrl ? (
-                      <img src={selectedPluginDetails.iconUrl} alt={selectedPluginDetails.name} className="h-10 w-10 rounded-xl object-contain bg-zinc-950 p-1" />
-                    ) : (
-                      <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400">
-                        <Box className="h-6 w-6" />
-                      </div>
-                    )}
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{selectedPluginDetails.name}</h3>
-                      <p className="text-xs text-zinc-400 font-mono">Provider: {selectedPluginDetails.provider} • Author: {selectedPluginDetails.author}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedPluginDetails(null)}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-950/60 p-4 rounded-2xl border border-zinc-800/80">
-                  {selectedPluginDetails.description}
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500 text-[10px]">Total Downloads</span>
-                    <p className="text-white font-bold">{(selectedPluginDetails.downloads || 0).toLocaleString()}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500 text-[10px]">Version</span>
-                    <p className="text-white font-bold">{selectedPluginDetails.version || 'Latest'}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500 text-[10px]">Platform</span>
-                    <p className="text-white font-bold">{selectedPluginDetails.platform || 'Paper / Spigot'}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
-                    <span className="text-zinc-500 text-[10px]">Category</span>
-                    <p className="text-white font-bold">{selectedPluginDetails.category}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800">
-                  {selectedPluginDetails.projectUrl && (
-                    <a
-                      href={selectedPluginDetails.projectUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold"
-                    >
-                      View Source Project
-                    </a>
-                  )}
-                  <button
-                    onClick={() => handleInstallPlugin(selectedPluginDetails)}
-                    disabled={installingPluginId === selectedPluginDetails.id}
-                    className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-xs shadow-md"
-                  >
-                    {installingPluginId === selectedPluginDetails.id ? 'Installing...' : 'Install Plugin to Server'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* TAB: WORLD MANAGER */}
+      {activeTab === "worlds" && (
+        <TabTransition>
+          <WorldManager server={server} />
+        </TabTransition>
       )}
 
       {/* TAB: MINECRAFT PROPERTIES */}
-      {activeTab === 'properties' && isMinecraft && (
-        <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Sliders className="h-5 w-5 text-amber-400" /> Minecraft Server Configuration (server.properties)
-              </h3>
-              <p className="text-xs text-zinc-400">Directly modify and validate in-game gameplay parameters, world seeds, and networking rules.</p>
-            </div>
-            <button
-              onClick={handleSaveMinecraftProps}
-              disabled={isSavingProps}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/10 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              <span>{isSavingProps ? 'Saving Properties...' : 'Save Configuration'}</span>
-            </button>
-          </div>
-
-          {propsSavedMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-semibold flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Server properties saved! Restart server to apply changes to the live Minecraft instance.
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Gameplay Rules */}
-            <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
-              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">Gameplay & World Parameters</h4>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Server MOTD (Message of the Day)</label>
-                <input
-                  type="text"
-                  value={mcProps.motd || ''}
-                  onChange={(e) => setMcProps({ ...mcProps, motd: e.target.value })}
-                  placeholder="§bAetherPanel Minecraft Server"
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Gamemode</label>
-                  <select
-                    value={mcProps.gamemode || 'survival'}
-                    onChange={(e) => setMcProps({ ...mcProps, gamemode: e.target.value })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs text-white"
-                  >
-                    <option value="survival">Survival</option>
-                    <option value="creative">Creative</option>
-                    <option value="adventure">Adventure</option>
-                    <option value="spectator">Spectator</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Difficulty</label>
-                  <select
-                    value={mcProps.difficulty || 'easy'}
-                    onChange={(e) => setMcProps({ ...mcProps, difficulty: e.target.value })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs text-white"
-                  >
-                    <option value="peaceful">Peaceful</option>
-                    <option value="easy">Easy</option>
-                    <option value="normal">Normal</option>
-                    <option value="hard">Hard</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Max Player Slots</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={mcProps.maxPlayers || 20}
-                    onChange={(e) => setMcProps({ ...mcProps, maxPlayers: parseInt(e.target.value, 10) || 20 })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Spawn Protection (Blocks)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={128}
-                    value={mcProps.spawnProtection ?? 16}
-                    onChange={(e) => setMcProps({ ...mcProps, spawnProtection: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">World / Level Name</label>
-                  <input
-                    type="text"
-                    value={mcProps.levelName || 'world'}
-                    onChange={(e) => setMcProps({ ...mcProps, levelName: e.target.value })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Custom World Seed</label>
-                  <input
-                    type="text"
-                    value={mcProps.levelSeed || ''}
-                    onChange={(e) => setMcProps({ ...mcProps, levelSeed: e.target.value })}
-                    placeholder="Leave empty for random"
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* In-Game Flags & Security */}
-            <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4">
-              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">In-Game Flags & Authentication</h4>
-
-              <div className="space-y-3">
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="text-xs font-bold text-white">Online Mode (Mojang Authentication)</div>
-                    <div className="text-[11px] text-zinc-400">Enforce official Minecraft account authentication. Disable for offline/cracked.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={mcProps.onlineMode !== false}
-                    onChange={(e) => setMcProps({ ...mcProps, onlineMode: e.target.checked })}
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="text-xs font-bold text-white">PvP Combat (Player vs Player)</div>
-                    <div className="text-[11px] text-zinc-400">Allow players to deal damage and engage in combat with each other.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={mcProps.pvp !== false}
-                    onChange={(e) => setMcProps({ ...mcProps, pvp: e.target.checked })}
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="text-xs font-bold text-white">Command Blocks Enabled</div>
-                    <div className="text-[11px] text-zinc-400">Enable execution of custom server command blocks.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={mcProps.enableCommandBlock !== false}
-                    onChange={(e) => setMcProps({ ...mcProps, enableCommandBlock: e.target.checked })}
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="text-xs font-bold text-white">Allow Flight (Survival Flight)</div>
-                    <div className="text-[11px] text-zinc-400">Prevents auto-kicking players using jetpacks, elytra mods, or flying glitches.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={mcProps.allowFlight === true}
-                    onChange={(e) => setMcProps({ ...mcProps, allowFlight: e.target.checked })}
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="text-xs font-bold text-white">Enforce White-List</div>
-                    <div className="text-[11px] text-zinc-400">Only players listed in whitelist.json can connect to the server.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={mcProps.whiteList === true}
-                    onChange={(e) => setMcProps({ ...mcProps, whiteList: e.target.checked })}
-                    className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-amber-500"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">View Distance (Chunks)</label>
-                  <input
-                    type="number"
-                    min={4}
-                    max={32}
-                    value={mcProps.viewDistance || 10}
-                    onChange={(e) => setMcProps({ ...mcProps, viewDistance: parseInt(e.target.value, 10) || 10 })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Simulation Distance</label>
-                  <input
-                    type="number"
-                    min={4}
-                    max={32}
-                    value={mcProps.simulationDistance || 8}
-                    onChange={(e) => setMcProps({ ...mcProps, simulationDistance: parseInt(e.target.value, 10) || 8 })}
-                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2 text-xs font-mono text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
+      {activeTab === "properties" && (
+        <TabTransition>
+          <ServerProperties server={server} />
+        </TabTransition>
       )}
 
       {/* TAB 4: ENVIRONMENT VARIABLES (.ENV) */}

@@ -603,4 +603,238 @@ router.delete('/webhooks/:id', authMiddleware, async (req: AuthenticatedRequest,
   res.json({ success: true, message: `Webhook '${webhook.name}' deleted successfully.` });
 });
 
+// ==========================================
+// USER ACCOUNT-LEVEL API KEYS (/api/v1/account/api-keys & /api/v1/api-keys/account)
+// ==========================================
+
+// Helper to generate base62 string
+function generateBase62(len: number): string {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let str = '';
+  const bytes = crypto.randomBytes(len);
+  for (let i = 0; i < len; i++) {
+    str += chars[bytes[i] % chars.length];
+  }
+  return str;
+}
+
+// GET /api/v1/api-keys/account - List current user's API keys
+router.get('/account/keys', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const userId = req.user!.id;
+  const now = new Date();
+
+  const userKeys = (db.apiKeys || [])
+    .filter(k => k.userId === userId)
+    .map(k => {
+      const isExpired = k.expiresAt && new Date(k.expiresAt) < now;
+      const status = k.status === 'revoked' ? 'revoked' : (isExpired ? 'expired' : 'active');
+      return {
+        id: k.id,
+        name: k.name,
+        description: k.description || '',
+        keyPrefix: k.keyPrefix,
+        role: k.role,
+        allowedIps: k.allowedIps || [],
+        expiresAt: k.expiresAt || null,
+        status,
+        scopes: k.scopes || ['*'],
+        lastUsedAt: k.lastUsedAt || null,
+        requestCount: k.requestCount || 0,
+        createdAt: k.createdAt
+      };
+    });
+
+  res.json({ success: true, data: userKeys });
+});
+
+// POST /api/v1/api-keys/account - Create an API key for the current user
+router.post('/account/keys', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { name, description, allowedIps, expiresInDays, scopes } = req.body;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({
+      error: { code: 'NAME_REQUIRED', message: 'API key name is required.' }
+    });
+  }
+
+  const db = await getDb();
+
+  // Specification: key starting with aeth_ + 32 base62 characters
+  const rawToken = generateBase62(32);
+  const fullApiKey = `aeth_${rawToken}`;
+  const keyPrefix = `aeth_${rawToken.substring(0, 6)}...${rawToken.substring(rawToken.length - 4)}`;
+  const keyHash = crypto.createHash('sha256').update(fullApiKey).digest('hex');
+
+  let expiresAt: string | null = null;
+  if (expiresInDays && Number(expiresInDays) > 0) {
+    expiresAt = new Date(Date.now() + Number(expiresInDays) * 86400000).toISOString();
+  }
+
+  const validScopes = Array.isArray(scopes) && scopes.length > 0 ? scopes : ['*'];
+
+  const newKey: ApiKey = {
+    id: `key_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+    userId: req.user!.id,
+    userEmail: req.user!.email,
+    userName: req.user!.displayName || req.user!.username || req.user!.email,
+    name: name.trim(),
+    description: (description || '').trim(),
+    keyPrefix,
+    keyHash,
+    role: req.user!.role,
+    allowedIps: Array.isArray(allowedIps) ? allowedIps.filter(Boolean) : [],
+    expiresAt,
+    status: 'active',
+    scopes: validScopes,
+    lastUsedAt: null,
+    lastUsedIp: null,
+    requestCount: 0,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!db.apiKeys) db.apiKeys = [];
+  db.apiKeys.push(newKey);
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'USER_API_KEY_CREATED', newKey.id,
+    `Created API key '${newKey.name}' (${keyPrefix})`
+  );
+
+  res.status(201).json({
+    success: true,
+    message: 'API Key generated successfully. Please copy it immediately; it will not be shown again.',
+    data: {
+      id: newKey.id,
+      name: newKey.name,
+      description: newKey.description,
+      keyPrefix: newKey.keyPrefix,
+      apiKey: fullApiKey,
+      scopes: newKey.scopes,
+      expiresAt: newKey.expiresAt,
+      createdAt: newKey.createdAt
+    }
+  });
+});
+
+// POST /api/v1/api-keys/account/:id/revoke - Revoke current user's key
+router.post('/account/keys/:id/revoke', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const key = (db.apiKeys || []).find(k => k.id === req.params.id);
+
+  if (!key) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API key not found.' } });
+  }
+
+  if (key.userId !== req.user!.id && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You do not own this API key.' } });
+  }
+
+  key.status = 'revoked';
+  key.revokedAt = new Date().toISOString();
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'USER_API_KEY_REVOKED', key.id,
+    `Revoked API key '${key.name}' (${key.keyPrefix})`
+  );
+
+  res.json({ success: true, message: 'API key revoked successfully.' });
+});
+
+// DELETE /api/v1/api-keys/account/:id - Delete current user's key
+router.delete('/account/keys/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const idx = (db.apiKeys || []).findIndex(k => k.id === req.params.id);
+
+  if (idx === -1) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API key not found.' } });
+  }
+
+  const key = db.apiKeys[idx];
+  if (key.userId !== req.user!.id && req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You do not own this API key.' } });
+  }
+
+  db.apiKeys.splice(idx, 1);
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'USER_API_KEY_DELETED', key.id,
+    `Deleted API key '${key.name}'`
+  );
+
+  res.json({ success: true, message: 'API key deleted successfully.' });
+});
+
+// GET /api/v1/api-keys/admin/paginated - Paginated Admin API keys with owner metadata
+router.get('/admin/paginated', authMiddleware, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  const keys = db.apiKeys || [];
+  const now = new Date();
+
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string, 10) || 10));
+  const q = (typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '');
+  const filter = (typeof req.query.filter === 'string' ? req.query.filter.trim().toLowerCase() : '');
+
+  let filtered = keys.map(k => {
+    const isExpired = k.expiresAt && new Date(k.expiresAt) < now;
+    const effectiveStatus = k.status === 'revoked' ? 'revoked' : (isExpired ? 'expired' : 'active');
+    const owner = db.users.find(u => u.id === k.userId);
+
+    return {
+      id: k.id,
+      userId: k.userId,
+      userEmail: k.userEmail || owner?.email || 'unknown',
+      userName: k.userName || owner?.username || 'unknown',
+      name: k.name,
+      description: k.description || '',
+      keyPrefix: k.keyPrefix,
+      role: k.role,
+      allowedIps: k.allowedIps || [],
+      expiresAt: k.expiresAt || null,
+      status: effectiveStatus,
+      scopes: k.scopes || ['*'],
+      lastUsedAt: k.lastUsedAt || null,
+      lastUsedIp: k.lastUsedIp || null,
+      requestCount: k.requestCount || 0,
+      createdAt: k.createdAt,
+      revokedAt: k.revokedAt || null
+    };
+  });
+
+  if (q) {
+    filtered = filtered.filter(k =>
+      k.name.toLowerCase().includes(q) ||
+      k.keyPrefix.toLowerCase().includes(q) ||
+      k.userEmail.toLowerCase().includes(q) ||
+      k.userName.toLowerCase().includes(q)
+    );
+  }
+
+  if (filter && filter !== 'all') {
+    filtered = filtered.filter(k => k.status === filter);
+  }
+
+  const total = filtered.length;
+  const startIndex = (page - 1) * limit;
+  const items = filtered.slice(startIndex, startIndex + limit);
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    }
+  });
+});
+
 export default router;
