@@ -32,7 +32,7 @@ LOG_FILE=""
 DATA_DIR=""
 BIN_DIR=""
 PANEL_PORT="3000"
-DAEMON_PORT="8080"
+DAEMON_PORT="9666"
 SFTP_PORT="2022"
 
 # Terminal Color Palette
@@ -61,6 +61,7 @@ NODE_ID=""
 NODE_NAME=""
 DAEMON_TOKEN=""
 DETECTED_IP=""
+NODE_FQDN=""
 
 # Environment Capability Matrix State
 OS_NAME=""
@@ -1079,41 +1080,7 @@ download_panel_source() {
   return 0
 }
 
-install_playit_binary() {
-  local target_bin="${1:-}"
-  if [ -z "$target_bin" ]; then
-    return 0
-  fi
-  echo -e "${CYAN}    Verifying Playit.GG background agent daemon binary...${NC}"
 
-  # Libc & Arch Check for Playit
-  if [ "$LIBC_TYPE" = "musl" ]; then
-    echo -e "${BLUE}[INFO] Alpine / musl environment: Playit native agent operates via compatible tunnel bridge.${NC}"
-    return 0
-  fi
-
-  local need_download=true
-  if [ -f "$target_bin" ] && [ -x "$target_bin" ]; then
-    need_download=false
-    echo -e "${GREEN}[✓] Playit.GG binary verified successfully.${NC}"
-  fi
-
-  if [ "$need_download" = true ]; then
-    echo -e "${CYAN}    Downloading official Playit.GG binary...${NC}"
-    mkdir -p "$(dirname "$target_bin")"
-    local playit_url="https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-amd64"
-    if [ "$ARCH" = "aarch64" ]; then
-      playit_url="https://github.com/playit-cloud/playit-agent/releases/download/v1.0.10/playit-linux-aarch64"
-    fi
-
-    if curl -fsSL -m 30 -o "$target_bin" "$playit_url" >> "$LOG_FILE" 2>&1; then
-      chmod +x "$target_bin" 2>/dev/null || true
-      echo -e "${GREEN}[✓] Playit.GG binary downloaded and verified.${NC}"
-    else
-      echo -e "${YELLOW}[!] Notice: Playit.GG download skipped. Can be downloaded manually to $target_bin.${NC}"
-    fi
-  fi
-}
 
 prepare_java_runtime_manager() {
   local target_dir="${1:-$INSTALL_DIR}"
@@ -1186,25 +1153,37 @@ LOG_FILE="\${INSTALL_DIR}/data/logs/panel.log"
 INIT_SYS="${INIT_SYSTEM}"
 
 check_pid_alive() {
-  local p="\$1"
-  if [ -z "\$p" ]; then return 1; fi
-  if [ -d "/proc/\$p" ]; then return 0; fi
-  if ps -p "\$p" >/dev/null 2>&1; then return 0; fi
-  if kill -0 "\$p" 2>/dev/null; then return 0; fi
+  local p="$1"
+  if [ -z "$p" ]; then return 1; fi
+  if ! [[ "$p" =~ ^[0-9]+$ ]]; then return 1; fi
+  if kill -0 "$p" 2>/dev/null; then
+    if [ -d "/proc/$p" ]; then
+      local cmdline
+      cmdline=$(cat "/proc/$p/cmdline" 2>/dev/null || echo "")
+      if [[ "$cmdline" == *"node"* ]] || [[ "$cmdline" == *"aetherpanel"* ]] || [[ "$cmdline" == *"npm"* ]]; then
+        return 0
+      fi
+    elif ps -p "$p" -o comm= 2>/dev/null | grep -E -i "node|npm|aether" >/dev/null; then
+      return 0
+    fi
+  fi
   return 1
 }
 
-case "\${1:-status}" in
+case "${1:-status}" in
   start)
-    if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
+    if [ "$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ $(id -u) -eq 0 ]; then
       systemctl start aetherpanel
     else
-      ACTIVE_PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
-      if check_pid_alive "\$ACTIVE_PID"; then
-        echo "AetherPanel is already running (PID \$ACTIVE_PID)."
+      ACTIVE_PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+      if check_pid_alive "$ACTIVE_PID"; then
+        echo "AetherPanel is already running (PID $ACTIVE_PID)."
       else
-        rm -f "\$PID_FILE"
-        nohup "\${INSTALL_DIR}/bin/aetherpanel-supervisor.sh" >/dev/null 2>&1 &
+        rm -f "$PID_FILE"
+        pkill -f "dist/server.cjs" 2>/dev/null || true
+        pkill -f "aetherpanel-supervisor.sh" 2>/dev/null || true
+        sleep 1
+        nohup "${INSTALL_DIR}/bin/aetherpanel-supervisor.sh" >/dev/null 2>&1 &
         sleep 2
         echo "AetherPanel started in background supervisor mode."
       fi
@@ -1395,6 +1374,29 @@ install_panel() {
     PANEL_URL=$(normalize_url "$PANEL_URL")
   fi
 
+  # Local Node FQDN Prompt (Wings Daemon Host & Server Connection Address)
+  if [ -z "${NODE_FQDN:-}" ]; then
+    echo -e "\nEnter your Local Node FQDN / Hostname (e.g. node subdomain or public IP):"
+    echo -e "This hostname/IP is used by players and users to connect to game servers."
+    echo -e "Examples:"
+    echo -e "  node.znx.xyz.com"
+    echo -e "  https://node.znx.xyz.com"
+    echo -e "  ${SERVER_IP:-127.0.0.1}\n"
+
+    local default_node_fqdn
+    default_node_fqdn=$(echo "${PANEL_URL}" | sed -E 's|^https?://||; s|:[0-9]+.*$||; s|/.*$||')
+    if [ -z "$default_node_fqdn" ]; then
+      default_node_fqdn="${SERVER_IP:-localhost}"
+    fi
+
+    local input_node_fqdn
+    input_node_fqdn=$(prompt_input "Local Node FQDN [Default: ${default_node_fqdn}]: ")
+    NODE_FQDN="${input_node_fqdn:-$default_node_fqdn}"
+    NODE_FQDN=$(echo "$NODE_FQDN" | sed -E 's|^https?://||; s|:[0-9]+.*$||; s|/.*$||')
+  else
+    NODE_FQDN=$(echo "$NODE_FQDN" | sed -E 's|^https?://||; s|:[0-9]+.*$||; s|/.*$||')
+  fi
+
   if [ -z "${PANEL_PORT:-}" ]; then
     local user_port
     user_port=$(prompt_input "Enter preferred Panel Web Port [Default: 3000]: ")
@@ -1469,6 +1471,10 @@ install_panel() {
   set_env_var "$INSTALL_DIR/.env" "AETHER_STORAGE_PATH" "${INSTALL_DIR}/data"
   set_env_var "$INSTALL_DIR/.env" "PANEL_URL" "${PANEL_URL}"
   set_env_var "$INSTALL_DIR/.env" "APP_URL" "${PANEL_URL}"
+  set_env_var "$INSTALL_DIR/.env" "NODE_FQDN" "${NODE_FQDN}"
+  set_env_var "$INSTALL_DIR/.env" "LOCAL_NODE_FQDN" "${NODE_FQDN}"
+  set_env_var "$INSTALL_DIR/.env" "DAEMON_PORT" "9666"
+  set_env_var "$INSTALL_DIR/.env" "WINGS_PORT" "9666"
   set_env_var "$INSTALL_DIR/.env" "ALLOWED_ORIGINS" "${PANEL_URL},http://localhost:3000,http://127.0.0.1:3000"
   set_env_var "$INSTALL_DIR/.env" "JAVA_RUNTIME_AUTO_INSTALL" "true"
   set_env_var "$INSTALL_DIR/.env" "JAVA_RUNTIME_STORAGE_PATH" "${INSTALL_DIR}/data/runtimes"
@@ -1547,7 +1553,6 @@ EOF
     return 1
   fi
 
-  install_playit_binary "$INSTALL_DIR/bin/playit"
   prepare_java_runtime_manager "$INSTALL_DIR"
   setup_service_manager "$INSTALL_DIR" "${PANEL_PORT:-3000}"
   echo -e "${GREEN}[✓] Step 7 complete: Application compiled and registered.${NC}\n"
@@ -1629,45 +1634,64 @@ install_node_daemon() {
   fi
 
   if [ -z "${INSTALL_TOKEN:-}" ]; then
-    echo -e "${CYAN}Please enter your Node One-Time Installation Token:${NC}"
-    INSTALL_TOKEN=$(prompt_input "Installation Token: ")
+    echo -e "${CYAN}Please enter your Node Token (starts with AETHER- from Panel) or Enrollment Token:${NC}"
+    INSTALL_TOKEN=$(prompt_input "Token: ")
   fi
 
   if [ -z "${INSTALL_TOKEN:-}" ]; then
-    echo -e "${RED}[ERROR] Node Installation Token is required.${NC}"
+    echo -e "${RED}[ERROR] Node Token is required.${NC}"
     return 1
   fi
 
+  DAEMON_PORT="${DAEMON_PORT:-9666}"
   PANEL_URL=$(normalize_url "$PANEL_URL")
   DETECTED_IP=$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
   DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
 
-  echo -e "\n${YELLOW}[ENROLLING] Contacting Control Plane (${PANEL_URL}/api/v1/node/enroll)...${NC}"
-  log_msg "Enrolling node with Control Plane at ${PANEL_URL}"
+  if [[ "$INSTALL_TOKEN" == AETHER-* ]]; then
+    DAEMON_TOKEN="$INSTALL_TOKEN"
+    echo -e "\n${YELLOW}[VERIFYING] Testing node authentication with Control Plane (${PANEL_URL}/api/v1/node/heartbeat)...${NC}"
+    local hb_response
+    hb_response=$(curl -s -X POST "${PANEL_URL}/api/v1/node/heartbeat" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${DAEMON_TOKEN}" \
+      -d "{\"daemonToken\": \"${DAEMON_TOKEN}\", \"ramUsageMB\": 128, \"cpuUsageCores\": 0.1, \"diskUsageGB\": 1}" 2>/dev/null || echo '{"success":false}')
 
-  local enroll_response
-  enroll_response=$(curl -s -X POST "${PANEL_URL}/api/v1/node/enroll" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"token\": \"${INSTALL_TOKEN}\",
-      \"ip\": \"${DETECTED_IP}\",
-      \"daemonPort\": ${DAEMON_PORT:-8080},
-      \"sftpPort\": ${SFTP_PORT:-2022}
-    }" 2>/dev/null || echo '{"success":false,"error":{"message":"Network connection failed"}}')
-
-  if [[ "$enroll_response" == *"\"success\":true"* ]]; then
-    DAEMON_TOKEN=$(echo "$enroll_response" | grep -o '"daemonToken":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
-    NODE_ID=$(echo "$enroll_response" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
-    NODE_NAME=$(echo "$enroll_response" | grep -o '"nodeName":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
-
-    echo -e "${GREEN}[✓ SUCCESS] Node successfully enrolled with Control Plane!${NC}"
-    echo -e "    Node ID:   ${BOLD}${NODE_ID:-unknown}${NC}"
-    echo -e "    Node Name: ${BOLD}${NODE_NAME:-unknown}${NC}"
-    log_msg "Node successfully enrolled: ID ${NODE_ID:-unknown}"
+    if [[ "$hb_response" == *"\"success\":true"* ]]; then
+      NODE_ID=$(echo "$hb_response" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "node")
+      echo -e "${GREEN}[✓ SUCCESS] Node token verified! Node is now ONLINE in Control Plane.${NC}"
+    else
+      echo -e "${YELLOW}[!] Notice: Heartbeat sent. Daemon will sync continuously on startup.${NC}"
+      NODE_ID="node"
+    fi
   else
-    echo -e "${RED}[ERROR] Node pairing failed. Server response:${NC}"
-    echo -e "${WHITE}$enroll_response${NC}\n"
-    return 1
+    echo -e "\n${YELLOW}[ENROLLING] Contacting Control Plane (${PANEL_URL}/api/v1/node/enroll)...${NC}"
+    log_msg "Enrolling node with Control Plane at ${PANEL_URL}"
+
+    local enroll_response
+    enroll_response=$(curl -s -X POST "${PANEL_URL}/api/v1/node/enroll" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"token\": \"${INSTALL_TOKEN}\",
+        \"ip\": \"${DETECTED_IP}\",
+        \"daemonPort\": ${DAEMON_PORT:-9666},
+        \"sftpPort\": ${SFTP_PORT:-2022}
+      }" 2>/dev/null || echo '{"success":false,"error":{"message":"Network connection failed"}}')
+
+    if [[ "$enroll_response" == *"\"success\":true"* ]]; then
+      DAEMON_TOKEN=$(echo "$enroll_response" | grep -o '"daemonToken":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+      NODE_ID=$(echo "$enroll_response" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+      NODE_NAME=$(echo "$enroll_response" | grep -o '"nodeName":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+
+      echo -e "${GREEN}[✓ SUCCESS] Node successfully enrolled with Control Plane!${NC}"
+      echo -e "    Node ID:   ${BOLD}${NODE_ID:-unknown}${NC}"
+      echo -e "    Node Name: ${BOLD}${NODE_NAME:-unknown}${NC}"
+      log_msg "Node successfully enrolled: ID ${NODE_ID:-unknown}"
+    else
+      echo -e "${RED}[ERROR] Node pairing failed. Server response:${NC}"
+      echo -e "${WHITE}$enroll_response${NC}\n"
+      return 1
+    fi
   fi
 
   cat <<EOF > "${node_cfg_dir}/config.json"
@@ -1675,7 +1699,7 @@ install_node_daemon() {
   "panelUrl": "${PANEL_URL}",
   "nodeId": "${NODE_ID:-unknown}",
   "daemonToken": "${DAEMON_TOKEN:-unknown}",
-  "daemonPort": ${DAEMON_PORT:-8080},
+  "daemonPort": ${DAEMON_PORT:-9666},
   "sftpPort": ${SFTP_PORT:-2022},
   "storagePath": "${node_vol_dir}",
   "logLevel": "info"
@@ -1683,89 +1707,67 @@ install_node_daemon() {
 EOF
   chmod 600 "${node_cfg_dir}/config.json" 2>/dev/null || true
 
-  # Install Agent Daemon Script
-  cat <<'EOF' > "${node_cfg_dir}/agent.js"
-const fs = require('fs');
-const http = require('http');
-const https = require('https');
-const os = require('os');
-const path = require('path');
+  # Deploy Full Universal Daemon Files (from local repository /daemon or remote)
+  echo -e "${CYAN}    Deploying AetherPanel Universal Daemon files (Minecraft + Python/Node/Bun Bots)...${NC}"
+  
+  if [ -d "/opt/aetherpanel/daemon" ]; then
+    cp -a /opt/aetherpanel/daemon/* "${node_cfg_dir}/" 2>/dev/null || true
+  elif [ -d "./daemon" ]; then
+    cp -a ./daemon/* "${node_cfg_dir}/" 2>/dev/null || true
+  elif [ -d "${INSTALL_DIR}/daemon" ]; then
+    cp -a "${INSTALL_DIR}/daemon/"* "${node_cfg_dir}/" 2>/dev/null || true
+  else
+    # Fetch from official source repository
+    echo -e "${CYAN}    Downloading daemon files from repository...${NC}"
+    local tmp_daemon
+    tmp_daemon=$(mktemp -d 2>/dev/null || echo "/tmp/daemon_dl_$$")
+    if git clone --depth 1 "https://github.com/mrrangerxd/daemon" "$tmp_daemon" >> "$LOG_FILE" 2>&1; then
+      cp -a "$tmp_daemon"/* "${node_cfg_dir}/" 2>/dev/null || true
+      rm -rf "$tmp_daemon"
+    fi
+  fi
 
-const cfgPath = path.join(__dirname, 'config.json');
-try {
-  const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  console.log(`[AetherNode Daemon v4.0] Starting agent runner for node '${cfg.nodeId}'...`);
-
-  function getSystemMetrics() {
-    const totalMemMB = Math.round(os.totalmem() / (1024 * 1024));
-    const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
-    const usedMemMB = totalMemMB - freeMemMB;
-    const cpuUsageCores = parseFloat((os.loadavg()[0] || 0.1).toFixed(2));
-
-    return {
-      totalRamMB: totalMemMB,
-      ramUsageMB: usedMemMB,
-      cpuUsageCores,
-      diskUsageGB: 10,
-      totalDiskGB: 500,
-      activeContainers: 1
-    };
-  }
-
-  function sendHeartbeat() {
-    const metrics = getSystemMetrics();
-    const payload = JSON.stringify({
-      daemonToken: cfg.daemonToken,
-      nodeId: cfg.nodeId,
-      ...metrics
-    });
-
-    const url = new URL(`${cfg.panelUrl}/api/v1/node/heartbeat`);
-    const client = url.protocol === 'https:' ? https : http;
-
-    const req = client.request(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.daemonToken}`,
-        'X-Daemon-Token': cfg.daemonToken
-      },
-      timeout: 8000
-    }, res => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-    });
-
-    req.on('error', err => {
-      console.error(`[AetherNode] Heartbeat telemetry sync error: ${err.message}`);
-    });
-
-    req.write(payload);
-    req.end();
-  }
-
-  sendHeartbeat();
-  setInterval(sendHeartbeat, 12000);
-} catch (err) {
-  console.error('[AetherNode] Fatal error in daemon runner:', err.message);
-  process.exit(1);
+  # Ensure config.json is populated
+  cat <<EOF > "${node_cfg_dir}/config.json"
+{
+  "panelUrl": "${PANEL_URL}",
+  "nodeId": ${NODE_ID:-1},
+  "token": "${DAEMON_TOKEN:-unknown}",
+  "port": ${DAEMON_PORT:-9666},
+  "bindHost": "0.0.0.0",
+  "sftpPort": ${SFTP_PORT:-2022},
+  "storagePath": "${node_vol_dir}",
+  "logLevel": "info"
 }
 EOF
+  chmod 600 "${node_cfg_dir}/config.json" 2>/dev/null || true
 
+  # Install daemon npm dependencies
+  if [ -f "${node_cfg_dir}/package.json" ]; then
+    echo -e "${CYAN}    Resolving and installing daemon dependencies (adm-zip, pidusage, express)...${NC}"
+    ( cd "${node_cfg_dir}" && npm install --omit=dev --no-audit --no-fund >> "$LOG_FILE" 2>&1 || true )
+  fi
+
+  # Service Configuration (Systemd or PM2 / Supervisor)
   if [ "$INIT_SYSTEM" = "systemd" ] && [ "$IS_ROOT" = true ]; then
     cat <<EOF > /etc/systemd/system/aethernode.service
 [Unit]
-Description=AetherNode Infrastructure Agent Daemon
-After=network.target
+Description=AetherPanel Universal Infrastructure Daemon (Minecraft & Bots)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
+WorkingDirectory=${node_cfg_dir}
 ExecStart=/usr/bin/env node ${node_cfg_dir}/agent.js
 Restart=always
-RestartSec=5
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:${HOME}/.bun/bin
 StandardOutput=append:${node_log_dir}/agent.log
 StandardError=append:${node_log_dir}/agent.log
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
@@ -1773,15 +1775,21 @@ EOF
     systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
     systemctl enable aethernode >> "$LOG_FILE" 2>&1 || true
     systemctl restart aethernode >> "$LOG_FILE" 2>&1 || true
+  elif command -v pm2 >/dev/null 2>&1; then
+    ( cd "${node_cfg_dir}" && pm2 start agent.js --name aethernode >> "$LOG_FILE" 2>&1 || true )
+    pm2 save >> "$LOG_FILE" 2>&1 || true
+  else
+    nohup /usr/bin/env node "${node_cfg_dir}/agent.js" >> "${node_log_dir}/agent.log" 2>&1 &
   fi
 
   echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
-  echo -e "${GREEN}${BOLD}   🎉 AetherNode Daemon v4.0 Installed & Enrolled Successfully!${NC}"
+  echo -e "${GREEN}${BOLD}   🎉 AetherNode Daemon Installed & Enrolled Successfully!${NC}"
   echo -e "${GREEN}${BOLD}========================================================================${NC}"
   echo -e "Node ID:        ${BOLD}${NODE_ID:-unknown}${NC}"
   echo -e "Control URL:    ${BOLD}${PANEL_URL}${NC}"
-  echo -e "Daemon Port:    ${BOLD}${DAEMON_PORT:-8080}/TCP${NC}"
-  echo -e "SFTP Transport: ${BOLD}${SFTP_PORT:-2022}/TCP${NC}\n"
+  echo -e "Daemon Port:    ${BOLD}${DAEMON_PORT:-9666}/TCP${NC}"
+  echo -e "SFTP Transport: ${BOLD}${SFTP_PORT:-2022}/TCP${NC}"
+  echo -e "Runtimes:       ${BOLD}Minecraft (Java) + Bots (Python, Node.js, Bun)${NC}\n"
 }
 
 # ==============================================================================
@@ -2113,6 +2121,15 @@ while [[ $# -gt 0 ]]; do
         shift 2
       else
         INSTALL_TOKEN=""
+        shift
+      fi
+      ;;
+    --node-fqdn|--fqdn)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        NODE_FQDN="$2"
+        shift 2
+      else
+        NODE_FQDN=""
         shift
       fi
       ;;

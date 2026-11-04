@@ -66,17 +66,19 @@ export function resolveServerPublicEndpoint(
 ): PublicEndpointResult {
   const port = (server as any).port || server.primaryPort || 25565;
 
-  if (node?.fqdn && node.fqdn.trim()) {
-    const rawHost = node.fqdn.trim();
+  // 1. If Node has a configured Hostname/FQDN (e.g. node.znx.xyz.com or public IP)
+  const nodeHost = (node?.hostname || node?.fqdn || '').trim();
+  if (nodeHost && nodeHost !== 'localhost' && nodeHost !== '127.0.0.1' && nodeHost !== '0.0.0.0') {
     return {
-      endpoint: `${rawHost}:${port}`,
-      rawHost,
+      endpoint: `${nodeHost}:${port}`,
+      rawHost: nodeHost,
       source: 'fqdn',
       port,
       isExternallyReachable: true
     };
   }
 
+  // 2. Node Public IPv4
   if (node?.publicIpv4 && node.publicIpv4.trim()) {
     const rawHost = node.publicIpv4.trim();
     return {
@@ -88,24 +90,26 @@ export function resolveServerPublicEndpoint(
     };
   }
 
-  if (server.primaryIp && server.primaryIp.trim()) {
-    const rawHost = server.primaryIp.trim();
+  // 3. Server Primary IP if non-loopback
+  const serverIp = (server.primaryIp || '').trim();
+  if (serverIp && serverIp !== '127.0.0.1' && serverIp !== '0.0.0.0' && serverIp !== 'localhost') {
     return {
-      endpoint: `${rawHost}:${port}`,
-      rawHost,
+      endpoint: `${serverIp}:${port}`,
+      rawHost: serverIp,
       source: 'node_ip',
       port,
       isExternallyReachable: true
     };
   }
 
-  const rawHost = node?.ip?.trim() || node?.hostname?.trim() || '127.0.0.1';
+  // 4. Node IP / Hostname fallback
+  const fallbackHost = node?.ip?.trim() || node?.hostname?.trim() || serverIp || '127.0.0.1';
   return {
-    endpoint: `${rawHost}:${port}`,
-    rawHost,
+    endpoint: `${fallbackHost}:${port}`,
+    rawHost: fallbackHost,
     source: 'node_ip',
     port,
-    isExternallyReachable: true
+    isExternallyReachable: fallbackHost !== '127.0.0.1'
   };
 }
 

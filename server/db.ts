@@ -1349,10 +1349,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         const hostCpuCores = os.cpus()?.length || 4;
 
         if (existingLocal) {
-          existingLocal.id = 'local';
-          existingLocal.isLocal = true;
-          existingLocal.hostname = existingLocal.hostname || 'localhost';
-          existingLocal.apiPort = existingLocal.apiPort || 3000;
+          existingLocal.hostname = existingLocal.hostname || process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || 'localhost';
+          if (existingLocal.apiPort === 3000) existingLocal.apiPort = 9666;
+          existingLocal.apiPort = existingLocal.apiPort || 9666;
           existingLocal.ssl = existingLocal.ssl || false;
           existingLocal.behindProxy = existingLocal.behindProxy || false;
           existingLocal.maintenanceMode = existingLocal.maintenanceMode || false;
@@ -1362,50 +1361,6 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           existingLocal.maxServers = existingLocal.maxServers || 100;
           existingLocal.memoryOverallocate = existingLocal.memoryOverallocate ?? 0;
           existingLocal.diskOverallocate = existingLocal.diskOverallocate ?? 0;
-          existingLocal.tags = existingLocal.tags || ['local', 'in-process'];
-          existingLocal.createdAt = existingLocal.createdAt || new Date().toISOString();
-          existingLocal.lastHeartbeatAt = new Date().toISOString();
-          // Ensure it is first
-          dbCache.nodes = [existingLocal, ...dbCache.nodes.filter(n => n.id !== 'local')];
-        } else {
-          const localNode: Node = {
-            id: 'local',
-            name: 'Local Node',
-            hostname: 'localhost',
-            apiPort: 3000,
-            ssl: false,
-            token: 'in-process-token',
-            isLocal: true,
-            behindProxy: false,
-            maintenanceMode: false,
-            memory: hostRamMB,
-            disk: 200,
-            cpu: hostCpuCores,
-            maxServers: 100,
-            memoryOverallocate: 0,
-            diskOverallocate: 0,
-            tags: ['local', 'in-process'],
-            lastHeartbeatAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            // Compatibility aliases
-            ip: '127.0.0.1',
-            daemonPort: 3000,
-            sftpPort: 2022,
-            location: 'local',
-            locationName: 'Primary Control Plane VPS',
-            flagCode: 'LOCAL',
-            totalRamMB: hostRamMB,
-            usedRamMB: 0,
-            totalCpuCores: hostCpuCores,
-            usedCpuCores: 0,
-            totalDiskGB: 200,
-            usedDiskGB: 5,
-            status: 'online',
-            isMaintenanceMode: false,
-            isLocalNode: true,
-            serverCount: dbCache.servers.length
-          };
-          dbCache.nodes.unshift(localNode);
         }
 
         if (!dbCache.passwords) {

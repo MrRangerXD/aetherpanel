@@ -1,0 +1,31 @@
+{
+  "name": "aether-daemon",
+  "version": "1.0.0",
+  "description": "AetherPanel Universal Daemon Agent - Minecraft & Multi-Language Bot Hosting (Python, Node.js, Bun)",
+  "main": "agent.js",
+  "author": "AetherPanel",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node agent.js",
+    "dev": "node --watch agent.js"
+  },
+  "dependencies": {
+    "7zip-min": "^3.0.1",
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
+    "axios": "^1.7.9",
+    "express": "^4.22.3",
+    "js-yaml": "^4.1.0",
+    "node-unrar-js": "^2.0.2",
+    "pidusage": "^3.0.2",
+    "prismarine-nbt": "^2.8.0",
+    "sanitize-filename": "^1.6.3",
+    "tar": "^7.5.22",
+    "unbzip2-stream": "^1.4.3",
+    "unzipper": "^0.12.3"
+  }
+}

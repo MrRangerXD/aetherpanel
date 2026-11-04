@@ -192,7 +192,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                   Email or Username
                 </label>
                 <div className="relative flex items-center">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none z-10" />
                   <input
                     type="text"
                     required
@@ -200,7 +200,8 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="user@domain.com"
                     aria-invalid={Boolean(error)}
-                    className="field w-full pl-10 text-xs"
+                    className="field w-full text-xs !pl-10"
+                    style={{ paddingLeft: '2.5rem' }}
                   />
                 </div>
               </div>
@@ -210,7 +211,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                   Password
                 </label>
                 <div className="relative flex items-center">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-ink-mute)] pointer-events-none z-10" />
                   <input
                     type="password"
                     required
@@ -218,7 +219,8 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     aria-invalid={Boolean(error)}
-                    className="field w-full pl-10 text-xs"
+                    className="field w-full text-xs !pl-10"
+                    style={{ paddingLeft: '2.5rem' }}
                   />
                 </div>
               </div>

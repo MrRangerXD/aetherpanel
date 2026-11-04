@@ -1,0 +1,9 @@
+{
+  "panelUrl": "http://localhost:3000",
+  "nodeId": 1,
+  "token": "",
+  "port": 9666,
+  "bindHost": "0.0.0.0",
+  "heartbeatIntervalMs": 15000,
+  "commandPollIntervalMs": 1000
+}

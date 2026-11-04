@@ -258,6 +258,8 @@ async function startServer() {
   app.use('/api/v1/support', supportRoutes);
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/node', nodeApiRoutes);
+  app.use('/api/nodes', nodeApiRoutes);
+  app.use('/api/node', nodeApiRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/afk', afkRoutes);
   app.use('/api/v1/discord', discordRoutes);

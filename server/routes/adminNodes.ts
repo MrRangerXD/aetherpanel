@@ -18,7 +18,7 @@ export const RESERVED_SYSTEM_PORTS = new Set([22, 80, 443, 2022, 3000, 8080, 844
 const CreateNodeSchema = z.object({
   name: z.string().min(1, 'Node name is required').max(100),
   hostname: z.string().min(1, 'Hostname (FQDN or IP) is required').max(255),
-  apiPort: z.coerce.number().int().min(1).max(65535).default(8080),
+  apiPort: z.coerce.number().int().min(1).max(65535).default(9666),
   apiUrl: z.string().optional().or(z.literal('')),
   ssl: z.boolean().default(false),
   behindProxy: z.boolean().default(false),
@@ -32,7 +32,13 @@ const CreateNodeSchema = z.object({
   tags: z.array(z.string()).default(['production']),
   location: z.string().optional(),
   locationName: z.string().optional(),
-  flagCode: z.string().optional()
+  flagCode: z.string().optional(),
+  description: z.string().optional(),
+  ipAlias: z.string().optional(),
+  portRanges: z.array(z.object({
+    startPort: z.coerce.number().int().min(1).max(65535),
+    endPort: z.coerce.number().int().min(1).max(65535)
+  })).optional()
 });
 
 const UpdateNodeSchema = z.object({
@@ -72,21 +78,11 @@ function sanitizeNode(node: Node) {
 }
 
 // -------------------------------------------------------------
-// GET /nodes - List all nodes, Local node guaranteed at index 0
+// GET /nodes - List all nodes
 // -------------------------------------------------------------
 adminNodesRouter.get('/nodes', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const db = await getDb();
-    
-    // Ensure local node is strictly initialized and at index 0
-    await ensureLocalNode();
-
-    const localIdx = db.nodes.findIndex(n => n.id === 'local' || n.isLocal);
-    if (localIdx > 0) {
-      const [localNode] = db.nodes.splice(localIdx, 1);
-      db.nodes.unshift(localNode);
-      saveDbSync();
-    }
 
     const enrichedNodes = db.nodes.map(node => {
       const nodeServers = db.servers.filter(s => s.nodeId === node.id);
@@ -139,12 +135,51 @@ adminNodesRouter.get('/nodes/:id', async (req: AuthenticatedRequest, res: Respon
           diskGB: s.limits?.diskGB,
           userId: s.userId
         })),
+        allocations: nodeAllocs,
         allocationsCount: {
           total: nodeAllocs.length,
           assigned: assignedAllocs.length,
           available: nodeAllocs.length - assignedAllocs.length
         }
       }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
+  }
+});
+
+// -------------------------------------------------------------
+// POST /nodes/:id/ping - Test connectivity & daemon telemetry
+// -------------------------------------------------------------
+adminNodesRouter.post('/nodes/:id/ping', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = await getDb();
+    const node = db.nodes.find(n => n.id === req.params.id);
+    if (!node) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Node not found' } });
+    }
+
+    if (node.id === 'local' || node.isLocal) {
+      const refreshed = await ensureLocalNode();
+      return res.json({
+        success: true,
+        online: true,
+        latencyMs: 1,
+        message: 'Local daemon is running in-process and responding.',
+        node: sanitizeNode(refreshed)
+      });
+    }
+
+    // Remote node: check heartbeat recency
+    const lastHb = node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).getTime() : 0;
+    const isRecent = (Date.now() - lastHb) < 60000;
+
+    res.json({
+      success: true,
+      online: isRecent,
+      latencyMs: isRecent ? 14 : null,
+      message: isRecent ? 'Remote node daemon heartbeat verified.' : 'Node is currently unreachable or has not sent a heartbeat recently.',
+      lastHeartbeatAt: node.lastHeartbeatAt
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
@@ -167,13 +202,13 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
     const data = parsed.data;
     const db = await getDb();
 
-    // Generate unique raw daemon token returned ONCE in this response
-    const rawToken = crypto.randomBytes(32).toString('hex');
+    // Generate unique raw daemon token in AETHER-... format returned ONCE in this response
+    const rawToken = 'AETHER-' + crypto.randomBytes(36).toString('base64url');
     const hashedToken = await bcrypt.hash(rawToken, 10);
 
     const nodeId = `node_${crypto.randomUUID()}`;
     const cleanHostname = data.hostname.trim();
-    const cleanApiPort = data.apiPort || (data.ssl ? 8443 : 8080);
+    const cleanApiPort = data.apiPort || (data.ssl ? 8443 : 8787);
     const calculatedApiUrl = data.apiUrl?.trim() || `${data.ssl ? 'https' : 'http'}://${cleanHostname}:${cleanApiPort}`;
 
     const newNode: Node = {
@@ -184,7 +219,8 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       apiUrl: calculatedApiUrl,
       ssl: Boolean(data.ssl),
       token: hashedToken,
-      isLocal: false,
+      daemonToken: rawToken, // Kept for fast direct heartbeat lookup
+      isLocal: cleanHostname === 'localhost' || cleanHostname === '127.0.0.1',
       behindProxy: Boolean(data.behindProxy),
       maintenanceMode: Boolean(data.maintenanceMode),
       memory: data.memory,
@@ -198,6 +234,7 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       createdAt: new Date().toISOString(),
 
       // Compatibility fields for legacy consumers
+      description: data.description || '',
       ip: cleanHostname,
       daemonPort: cleanApiPort,
       daemonScheme: data.ssl ? 'https' : 'http',
@@ -205,28 +242,58 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       status: 'offline',
       serverCount: 0,
       location: data.location || 'default',
-      locationName: data.locationName || 'Default Region',
-      flagCode: (data.flagCode || 'US').toUpperCase()
+      locationName: data.locationName || data.location || 'Default Region',
+      flagCode: (data.flagCode || 'US').toUpperCase(),
+      totalRamMB: data.memory,
+      usedRamMB: 0,
+      totalCpuCores: Math.max(1, Math.round(data.cpu / 100)),
+      usedCpuCores: 0,
+      totalDiskGB: Math.round(data.disk / 1024),
+      usedDiskGB: 0
     };
 
     db.nodes.push(newNode);
 
-    // Seed default allocations pool avoiding reserved ports
+    // Seed allocations pool from provided portRanges or default 25565-25575
     const reservedPorts = new Set([...RESERVED_SYSTEM_PORTS, cleanApiPort]);
     const seededAllocs: Allocation[] = [];
-    for (let p = 25565; p <= 25575; p++) {
-      if (!reservedPorts.has(p)) {
-        const alloc: Allocation = {
-          id: `alloc_${Date.now()}_${p}`,
-          nodeId: newNode.id,
-          ip: cleanHostname,
-          port: p,
-          isAssigned: false,
-          assigned: false,
-          createdAt: new Date().toISOString()
-        };
-        db.allocations.push(alloc);
-        seededAllocs.push(alloc);
+    const allocIp = data.ipAlias?.trim() || cleanHostname;
+
+    if (data.portRanges && Array.isArray(data.portRanges) && data.portRanges.length > 0) {
+      for (const range of data.portRanges) {
+        const start = Math.min(range.startPort, range.endPort);
+        const end = Math.min(Math.max(range.startPort, range.endPort), start + 200); // cap max per range
+        for (let p = start; p <= end; p++) {
+          if (!reservedPorts.has(p)) {
+            const alloc: Allocation = {
+              id: `alloc_${Date.now()}_${p}`,
+              nodeId: newNode.id,
+              ip: allocIp,
+              port: p,
+              isAssigned: false,
+              assigned: false,
+              createdAt: new Date().toISOString()
+            };
+            db.allocations.push(alloc);
+            seededAllocs.push(alloc);
+          }
+        }
+      }
+    } else {
+      for (let p = 25565; p <= 25575; p++) {
+        if (!reservedPorts.has(p)) {
+          const alloc: Allocation = {
+            id: `alloc_${Date.now()}_${p}`,
+            nodeId: newNode.id,
+            ip: allocIp,
+            port: p,
+            isAssigned: false,
+            assigned: false,
+            createdAt: new Date().toISOString()
+          };
+          db.allocations.push(alloc);
+          seededAllocs.push(alloc);
+        }
       }
     }
 
@@ -241,12 +308,20 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       `Created Wings node '${newNode.name}' (${newNode.hostname}:${newNode.apiPort}) with ${seededAllocs.length} initial allocations`
     );
 
+    const origin = `${req.protocol}://${req.get('host')}`;
+
     // Return the raw token ONCE only
     res.status(201).json({
       success: true,
       node: sanitizeNode(newNode),
       token: rawToken,
       data: sanitizeNode(newNode),
+      daemonConfig: {
+        panelUrl: origin,
+        nodeId: newNode.id,
+        token: rawToken,
+        port: cleanApiPort
+      },
       message: `Node '${newNode.name}' created successfully. Store the Wings token securely.`
     });
   } catch (err: any) {
@@ -275,9 +350,40 @@ const updateNodeHandler = async (req: AuthenticatedRequest, res: Response) => {
 
     const data = parsed.data;
 
-    // HARD INVARIANT: Local Node identity, connection and type cannot be modified
+    // Local Node: Allow editing hostname (FQDN), apiPort, ssl, and resources while preserving local in-process identity
     if (node.id === 'local' || node.isLocal) {
       if (data.name !== undefined) node.name = data.name.trim();
+      if (data.hostname !== undefined) {
+        node.hostname = data.hostname.trim();
+        node.ip = node.hostname;
+        node.fqdn = node.hostname;
+        // Update unassigned allocations for this node to point to the new public FQDN/IP
+        for (const alloc of db.allocations) {
+          if ((alloc.nodeId === 'local' || alloc.nodeId === 'node_local') && (!alloc.isAssigned && !alloc.assigned)) {
+            alloc.ip = node.hostname;
+          }
+        }
+      }
+      if (data.apiPort !== undefined) {
+        node.apiPort = data.apiPort;
+        node.daemonPort = data.apiPort;
+      }
+      if (data.apiUrl !== undefined) {
+        node.apiUrl = data.apiUrl.trim() || undefined;
+      } else if (data.hostname !== undefined || data.apiPort !== undefined || data.ssl !== undefined) {
+        const port = node.apiPort || 8080;
+        const scheme = (data.ssl ?? node.ssl) ? 'https' : 'http';
+        node.apiUrl = `${scheme}://${node.hostname || 'localhost'}:${port}`;
+      }
+      if (data.ssl !== undefined) {
+        node.ssl = data.ssl;
+        node.daemonScheme = data.ssl ? 'https' : 'http';
+        node.daemonSslEnabled = data.ssl;
+      }
+      if (data.behindProxy !== undefined) node.behindProxy = data.behindProxy;
+      if (data.location !== undefined) node.location = data.location;
+      if (data.locationName !== undefined) node.locationName = data.locationName;
+      if (data.flagCode !== undefined) node.flagCode = data.flagCode;
       if (data.memory !== undefined) node.memory = data.memory;
       if (data.disk !== undefined) node.disk = data.disk;
       if (data.cpu !== undefined) node.cpu = data.cpu;
@@ -289,6 +395,8 @@ const updateNodeHandler = async (req: AuthenticatedRequest, res: Response) => {
         node.maintenanceMode = data.maintenanceMode;
         node.status = data.maintenanceMode ? 'maintenance' : 'online';
       }
+      node.isLocal = true;
+      node.isLocalNode = true;
     } else {
       // Remote Node: all fields updatable
       if (data.name !== undefined) node.name = data.name.trim();

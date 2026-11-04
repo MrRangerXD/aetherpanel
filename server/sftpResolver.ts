@@ -16,7 +16,7 @@ export interface SftpResolutionDetails {
  */
 export async function resolveNodeSftpMode(nodeId: string): Promise<SftpResolutionDetails> {
   const db = await getDb();
-  const node = db.nodes.find(n => n.id === nodeId);
+  const node = db.nodes.find(n => n.id === nodeId || ((nodeId === 'local' || nodeId === 'node_local') && (n.isLocal || n.id === 'local' || n.id === 'node_local')));
   
   const sftpPort = node?.sftpPort || 2022;
   const sftpDaemonOnline = await checkPortReachable('127.0.0.1', sftpPort, 1000);

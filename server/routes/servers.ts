@@ -142,20 +142,30 @@ router.get('/', authMiddleware, requireApiKeyScope('servers:read'), async (req: 
 
   const ownedServers = db.servers
     .filter(s => s.userId === req.user!.id)
-    .map(srv => ({
-      ...srv,
-      serverType: resolveServerType(srv, db.serverTypes || []),
-      isSubuser: false
-    }));
+    .map(srv => {
+      const node = db.nodes.find(n => n.id === srv.nodeId);
+      const ep = resolveServerPublicEndpoint(srv, node);
+      return {
+        ...srv,
+        primaryIp: ep.rawHost,
+        resolvedPublicEndpoint: ep.endpoint,
+        serverType: resolveServerType(srv, db.serverTypes || []),
+        isSubuser: false
+      };
+    });
 
   const sharedServers = db.servers
     .filter(s => subuserServerIds.includes(s.id) && s.userId !== req.user!.id)
     .map(srv => {
       const subuserEntry = subuserEntries.find(sub => sub.serverId === srv.id);
       const owner = db.users.find(u => u.id === srv.userId);
+      const node = db.nodes.find(n => n.id === srv.nodeId);
+      const ep = resolveServerPublicEndpoint(srv, node);
       
       return {
         ...srv,
+        primaryIp: ep.rawHost,
+        resolvedPublicEndpoint: ep.endpoint,
         serverType: resolveServerType(srv, db.serverTypes || []),
         isSubuser: true,
         permissions: subuserEntry ? subuserEntry.permissions : [],
@@ -197,6 +207,7 @@ router.get('/:id', authMiddleware, requireApiKeyScope('servers:read'), async (re
     data: {
       server: {
         ...server,
+        primaryIp: publicEndpoint.rawHost,
         serverType: resolveServerType(server, db.serverTypes || []),
         isSubuser,
         permissions: subuserEntry ? subuserEntry.permissions : undefined,

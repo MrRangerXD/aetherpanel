@@ -11,6 +11,15 @@ import { resolveBotRuntimeExecutable, resolveNpmExecutable, resolveNpmExecutable
 
 const SERVERS_DIR = path.join(process.cwd(), 'data', 'servers');
 
+/**
+ * Authoritative check whether a server or node is managed in-process by the Local Node provider.
+ */
+export function isNodeLocal(nodeId?: string, node?: any): boolean {
+  if (!nodeId || nodeId === 'local' || nodeId === 'node_local') return true;
+  if (node && (node.isLocal || node.isLocalNode || node.id === 'local' || node.id === 'node_local')) return true;
+  return false;
+}
+
 // In-memory active running child processes & telemetry map
 interface ActiveProcessEntry {
   child?: ChildProcess;
@@ -377,7 +386,7 @@ export async function validateServerPreflight(serverId: string): Promise<Preflig
     if (node.isMaintenanceMode || node.status === 'maintenance') {
       return { ok: false, code: 'NODE_MAINTENANCE', reason: `Assigned node '${node.name}' is currently in maintenance mode.` };
     }
-    if (node.status === 'offline' && !node.isLocalNode && node.id !== 'node_local') {
+    if (node.status === 'offline' && !isNodeLocal(server.nodeId, node)) {
       return { ok: false, code: 'NODE_OFFLINE', reason: `Assigned node '${node.name}' is offline. Cannot initialize container.` };
     }
   }
@@ -538,7 +547,7 @@ export async function startServer(serverId: string): Promise<boolean> {
 
   // Check if server is on a remote node
   const node = db.nodes.find(n => n.id === server.nodeId);
-  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  const isRemote = !isNodeLocal(server.nodeId, node);
 
   if (isRemote) {
     appendConsoleLog(serverId, `[AetherDaemon/INFO]: Dispatching startup command to remote node '${node?.name || server.nodeId}' daemon...`);
@@ -964,7 +973,7 @@ export async function stopServer(serverId: string): Promise<boolean> {
 
   // Check if remote node server
   const node = db.nodes.find(n => n.id === server.nodeId);
-  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  const isRemote = !isNodeLocal(server.nodeId, node);
   if (isRemote) {
     queueRemoteServerCommand(serverId, 'STOP');
     server.status = 'stopping';
@@ -1016,7 +1025,7 @@ export async function killServer(serverId: string): Promise<boolean> {
 
   // Check if remote node server
   const node = db.nodes.find(n => n.id === server.nodeId);
-  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  const isRemote = !isNodeLocal(server.nodeId, node);
   if (isRemote) {
     queueRemoteServerCommand(serverId, 'KILL');
     server.status = 'stopped';
@@ -1077,7 +1086,7 @@ export async function reconcileServerStatesOnBoot(): Promise<void> {
     const db = await getDb();
     for (const server of db.servers) {
       const node = db.nodes.find(n => n.id === server.nodeId);
-      const isLocal = !node || node.isLocalNode || node.id === 'node_local';
+      const isLocal = isNodeLocal(server.nodeId, node);
 
       if (isLocal) {
         // Check auto-start on boot
@@ -1199,7 +1208,7 @@ export async function sendServerCommand(serverId: string, command: string): Prom
 
   // Check if server is running on a remote node
   const node = db.nodes.find(n => n.id === server.nodeId);
-  const isRemote = (node && !node.isLocalNode && node.id !== 'node_local') || (server.nodeId && server.nodeId !== 'node_local');
+  const isRemote = !isNodeLocal(server.nodeId, node);
 
   if (isRemote) {
     if (server.status !== 'running') {

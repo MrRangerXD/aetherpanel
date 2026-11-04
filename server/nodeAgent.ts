@@ -14,7 +14,7 @@ let localAgentInterval: NodeJS.Timeout | null = null;
 export async function ensureLocalNode(): Promise<Node> {
   const db = await getDb();
 
-  let localNode = db.nodes.find(n => n.id === 'node_local' || n.isLocalNode);
+  let localNode = db.nodes.find(n => n.id === 'local' || n.id === 'node_local' || n.isLocal || n.isLocalNode);
 
   const hostRamMB = Math.round(os.totalmem() / (1024 * 1024));
   const freeRamMB = Math.round(os.freemem() / (1024 * 1024));
@@ -51,131 +51,102 @@ export async function ensureLocalNode(): Promise<Node> {
   if (!localNode) {
     localNode = {
       id: 'local',
-      uuid: 'local-node-00000000-0000-000000000000',
-      name: 'Local Node (Primary Host)',
-      description: 'Default local compute host co-located on control plane VPS.',
-      hostname: 'localhost',
-      apiPort: 3000,
-      apiUrl: 'http://127.0.0.1:3000',
+      name: 'Local Node',
+      hostname: process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || 'localhost',
+      apiPort: 9666,
+      daemonPort: 9666,
+      apiUrl: `http://${process.env.NODE_FQDN || 'localhost'}:9666`,
       ssl: false,
-      isLocal: true,
       behindProxy: false,
       maintenanceMode: false,
+      isLocal: true,
+      isLocalNode: true,
       memory: hostRamMB,
+      totalRamMB: hostRamMB,
+      usedRamMB: 0,
       disk: totalDiskGB * 1024,
+      totalDiskGB: totalDiskGB,
+      usedDiskGB: 0,
       cpu: hostCpuCores * 100,
+      totalCpuCores: hostCpuCores,
+      usedCpuCores: 0,
       maxServers: 100,
+      serverCount: 0,
       memoryOverallocate: 0,
       diskOverallocate: 0,
       tags: ['local', 'primary', 'bare-metal'],
-      lastHeartbeatAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-
-      // Compatibility fields
-      ip: primaryIp,
-      publicIpv4: detectedPublicIp || undefined,
-      fqdn: hostName.includes('.') ? hostName : `${hostName}.local`,
-      bindAddress: '0.0.0.0',
-      scheme: 'http',
-      sslEnabled: false,
-      daemonPort: 3000,
-      daemonListenIp: '0.0.0.0',
-      daemonScheme: 'http',
-      daemonSslEnabled: false,
-      sftpPort: 2022,
-      sftpFqdn: hostName.includes('.') ? `sftp.${hostName}` : undefined,
       location: 'local',
-      locationName: 'Primary Control Plane Region',
-      flagCode: 'US',
-      totalRamMB: hostRamMB,
-      usedRamMB,
-      totalCpuCores: hostCpuCores,
-      usedCpuCores: 0.1,
-      totalDiskGB,
-      usedDiskGB,
-      reservedRamMB: 1024,
-      reservedCpuCores: 0.5,
-      reservedDiskGB: 5,
-      ramOverallocatePercent: 0,
-      cpuOverallocatePercent: 0,
-      diskOverallocatePercent: 0,
-      allowedProducts: ['prod_minecraft', 'prod_bot'],
+      locationName: 'Primary Control Plane VPS',
+      flagCode: 'IN',
       status: 'online',
-      isMaintenanceMode: false,
-      isLocalNode: true,
-      serverCount: 0,
-      isSecure: true
-    };
-    db.nodes.unshift(localNode);
-
-    // Ensure initial port allocations for Local Node
-    for (let p = 25565; p <= 25575; p++) {
-      const exists = db.allocations.some(a => a.nodeId === 'local' && a.port === p);
-      if (!exists) {
-        db.allocations.push({
-          id: `alloc_local_${p}`,
-          nodeId: 'local',
-          ip: primaryIp,
-          port: p,
-          isAssigned: false,
-          assigned: false,
-          createdAt: new Date().toISOString()
-        });
-      }
-    }
-    saveDbSync();
-  } else {
-    // Update live hardware capacity & preserve user settings
-    localNode.id = 'local';
-    localNode.isLocal = true;
-    localNode.hostname = localNode.hostname || 'localhost';
-    localNode.apiPort = localNode.apiPort || 3000;
-    localNode.ssl = localNode.ssl ?? false;
-    localNode.behindProxy = localNode.behindProxy ?? false;
-    localNode.maintenanceMode = localNode.maintenanceMode ?? localNode.isMaintenanceMode ?? false;
-    localNode.memory = localNode.memory || hostRamMB;
-    localNode.disk = localNode.disk || (totalDiskGB * 1024);
-    localNode.cpu = localNode.cpu || (hostCpuCores * 100);
-    localNode.maxServers = localNode.maxServers || 100;
-    localNode.memoryOverallocate = localNode.memoryOverallocate ?? 0;
-    localNode.diskOverallocate = localNode.diskOverallocate ?? 0;
-    localNode.tags = localNode.tags || ['local', 'primary', 'bare-metal'];
-    localNode.createdAt = localNode.createdAt || new Date().toISOString();
-    localNode.uuid = localNode.uuid || 'local-node-00000000-0000-000000000000';
-    localNode.bindAddress = localNode.bindAddress || '0.0.0.0';
-    localNode.scheme = localNode.scheme || (localNode.sslEnabled ? 'https' : 'http');
-    localNode.sslEnabled = localNode.sslEnabled ?? false;
-    localNode.daemonPort = localNode.daemonPort || 3000;
-    localNode.sftpPort = localNode.sftpPort || 2022;
-    if (!localNode.fqdn) localNode.fqdn = hostName.includes('.') ? hostName : `${hostName}.local`;
-    if (detectedPublicIp && (!localNode.publicIpv4 || localNode.ip === '127.0.0.1')) {
-      localNode.publicIpv4 = detectedPublicIp;
-    }
-    localNode.totalRamMB = hostRamMB;
-    localNode.totalCpuCores = hostCpuCores;
-    localNode.totalDiskGB = totalDiskGB;
-    localNode.isLocalNode = true;
-    localNode.lastHeartbeatAt = new Date().toISOString();
-    if (!localNode.isMaintenanceMode && localNode.status === 'offline') {
-      localNode.status = 'online';
-    }
-
-    // Ensure allocations exist for local node
-    const localAllocs = db.allocations.filter(a => a.nodeId === localNode!.id);
-    if (localAllocs.length === 0) {
-      for (let p = 25565; p <= 25575; p++) {
-        db.allocations.push({
-          id: `alloc_local_${p}`,
-          nodeId: localNode.id,
-          ip: localNode.ip || primaryIp,
-          port: p,
-          isAssigned: false,
-          createdAt: new Date().toISOString()
-        });
-      }
-    }
-    saveDbSync();
+      ip: primaryIp,
+      fqdn: hostName.includes('.') ? hostName : `${hostName}.local`,
+      sftpPort: 2022,
+      lastHeartbeatAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    } as any;
+    db.nodes.push(localNode);
   }
+
+  // Update live hardware capacity & preserve user settings
+  localNode.id = 'local';
+  localNode.isLocal = true;
+  localNode.hostname = localNode.hostname || process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || 'localhost';
+  if (localNode.apiPort === 3000 || localNode.apiPort === 8080 || localNode.apiPort === 8787) {
+    localNode.apiPort = 9666;
+  }
+  localNode.apiPort = localNode.apiPort || 9666;
+  localNode.ssl = localNode.ssl ?? false;
+  localNode.behindProxy = localNode.behindProxy ?? false;
+  localNode.maintenanceMode = localNode.maintenanceMode ?? localNode.isMaintenanceMode ?? false;
+  localNode.memory = localNode.memory || hostRamMB;
+  localNode.disk = localNode.disk || (totalDiskGB * 1024);
+  localNode.cpu = localNode.cpu || (hostCpuCores * 100);
+  localNode.maxServers = localNode.maxServers || 100;
+  localNode.memoryOverallocate = localNode.memoryOverallocate ?? 0;
+  localNode.diskOverallocate = localNode.diskOverallocate ?? 0;
+  localNode.tags = localNode.tags || ['local', 'primary', 'bare-metal'];
+  localNode.createdAt = localNode.createdAt || new Date().toISOString();
+  localNode.uuid = localNode.uuid || 'local-node-00000000-0000-000000000000';
+  localNode.bindAddress = localNode.bindAddress || '0.0.0.0';
+  localNode.scheme = localNode.scheme || (localNode.sslEnabled ? 'https' : 'http');
+  localNode.sslEnabled = localNode.sslEnabled ?? false;
+  if (localNode.daemonPort === 3000 || localNode.daemonPort === 8080 || localNode.daemonPort === 8787) {
+    localNode.daemonPort = 9666;
+  }
+  localNode.daemonPort = localNode.daemonPort || 9666;
+  if (localNode.apiUrl?.includes(':3000') || localNode.apiUrl?.includes(':8080') || localNode.apiUrl?.includes(':8787')) {
+    localNode.apiUrl = `${localNode.ssl ? 'https' : 'http'}://${localNode.hostname || 'localhost'}:${localNode.apiPort}`;
+  }
+  localNode.sftpPort = localNode.sftpPort || 2022;
+  if (!localNode.fqdn) localNode.fqdn = hostName.includes('.') ? hostName : `${hostName}.local`;
+  if (detectedPublicIp && (!localNode.publicIpv4 || localNode.ip === '127.0.0.1')) {
+    localNode.publicIpv4 = detectedPublicIp;
+  }
+  localNode.totalRamMB = hostRamMB;
+  localNode.totalCpuCores = hostCpuCores;
+  localNode.totalDiskGB = totalDiskGB;
+  localNode.isLocalNode = true;
+  localNode.lastHeartbeatAt = new Date().toISOString();
+  if (!localNode.maintenanceMode && localNode.status !== 'maintenance') {
+    localNode.status = 'online';
+  }
+
+  // Ensure allocations exist for local node
+  const localAllocs = db.allocations.filter(a => a.nodeId === localNode!.id);
+  if (localAllocs.length === 0) {
+    for (let p = 25565; p <= 25575; p++) {
+      db.allocations.push({
+        id: `alloc_local_${p}`,
+        nodeId: localNode.id,
+        ip: localNode.ip || primaryIp,
+        port: p,
+        isAssigned: false,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+  saveDbSync();
 
   return localNode;
 }
@@ -231,10 +202,9 @@ export function startLocalNodeAgent(): void {
   localAgentInterval = setInterval(async () => {
     try {
       const db = await getDb();
-      const localNode = db.nodes.find(n => n.id === 'node_local' || n.isLocalNode);
+      const localNode = db.nodes.find(n => n.id === 'local' || n.id === 'node_local' || n.isLocal || n.isLocalNode);
 
       if (!localNode) {
-        await ensureLocalNode();
         return;
       }
 
