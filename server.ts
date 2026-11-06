@@ -249,14 +249,23 @@ async function startServer() {
   });
 
   app.use('/api/v1/auth', sensitiveAuthRateLimiter, authRoutes);
+  app.use('/api/auth', sensitiveAuthRateLimiter, authRoutes);
   app.use('/api/v1/account', authRoutes);
+  app.use('/api/account', authRoutes);
   app.use('/api/v1/public', publicRoutes);
+  app.use('/api/public', publicRoutes);
   app.use('/api/v1/plans', publicRoutes);
+  app.use('/api/plans', publicRoutes);
   app.use('/api/v1/servers', serverRoutes);
+  app.use('/api/servers', serverRoutes);
   app.use('/api/v1/deploy', deployRoutes);
+  app.use('/api/deploy', deployRoutes);
   app.use('/api/v1/billing', billingRoutes);
+  app.use('/api/billing', billingRoutes);
   app.use('/api/v1/support', supportRoutes);
+  app.use('/api/support', supportRoutes);
   app.use('/api/v1/admin', adminRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/v1/node', nodeApiRoutes);
   app.use('/api/nodes', nodeApiRoutes);
   app.use('/api/node', nodeApiRoutes);
@@ -265,6 +274,7 @@ async function startServer() {
   app.use('/api/v1/discord', discordRoutes);
   app.use('/api/v1/status', statusRoutes);
   app.use('/api/v1/monitoring', monitoringRoutes);
+  app.use('/api/monitoring', monitoringRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
   app.use('/api/v1/minecraft', minecraftRoutes);
   app.use('/api/v1/server-types', serverTypesRoutes);

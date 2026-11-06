@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Server as ServerIcon, Search, Play, Square, RotateCw, Trash2, 
-  CheckSquare, Square as SquareOutline, AlertTriangle, X, Loader2, CheckCircle2 
+  CheckSquare, Square as SquareOutline, AlertTriangle, X, Loader2, CheckCircle2,
+  Cpu, HardDrive, Activity, Zap, Layers, RefreshCw
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { fetchAuthoritativeMinecraftVersions, getCachedMinecraftVersions } from '../../lib/minecraftVersions';
@@ -12,6 +13,7 @@ export const AdminServers: React.FC = () => {
   const { toast } = useToast();
   const [servers, setServers] = useState<Server[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'stopped' | 'minecraft' | 'bot'>('all');
   const [loading, setLoading] = useState(true);
 
   // Multi-selection state
@@ -133,15 +135,40 @@ export const AdminServers: React.FC = () => {
     fetchAllServers();
   }, []);
 
+  // Platform Metrics
+  const metrics = useMemo(() => {
+    const total = servers.length;
+    const running = servers.filter(s => s.status === 'running').length;
+    const stopped = servers.filter(s => s.status !== 'running').length;
+    const totalRamMB = servers.reduce((acc, s) => acc + (s.limits?.ramMB || 0), 0);
+    const totalCores = servers.reduce((acc, s) => acc + (s.limits?.cpuCores || 0), 0);
+    return { total, running, stopped, totalRamMB, totalCores };
+  }, [servers]);
+
   // Filtered servers
   const filtered = useMemo(() => {
-    return servers.filter(s =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.primaryIp.toLowerCase().includes(search.toLowerCase()) ||
-      s.software.toLowerCase().includes(search.toLowerCase()) ||
-      s.id.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [servers, search]);
+    return servers.filter(s => {
+      const q = search.toLowerCase().trim();
+      const matchesSearch = !q || (
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.primaryIp || '').toLowerCase().includes(q) ||
+        (s.software || '').toLowerCase().includes(q) ||
+        (s.id || '').toLowerCase().includes(q)
+      );
+      if (!matchesSearch) return false;
+      if (statusFilter === 'running') return s.status === 'running';
+      if (statusFilter === 'stopped') return s.status !== 'running';
+      if (statusFilter === 'minecraft') {
+        const sw = (s.software || '').toLowerCase();
+        return (s.productId?.includes('minecraft') || s.serverTypeId?.includes('minecraft') || ['paper', 'purpur', 'spigot', 'vanilla', 'fabric', 'forge'].some(x => sw.includes(x)));
+      }
+      if (statusFilter === 'bot') {
+        const sw = (s.software || '').toLowerCase();
+        return (s.productId?.includes('bot') || s.serverTypeId?.includes('node') || s.serverTypeId?.includes('python') || s.serverTypeId?.includes('bun') || ['node', 'python', 'bun'].some(x => sw.includes(x)));
+      }
+      return true;
+    });
+  }, [servers, search, statusFilter]);
 
   // Selection handlers
   const isAllSelected = filtered.length > 0 && filtered.every(s => selectedIds.includes(s.id));
@@ -321,7 +348,7 @@ export const AdminServers: React.FC = () => {
   const selectedServersList = servers.filter(s => selectedIds.includes(s.id));
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-500/20 pb-5">
@@ -351,6 +378,122 @@ export const AdminServers: React.FC = () => {
             <span>Create Server</span>
           </button>
         </div>
+      </div>
+
+      {/* Analytics Overview Cards (Expansive Enterprise Width) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div className="p-4 rounded-2xl bg-[#14151b] border border-[#23252e] space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
+            <span>TOTAL CONTAINERS</span>
+            <ServerIcon className="h-4 w-4 text-[#f97316]" />
+          </div>
+          <div className="text-2xl font-bold text-white font-mono">{metrics.total}</div>
+          <div className="text-[11px] text-neutral-500">
+            Registered customer instances
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#14151b] border border-[#23252e] space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
+            <span>ACTIVE PROCESSES</span>
+            <Activity className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-bold text-emerald-400 font-mono">{metrics.running}</div>
+          <div className="text-[11px] text-neutral-500">Currently executing & healthy</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#14151b] border border-[#23252e] space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
+            <span>OFFLINE / STOPPED</span>
+            <Square className="h-4 w-4 text-neutral-400" />
+          </div>
+          <div className="text-2xl font-bold text-neutral-300 font-mono">{metrics.stopped}</div>
+          <div className="text-[11px] text-neutral-500">Idle / awaiting manual start</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#14151b] border border-[#23252e] space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
+            <span>ALLOCATED MEMORY</span>
+            <HardDrive className="h-4 w-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-bold text-amber-400 font-mono">
+            {metrics.totalRamMB >= 1024 ? `${(metrics.totalRamMB / 1024).toFixed(1)} GB` : `${metrics.totalRamMB} MB`}
+          </div>
+          <div className="text-[11px] text-neutral-500">Committed cluster RAM</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#14151b] border border-[#23252e] space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
+            <span>TOTAL VCPU CORES</span>
+            <Cpu className="h-4 w-4 text-purple-400" />
+          </div>
+          <div className="text-2xl font-bold text-purple-400 font-mono">{metrics.totalCores} vCPU</div>
+          <div className="text-[11px] text-neutral-500">Assigned hardware threads</div>
+        </div>
+      </div>
+
+      {/* Filter Tabs Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-[#14151b] border border-[#23252e]">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'all'
+                ? 'bg-[#f97316] text-white shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+            }`}
+          >
+            All Instances ({metrics.total})
+          </button>
+          <button
+            onClick={() => setStatusFilter('running')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'running'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+            }`}
+          >
+            Running ({metrics.running})
+          </button>
+          <button
+            onClick={() => setStatusFilter('stopped')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'stopped'
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+            }`}
+          >
+            Stopped ({metrics.stopped})
+          </button>
+          <button
+            onClick={() => setStatusFilter('minecraft')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'minecraft'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+            }`}
+          >
+            Minecraft Servers
+          </button>
+          <button
+            onClick={() => setStatusFilter('bot')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'bot'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+            }`}
+          >
+            Discord Bots & Apps
+          </button>
+        </div>
+
+        <button
+          onClick={fetchAllServers}
+          className="p-2 rounded-xl bg-[#0c0d12] border border-[#23252e] hover:bg-[#181920] text-neutral-300 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 text-xs"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#f97316]' : ''}`} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
       </div>
 
       {/* Bulk Action Toolbar */}

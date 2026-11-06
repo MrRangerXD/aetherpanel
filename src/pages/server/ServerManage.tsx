@@ -23,6 +23,7 @@ import { ServerFileManagerTab } from '../../components/server/ServerFileManagerT
 import { ServerSubusersTab } from '../../components/server/ServerSubusersTab';
 import { ServerSidebar } from '../../components/server/ServerSidebar';
 import { ServerHeader } from '../../components/server/ServerHeader';
+import { ServerStartupTab } from '../../components/server/ServerStartupTab';
 import { PluginManager } from '../../components/server/PluginManager';
 import { ModManager } from '../../components/server/ModManager';
 import { PlayerManager } from '../../components/server/PlayerManager';
@@ -1257,23 +1258,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const canKill = !server?.isSubuser || server?.permissions?.includes('server.kill') || hasPerm('power.kill');
 
   return (
-    <div className="flex-1 w-full h-full min-h-0 flex flex-col lg:flex-row overflow-hidden bg-[var(--color-bg)]">
-      <ServerSidebar
-        server={server}
-        activeTab={activeTab}
-        onTabSelect={handleTabSelect}
-        hasPerm={hasPerm}
-        canManageSubusers={canManageSubusers}
-        isMinecraft={isMinecraft}
-        isBot={isBot}
-        isPython={isPython}
-        databasesCount={databases.length}
-        schedulesCount={schedules.length}
-        backupsCount={backups.length}
-        onNavigate={onNavigate}
-      />
-
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-y-auto">
+    <div className="flex-1 w-full min-w-0 flex flex-col h-full overflow-y-auto bg-[#0c0d12]">
+      <div className="flex-1 min-w-0 flex flex-col h-full">
         <ServerHeader
           server={server}
           isMinecraft={isMinecraft}
@@ -1289,6 +1275,11 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           canKill={canKill}
           powerLoadingAction={powerLoadingAction}
           onPowerAction={handlePowerAction}
+          activeTab={activeTab}
+          onTabSelect={handleTabSelect}
+          databasesCount={databases.length}
+          schedulesCount={schedules.length}
+          backupsCount={backups.length}
         />
         {/* Mobile / Compact screens quick select dropdown */}
         <div className="w-full lg:hidden p-3 border-b border-[var(--color-line)] bg-[var(--color-surface-2)] shrink-0">
@@ -1326,6 +1317,16 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             server={server}
             onRefreshServer={fetchServerDetails}
             onPowerAction={handlePowerAction}
+          />
+        </TabTransition>
+      )}
+
+      {/* TAB: STARTUP & VARIABLES (Orihost-inspired) */}
+      {activeTab === 'startup' && (
+        <TabTransition>
+          <ServerStartupTab
+            server={server}
+            onRefreshServer={fetchServerDetails}
           />
         </TabTransition>
       )}

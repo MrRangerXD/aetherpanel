@@ -819,14 +819,18 @@ router.post('/servers/create', async (req: AuthenticatedRequest, res: Response) 
 
   db.servers.push(newServer);
 
-  import('../provider').then(p => {
-    p.initializeServerFiles(serverId, category, resolvedSoftware);
+  import('../provider').then(async (p) => {
+    p.initializeServerFiles(serverId, category, resolvedSoftware, resolvedVersion);
     if (category === 'minecraft') {
       p.appendConsoleLog(serverId, `[AetherPanel]: Admin provisioned Minecraft server (${resolvedSoftware} ${resolvedVersion}) with custom specs...`);
-      import('../minecraftService').then(mc => {
+      try {
+        const mc = await import('../minecraftService');
         mc.writeMinecraftEula(serverId, true);
-        mc.writeServerProperties(serverId, { serverPort: assignedPort });
-      }).catch(() => {});
+        mc.writeServerProperties(serverId, { serverPort: assignedPort, motd: `§bAetherPanel §7- ${newServer.name}` });
+        await mc.downloadMinecraftServerJar(serverId, resolvedSoftware, resolvedVersion);
+      } catch (e) {}
+    } else {
+      p.appendConsoleLog(serverId, `[AetherPanel]: Admin provisioned ${resolvedSoftware} server (${resolvedVersion}) on port ${assignedPort}...`);
     }
     p.startServer(serverId).catch(() => {});
   }).catch(() => {});

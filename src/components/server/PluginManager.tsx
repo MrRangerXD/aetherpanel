@@ -24,6 +24,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
 
   // Search State
   const [query, setQuery] = useState('');
+  const [source, setSource] = useState<'modrinth' | 'hangar' | 'curseforge'>('modrinth');
   const [searchResults, setSearchResults] = useState<ModrinthProject[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedProject, setSelectedProject] = useState<ModrinthProject | null>(null);
@@ -120,32 +121,42 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
     }
   };
 
-  // Search Modrinth
-  const handleSearch = async (e?: React.FormEvent) => {
+  // Auto-fetch popular plugins on search tab activation
+  useEffect(() => {
+    if (activeTab === 'search' && searchResults.length === 0 && !searching) {
+      handleSearch(undefined, source, '');
+    }
+  }, [activeTab]);
+
+  // Search Plugins across Modrinth, Hangar & CurseForge
+  const handleSearch = async (e?: React.FormEvent, overrideSource?: 'modrinth' | 'hangar' | 'curseforge', queryOverride?: string) => {
     if (e) e.preventDefault();
-    if (!query.trim()) return;
+    const activeSrc = overrideSource || source;
+    const queryStr = queryOverride !== undefined ? queryOverride : query;
     setSearching(true);
     try {
       const res = await apiRequest<ModrinthProject[]>(
-        `/servers/${server.id}/plugins/search?q=${encodeURIComponent(query.trim())}`
+        `/servers/${server.id}/plugins/search?source=${activeSrc}&q=${encodeURIComponent(queryStr.trim())}`
       );
       if (res.success) {
         setSearchResults(res.data || []);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Modrinth search failed');
+      toast.error(err.message || `${activeSrc} search failed`);
     } finally {
       setSearching(false);
     }
   };
 
-  // Open Version Picker for Modrinth Project
+  // Open Version Picker
   const handleOpenVersions = async (project: ModrinthProject) => {
     setSelectedProject(project);
     setLoadingVersions(true);
+    const pId = (project as any).project_id || project.id || (project as any).slug;
+    const pSrc = (project as any).source || source;
     try {
       const res = await apiRequest<ModrinthVersion[]>(
-        `/servers/${server.id}/plugins/versions/${project.id}`
+        `/servers/${server.id}/plugins/versions/${encodeURIComponent(pId)}?source=${pSrc}`
       );
       if (res.success) {
         setVersions(res.data || []);
@@ -159,13 +170,15 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
 
   // Install Specific Version
   const handleInstallVersion = async (projectId: string, versionId: string) => {
+    const pId = (selectedProject as any)?.project_id || selectedProject?.id || projectId;
+    const pSrc = (selectedProject as any)?.source || source;
     setActionLoading(versionId);
     try {
       const res = await apiRequest<{ success: boolean; message: string; restartRequired: boolean }>(
         `/servers/${server.id}/plugins/install`,
         {
           method: 'POST',
-          body: JSON.stringify({ projectId, versionId })
+          body: JSON.stringify({ projectId: pId, versionId, source: pSrc })
         }
       );
       if (res.success) {
@@ -228,7 +241,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
             Plugin Manager
           </h2>
           <p className="text-xs text-[var(--color-ink-dim)] mt-1">
-            Browse, install, and configure Spigot/Paper plugins powered by Modrinth API
+            Browse, install, and configure Spigot/Paper plugins powered by Hangar, Modrinth, and CurseForge
           </p>
         </div>
 
@@ -252,7 +265,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
                   : 'text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
               }`}
             >
-              Search Modrinth
+              Browse Plugins (Hangar / Modrinth / CurseForge)
             </button>
           </div>
 
@@ -410,24 +423,76 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
         </div>
       )}
 
-      {/* Search Modrinth Tab */}
+      {/* Search Plugins Tab */}
       {activeTab === 'search' && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Repository Source Selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#14151b] border border-[#23252e] rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('modrinth');
+                  if (query.trim()) handleSearch(undefined, 'modrinth');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'modrinth' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                Modrinth
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('hangar');
+                  if (query.trim()) handleSearch(undefined, 'hangar');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'hangar' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                Hangar (PaperMC)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('curseforge');
+                  if (query.trim()) handleSearch(undefined, 'curseforge');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'curseforge' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                CurseForge
+              </button>
+            </div>
+
+            <span className="text-[11px] text-neutral-400 font-mono">
+              Source: <span className="text-white font-semibold capitalize">{source} Repository</span>
+            </span>
+          </div>
+
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-dim)]" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
               <input
                 type="text"
-                placeholder="Search Spigot / Paper plugins (e.g. EssentialsX, LuckPerms, Vault)..."
+                placeholder={
+                  source === 'hangar'
+                    ? "Search PaperMC Hangar plugins (e.g. EssentialsX, Chunky, LuckPerms)..."
+                    : source === 'curseforge'
+                    ? "Search CurseForge plugins (e.g. WorldEdit, Vault, Geyser)..."
+                    : "Search Modrinth plugins (e.g. EssentialsX, LuckPerms, ViaVersion)..."
+                }
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="field w-full pl-9 pr-3 py-2 text-xs bg-[var(--color-surface)] border border-[var(--color-line)] rounded-lg text-[var(--color-ink)] placeholder-[var(--color-ink-mute)]"
+                className="field w-full pl-9 pr-3 py-2 text-xs bg-[#14151b] border border-[#23252e] rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:border-[#f97316]"
               />
             </div>
             <button
               type="submit"
               disabled={searching}
-              className="btn-primary px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+              className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-[#f97316]/20 transition-all cursor-pointer"
             >
               {searching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
               Search
@@ -492,15 +557,30 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-[var(--color-line)] flex items-center justify-between">
-                    <a
-                      href={`https://modrinth.com/plugin/${project.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] flex items-center gap-1"
-                    >
-                      View on Modrinth
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {(() => {
+                      const itemSource = (project as any).source || source;
+                      const externalUrl = itemSource === 'hangar'
+                        ? `https://hangar.papermc.io/${(project as any).author || 'papermc'}/${project.slug}`
+                        : itemSource === 'curseforge'
+                        ? `https://www.curseforge.com/minecraft/bukkit-plugins/${project.slug}`
+                        : `https://modrinth.com/plugin/${project.slug}`;
+                      const label = itemSource === 'hangar'
+                        ? 'View on Hangar'
+                        : itemSource === 'curseforge'
+                        ? 'View on CurseForge'
+                        : 'View on Modrinth';
+                      return (
+                        <a
+                          href={externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] flex items-center gap-1"
+                        >
+                          {label}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      );
+                    })()}
 
                     <button
                       onClick={() => handleOpenVersions(project)}
@@ -572,7 +652,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ server }) => {
                       </div>
 
                       <button
-                        onClick={() => handleInstallVersion(selectedProject.id, ver.id)}
+                        onClick={() => handleInstallVersion((selectedProject as any).project_id || selectedProject.id || (selectedProject as any).slug, ver.id)}
                         disabled={isInstalling}
                         className="btn-primary px-3 py-1.5 text-xs font-semibold shrink-0 flex items-center gap-1.5"
                       >

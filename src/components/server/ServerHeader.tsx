@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Wifi, Check, Copy, RotateCw, Play, Square, Skull,
-  Box, FileText, Terminal as TerminalIcon, ArrowLeft
+  Box, FileText, Terminal as TerminalIcon, ArrowLeft,
+  ChevronDown, ExternalLink, Zap, Info, Shield, Database,
+  Clock, Folder, Activity, Key, Sliders, Users, HardDrive,
+  Package, Boxes, Globe, Crown
 } from 'lucide-react';
 import { Server } from '../../types';
 import { formatMemory } from '../../lib/serverNormalize';
@@ -21,6 +24,11 @@ interface ServerHeaderProps {
   canKill: boolean;
   powerLoadingAction: 'start' | 'stop' | 'restart' | 'kill' | null;
   onPowerAction: (action: 'start' | 'stop' | 'restart' | 'kill') => void;
+  activeTab?: string;
+  onTabSelect?: (tab: string) => void;
+  databasesCount?: number;
+  schedulesCount?: number;
+  backupsCount?: number;
 }
 
 export const ServerHeader: React.FC<ServerHeaderProps> = ({
@@ -37,183 +45,288 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
   canStop,
   canKill,
   powerLoadingAction,
-  onPowerAction
+  onPowerAction,
+  activeTab = 'console',
+  onTabSelect,
+  databasesCount = 0,
+  schedulesCount = 0,
+  backupsCount = 0
 }) => {
+  const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
+
+  // Minecraft servers get Plugins, Mods, Players, Worlds, Properties outside in main tabs row!
+  const mainTabs = isMinecraft
+    ? [
+        { id: 'console', label: 'Console', icon: TerminalIcon },
+        { id: 'files', label: 'Files', icon: Folder },
+        { id: 'plugins', label: 'Plugins', icon: Package },
+        { id: 'mods', label: 'Mods', icon: Boxes },
+        { id: 'players', label: 'Players', icon: Crown },
+        { id: 'worlds', label: 'Worlds', icon: Globe },
+        { id: 'properties', label: 'Properties', icon: FileText },
+        { id: 'backups', label: 'Backups', icon: HardDrive, count: backupsCount },
+        { id: 'startup', label: 'Startup', icon: Sliders },
+        { id: 'databases', label: 'Databases', icon: Database, count: databasesCount },
+        { id: 'schedules', label: 'Schedules', icon: Clock, count: schedulesCount },
+        { id: 'subusers', label: 'Users', icon: Users },
+        { id: 'activity', label: 'Activity', icon: Activity }
+      ]
+    : [
+        { id: 'console', label: 'Console', icon: TerminalIcon },
+        { id: 'files', label: 'Files', icon: Folder },
+        { id: 'startup', label: 'Startup', icon: Sliders },
+        { id: 'env', label: 'Environment', icon: Key },
+        { id: 'backups', label: 'Backups', icon: HardDrive, count: backupsCount },
+        { id: 'databases', label: 'Databases', icon: Database, count: databasesCount },
+        { id: 'schedules', label: 'Schedules', icon: Clock, count: schedulesCount },
+        { id: 'subusers', label: 'Users', icon: Users },
+        { id: 'activity', label: 'Activity', icon: Activity },
+        { id: 'settings', label: 'Settings', icon: Sliders }
+      ];
+
+  const moreTabs = [
+    { id: 'network', label: 'Network & SFTP' },
+    { id: 'monitoring', label: 'Monitoring & Metrics' },
+    ...(isMinecraft
+      ? [
+          { id: 'settings', label: 'Settings' },
+          { id: 'env', label: 'Raw .env Editor' }
+        ]
+      : []),
+    { id: 'importer', label: 'Server Importer' },
+    { id: 'discord', label: 'Discord Bot' }
+  ];
+
+  const isMoreTabActive = moreTabs.some((t) => t.id === activeTab);
+
   return (
-    <div className="p-4 sm:p-5 border-b border-[var(--color-line)] bg-[var(--color-surface)] space-y-3 shrink-0">
-      {/* Top Breadcrumb row */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--color-ink-mute)]">
-        <div className="flex items-center gap-2">
+    <div className="border-b border-[#23252e] bg-[#0c0d12] space-y-4 shrink-0 px-4 sm:px-6 pt-4 pb-2">
+      {/* 1. Breadcrumb row (Orihost image_00688f85.png) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
+        <div className="flex items-center gap-2 font-mono">
           <button
             type="button"
-            onClick={() => onNavigate('dashboard')}
-            className="lg:hidden inline-flex items-center gap-1.5 text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer font-medium"
+            onClick={() => onNavigate('servers')}
+            className="inline-flex items-center gap-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
           >
-            <ArrowLeft className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+            <ArrowLeft className="h-3.5 w-3.5 text-[#f97316]" />
             <span>Servers</span>
-            <span>/</span>
           </button>
-          <span className="hidden lg:inline text-[var(--color-ink-dim)]">Server Control</span>
-          <span className="hidden lg:inline">/</span>
-          <span className="text-[var(--color-ink)] font-semibold truncate max-w-xs">{server.name}</span>
+          <span>/</span>
+          <span className="text-white font-semibold truncate max-w-[200px] sm:max-w-xs">{server.name}</span>
+          <span>/</span>
+          <span className="text-[#f97316] font-semibold capitalize">{activeTab}</span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] text-[var(--color-ink-mute)] bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-line)]">
-            Node: {server.location || 'Local Node'}
+          <span className="font-mono text-[10px] text-neutral-400 bg-[#14151b] px-2.5 py-0.5 rounded border border-[#23252e]">
+            Node: {server.location || 'DE-04'}
           </span>
           {server.isSubuser && (
-            <span className="font-mono text-[10px] text-[var(--color-accent)] bg-[var(--color-accent)]/10 px-2 py-0.5 rounded border border-[var(--color-accent)]/30">
+            <span className="font-mono text-[10px] text-[#f97316] bg-[#f97316]/10 px-2.5 py-0.5 rounded border border-[#f97316]/30">
               Shared Access
             </span>
           )}
         </div>
       </div>
 
-      {/* Server Title, Status, Real Specs, and Pterodactyl Power Buttons */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+      {/* 2. Server Title, Specs & Power Buttons (Orihost image_00688f85.png) */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         {/* Left: Icon, Server Name & Real Specs */}
         <div className="flex items-start sm:items-center gap-3">
-          <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border border-[var(--color-line)] bg-[var(--color-surface-2)] text-[var(--color-accent)]">
+          <div className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 border border-[#23252e] bg-[#14151b] text-[#f97316] shadow-sm">
             {isMinecraft ? <Box className="h-5 w-5" /> : isPython ? <FileText className="h-5 w-5" /> : <TerminalIcon className="h-5 w-5" />}
           </div>
 
           <div className="space-y-0.5 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold text-[var(--color-ink)] tracking-tight break-words">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight break-words">
                 {server.name}
               </h1>
 
-              {/* Real-time Status Badge */}
+              {/* Status Badge */}
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold border ${
                   server.status === 'running'
-                    ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/40'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                     : server.status === 'starting' || server.status === 'stopping'
-                    ? 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/40'
-                    : 'bg-[var(--color-surface-2)] text-[var(--color-ink-mute)] border-[var(--color-line)]'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                 }`}
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
                     server.status === 'running'
-                      ? 'bg-[var(--color-ok)] animate-pulse'
+                      ? 'bg-emerald-400 animate-pulse'
                       : server.status === 'starting' || server.status === 'stopping'
-                      ? 'bg-[var(--color-warn)] animate-spin'
-                      : 'bg-[var(--color-ink-mute)]'
+                      ? 'bg-amber-400 animate-spin'
+                      : 'bg-neutral-500'
                   }`}
                 />
                 <span className="uppercase tracking-wider font-mono">{server.status}</span>
               </span>
+
+              {/* Address with 1-click Copy */}
+              <div
+                onClick={() => onCopy(fullIp)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#14151b] border border-[#23252e] text-xs font-mono text-neutral-300 hover:text-white hover:border-[#f97316] transition-colors cursor-pointer group"
+                title="Click to copy address"
+              >
+                <span>{fullIp}</span>
+                {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3 text-neutral-400 group-hover:text-white" />}
+              </div>
+
+              {/* Location Tag */}
+              <span className="text-[10px] font-mono text-neutral-400 flex items-center gap-1">
+                <span>/</span>
+                <span>{server.location || 'DE-04'}</span>
+              </span>
             </div>
 
-            {/* Real Server Specs & Node Info */}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-mute)]">
-              <span className="text-[var(--color-ink-dim)] font-medium">
+            {/* Subtitle Specs */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400 font-mono">
+              <span className="text-neutral-300 font-medium">
                 {server.software} ({server.version || 'Latest'})
               </span>
               <span>·</span>
-              <span className="font-mono">
-                {formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)} RAM
-              </span>
+              <span>{formatMemory(server.resources?.memoryMb || server.limits?.ramMB || 512)} RAM</span>
               <span>·</span>
-              <span className="font-mono">
-                {server.limits?.cpuCores || 1} CPU Core
-                {server.limits?.cpuCores && server.limits.cpuCores > 1 ? 's' : ''}
-              </span>
+              <span>{server.limits?.cpuCores || 1} CPU</span>
               <span>·</span>
-              <span className="font-mono">{server.limits?.diskGB || 10} GB NVMe</span>
+              <span>{server.limits?.diskGB || 10} GB Disk</span>
             </div>
           </div>
         </div>
 
-        {/* Right: Address Quick Copy & Pterodactyl Power Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 1-click Address Pill */}
-          <div
-            onClick={() => onCopy(fullIp)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono text-[var(--color-ink-dim)] hover:border-[var(--color-accent)] transition-colors cursor-pointer group"
-            title="Click to copy server address"
-          >
-            <Wifi className="h-3.5 w-3.5 text-[var(--color-ink-mute)] group-hover:text-[var(--color-accent)] transition-colors" />
-            <span className="truncate max-w-[180px] sm:max-w-[220px]">
-              <strong className="text-[var(--color-ink)] font-mono">{fullIp}</strong>
-            </span>
+        {/* Right: Power Controls */}
+        <div className="flex items-center gap-2">
+          {!isRunning && server.status !== 'starting' ? (
             <button
               type="button"
-              className="p-0.5 hover:text-[var(--color-ink)] text-[var(--color-ink-mute)] transition-colors shrink-0"
+              disabled={powerLoadingAction !== null || !canStart}
+              onClick={() => onPowerAction('start')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" /> : <Copy className="h-3.5 w-3.5" />}
+              {powerLoadingAction === 'start' ? (
+                <RotateCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5 fill-current" />
+              )}
+              <span>Start</span>
             </button>
-          </div>
-
-          {/* Pterodactyl Power Buttons Group */}
-          <div className="flex items-center gap-1 p-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)]">
-            {!isRunning && server.status !== 'starting' ? (
+          ) : (
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                disabled={powerLoadingAction !== null || !canStart}
-                onClick={() => onPowerAction('start')}
-                className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
-                title="Start Server"
+                disabled={powerLoadingAction !== null || !canRestart}
+                onClick={() => onPowerAction('restart')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#14151b] border border-[#23252e] hover:border-amber-500/50 text-amber-400 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
               >
-                {powerLoadingAction === 'start' ? (
+                {powerLoadingAction === 'restart' ? (
                   <RotateCw className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <RotateCw className="h-3.5 w-3.5" />
                 )}
-                <span>Start</span>
+                <span>Restart</span>
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled={powerLoadingAction !== null || !canRestart}
-                  onClick={() => onPowerAction('restart')}
-                  className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-warn)] hover:text-[var(--color-warn)] hover:bg-[var(--color-warn)]/10"
-                  title="Restart Server"
-                >
-                  {powerLoadingAction === 'restart' ? (
-                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCw className="h-3.5 w-3.5" />
-                  )}
-                  <span>Restart</span>
-                </button>
 
-                <button
-                  type="button"
-                  disabled={powerLoadingAction !== null || !canStop}
-                  onClick={() => onPowerAction('stop')}
-                  className="btn btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-[var(--color-err)] hover:text-[var(--color-err)] hover:bg-[var(--color-err)]/10"
-                  title="Gracefully Stop Server"
-                >
-                  {powerLoadingAction === 'stop' ? (
-                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                  )}
-                  <span>Stop</span>
-                </button>
+              <button
+                type="button"
+                disabled={powerLoadingAction !== null || !canStop}
+                onClick={() => onPowerAction('stop')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#14151b] border border-[#23252e] hover:border-red-500/50 text-red-400 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                {powerLoadingAction === 'stop' ? (
+                  <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                )}
+                <span>Stop</span>
+              </button>
 
+              {canKill && (
                 <button
                   type="button"
-                  disabled={powerLoadingAction !== null || !canKill}
+                  disabled={powerLoadingAction !== null}
                   onClick={() => onPowerAction('kill')}
-                  className="btn btn-danger text-xs py-1.5 px-2.5 flex items-center gap-1.5"
-                  title="Force Kill Process (Immediate SIGKILL)"
+                  className="p-2 rounded-lg bg-[#14151b] border border-[#23252e] hover:bg-red-950/40 text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+                  title="Force Kill (SIGKILL)"
                 >
-                  {powerLoadingAction === 'kill' ? (
-                    <RotateCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Skull className="h-3.5 w-3.5" />
-                  )}
-                  <span>Kill</span>
+                  <Skull className="h-3.5 w-3.5" />
                 </button>
-              </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Orihost Horizontal Sub-Navigation Tabs Row (image_00688f85.png) */}
+      <div className="flex items-center justify-between border-t border-[#23252e]/80 pt-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 sm:gap-2">
+          {mainTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onTabSelect && onTabSelect(tab.id)}
+                className={`relative flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
+                    : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+                }`}
+              >
+                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+                <span>{tab.label}</span>
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#23252e] text-neutral-300">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* More Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setMoreDropdownOpen((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                isMoreTabActive
+                  ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
+                  : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+              }`}
+            >
+              <span>More</span>
+              <ChevronDown className="h-3 w-3" />
+            </button>
+
+            {moreDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1 w-48 rounded-xl bg-[#14151b] border border-[#23252e] shadow-2xl p-1 z-50 animate-in fade-in slide-in-from-top-2">
+                {moreTabs.map((mt) => (
+                  <button
+                    key={mt.id}
+                    onClick={() => {
+                      if (onTabSelect) onTabSelect(mt.id);
+                      setMoreDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      activeTab === mt.id
+                        ? 'bg-[#181922] text-[#f97316] font-bold'
+                        : 'text-neutral-300 hover:text-white hover:bg-[#1c1e28]'
+                    }`}
+                  >
+                    {mt.label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* 4. Top 2 Promo Banners on Every Server Tab (Orihost image_00688f85.png) */}
+      <div className="space-y-2 pt-1">
       </div>
     </div>
   );

@@ -1,39 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { LifeBuoy, PlusCircle, Send, ShieldAlert, X } from 'lucide-react';
+import {
+  Server, CreditCard, User, Flag, HelpCircle, Plus, Send,
+  MessageSquare, Info, Shield, CheckCircle2, ChevronRight, X, Clock
+} from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { SupportTicket } from '../../types';
-import { PanelScrollReveal } from '../../components/PanelScrollReveal';
 
 interface SupportTicketsProps {
-  onNavigate: (page: string, params?: any) => void;
+  onNavigate?: (page: string, params?: any) => void;
 }
 
 export const SupportTickets: React.FC<SupportTicketsProps> = () => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [, setLoading] = useState(true);
 
-  // New ticket modal state
-  const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  // New ticket modal
+  const [showModal, setShowModal] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState<string>('Server issue');
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState('Technical Support');
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [initialMessage, setInitialMessage] = useState('');
+  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reply message
   const [replyMessage, setReplyMessage] = useState('');
 
+  const topics = [
+    { id: 'Server issue', label: 'Server issue', icon: Server },
+    { id: 'Premium & payment', label: 'Premium & payment', icon: CreditCard },
+    { id: 'Account & suspension', label: 'Account & suspension', icon: User },
+    { id: 'Report abuse', label: 'Report abuse', icon: Flag },
+    { id: 'Other', label: 'Other', icon: HelpCircle }
+  ];
+
   const fetchTickets = async () => {
-    const res = await apiRequest('/support/tickets');
-    if (res.success && res.data) {
-      setTickets(res.data);
-      if (selectedTicket) {
-        const updated = res.data.find((t: SupportTicket) => t.id === selectedTicket.id);
-        if (updated) setSelectedTicket(updated);
+    try {
+      const res = await apiRequest('/support/tickets');
+      if (res.success && res.data) {
+        setTickets(res.data);
+        if (selectedTicket) {
+          const updated = res.data.find((t: SupportTicket) => t.id === selectedTicket.id);
+          if (updated) setSelectedTicket(updated);
+        }
       }
+    } catch (e) {
+      console.error('Failed to fetch tickets:', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -42,266 +56,283 @@ export const SupportTickets: React.FC<SupportTicketsProps> = () => {
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !initialMessage.trim()) return;
-
+    if (!subject.trim() || !message.trim()) return;
     setIsSubmitting(true);
-    const res = await apiRequest('/support/tickets/create', {
-      method: 'POST',
-      body: JSON.stringify({
-        subject,
-        category,
-        priority,
-        message: initialMessage
-      })
-    });
-
-    if (res.success) {
-      setSubject('');
-      setInitialMessage('');
-      setShowNewTicketModal(false);
-      fetchTickets();
+    try {
+      const res = await apiRequest('/support/tickets/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          category: selectedTopic,
+          subject: subject.trim(),
+          message: message.trim(),
+          priority: 'medium'
+        })
+      });
+      if (res.success) {
+        setSubject('');
+        setMessage('');
+        setShowModal(false);
+        fetchTickets();
+      }
+    } catch (e) {
+      console.error('Failed to create ticket:', e);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket || !replyMessage.trim()) return;
-
-    const res = await apiRequest(`/support/tickets/${selectedTicket.id}/reply`, {
-      method: 'POST',
-      body: JSON.stringify({ message: replyMessage.trim() })
-    });
-
-    if (res.success) {
-      setReplyMessage('');
-      fetchTickets();
+    try {
+      const res = await apiRequest(`/support/tickets/${selectedTicket.id}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({ message: replyMessage.trim() })
+      });
+      if (res.success) {
+        setReplyMessage('');
+        fetchTickets();
+      }
+    } catch (e) {
+      console.error('Failed to reply:', e);
     }
   };
 
+  const openTicketsCount = tickets.filter((t) => t.status === 'open' || t.status === 'pending').length;
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      
-      {/* Header */}
-      <PanelScrollReveal delayMs={0}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-line)] pb-5">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-ink)] tracking-tight">Technical Support</h1>
-            <p className="text-xs text-[var(--color-ink-mute)] mt-1">Get priority assistance from our DevOps engineers and system administrators.</p>
-          </div>
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
 
-          <button
-            onClick={() => setShowNewTicketModal(true)}
-            className="btn btn-primary"
-          >
-            <PlusCircle className="h-4 w-4" />
-            <span>Create Support Ticket</span>
-          </button>
-        </div>
-      </PanelScrollReveal>
+      {/* 2. Header (Orihost image_555e7f05.png) */}
+      <div>
+        <h1 className="text-2xl font-bold text-white tracking-tight">How can we help?</h1>
+        <p className="text-xs text-neutral-400 mt-1">
+          Pick a topic to open a ticket. We reply here and by email.
+        </p>
+      </div>
 
-      {/* Main Grid: Ticket List + Message Thread */}
-      <PanelScrollReveal delayMs={40}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          
-          {/* Ticket List (Left Column) */}
-          <div className="space-y-2.5">
-            <h3 className="label">Your Ticket Queue</h3>
-
-            {tickets.length === 0 ? (
-              <div className="surface p-8 text-center rounded-lg text-xs text-[var(--color-ink-mute)]">
-                No support tickets found.
+      {/* 3. 5 Topic Selector Cards in a Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {topics.map((topic) => {
+          const Icon = topic.icon;
+          const isSelected = selectedTopic === topic.id;
+          return (
+            <button
+              key={topic.id}
+              onClick={() => {
+                setSelectedTopic(topic.id);
+                setShowModal(true);
+              }}
+              className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-24 ${
+                isSelected
+                  ? 'bg-[#181922] border-[#f97316] text-white shadow-sm'
+                  : 'bg-[#14151b] border-[#23252e] text-neutral-300 hover:text-white hover:border-[#383a48]'
+              }`}
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#0c0d12] border border-[#23252e] flex items-center justify-center text-[#f97316]">
+                <Icon className="h-4 w-4" />
               </div>
-            ) : (
-              tickets.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => setSelectedTicket(t)}
-                  className={`p-3.5 rounded-lg border transition-colors cursor-pointer space-y-1.5 ${
-                    selectedTicket?.id === t.id
-                      ? 'bg-[var(--color-surface-3)] border-[var(--color-accent)]'
-                      : 'surface border-[var(--color-line)] hover:border-[var(--color-line-soft)]'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono capitalize border ${
-                      t.status === 'open' ? 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/30' :
-                      t.status === 'answered' ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/30' :
-                      'surface-2 text-[var(--color-ink-mute)] border-[var(--color-line)]'
-                    }`}>
+              <div className="text-xs font-semibold truncate mt-2">{topic.label}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Subtle Note */}
+      <div className="text-xs text-neutral-400">
+        <strong className="text-white font-medium">Premium</strong> tickets are answered first.
+      </div>
+
+      {/* 4. Your Tickets Section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">Your tickets</h3>
+          <span className="text-xs text-neutral-500 font-mono">
+            {openTicketsCount} of 3 open
+          </span>
+        </div>
+
+        {tickets.length === 0 ? (
+          <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-12 text-center space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-[#0c0d12] border border-[#23252e] flex items-center justify-center text-neutral-500 mx-auto">
+              <MessageSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">No tickets yet</div>
+              <div className="text-xs text-neutral-400 mt-1">
+                Tickets you open will show up here with where they stand.
+              </div>
+            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>+ New ticket</span>
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-[#14151b] border border-[#23252e] divide-y divide-[#23252e]/60 overflow-hidden">
+            {tickets.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => setSelectedTicket(t)}
+                className="p-4 flex items-center justify-between hover:bg-[#181922] transition-colors cursor-pointer"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold ${
+                        t.status === 'open'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                          : t.status === 'answered'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-neutral-800 text-neutral-400'
+                      }`}
+                    >
                       {t.status}
                     </span>
-
-                    <span className="text-[10px] text-[var(--color-ink-mute)] font-mono">#{t.id.slice(0, 6)}</span>
+                    <span className="text-xs font-bold text-white">{t.subject}</span>
                   </div>
-
-                  <h4 className="text-xs font-semibold text-[var(--color-ink)] leading-tight">{t.subject}</h4>
-                  
-                  <div className="flex justify-between text-[11px] text-[var(--color-ink-dim)] pt-0.5">
-                    <span>{t.category}</span>
-                    <span className="font-mono text-[10px]">{t.createdAt}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Selected Ticket Thread (Right Column) */}
-          <div className="lg:col-span-2 space-y-4">
-            {selectedTicket ? (
-              <div className="surface p-5 sm:p-6 rounded-lg space-y-5">
-                <div className="border-b border-[var(--color-line)] pb-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-[var(--color-accent)] font-semibold">Ticket #{selectedTicket.id}</span>
-                    <span className="text-xs text-[var(--color-ink-mute)] font-mono">{selectedTicket.createdAt}</span>
-                  </div>
-                  <h2 className="text-lg font-bold text-[var(--color-ink)] tracking-tight">{selectedTicket.subject}</h2>
-                  <div className="flex items-center gap-3 text-xs text-[var(--color-ink-dim)]">
-                    <span>Category: <strong className="text-[var(--color-ink)]">{selectedTicket.category}</strong></span>
-                    <span>Priority: <strong className="text-[var(--color-accent)] uppercase">{selectedTicket.priority}</strong></span>
+                  <div className="text-[11px] text-neutral-500 font-mono">
+                    Topic: {t.category || 'General'} · #{t.id.slice(0, 8)}
                   </div>
                 </div>
 
-                {/* Message Feed */}
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                  {selectedTicket.messages.map((m) => {
-                    const isStaff = ['admin', 'super_admin', 'support'].includes(m.senderRole);
-
-                    return (
-                      <div
-                        key={m.id}
-                        className={`p-3.5 rounded-lg border space-y-1.5 ${
-                          isStaff
-                            ? 'surface-2 border-[var(--color-accent)]/40 ml-4'
-                            : 'surface border-[var(--color-line)] mr-4'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center text-xs">
-                          <span className={`font-semibold flex items-center gap-1.5 ${isStaff ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink)]'}`}>
-                            {isStaff && <ShieldAlert className="h-3.5 w-3.5" />}
-                            {m.senderName} {isStaff && '(Staff Support)'}
-                          </span>
-                          <span className="text-[10px] text-[var(--color-ink-mute)] font-mono">{m.createdAt}</span>
-                        </div>
-                        <p className="text-xs text-[var(--color-ink-dim)] leading-relaxed whitespace-pre-wrap">{m.message}</p>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono">
+                  <span>{new Date(t.createdAt).toLocaleDateString()}</span>
+                  <ChevronRight className="h-4 w-4" />
                 </div>
-
-                {/* Reply Box */}
-                <form onSubmit={handleSendReply} className="space-y-2.5 border-t border-[var(--color-line)] pt-4">
-                  <textarea
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    placeholder="Type your response to support staff..."
-                    rows={3}
-                    className="field w-full p-3 text-xs rounded-md leading-relaxed resize-none"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      className="btn btn-primary text-xs"
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      <span>Submit Reply</span>
-                    </button>
-                  </div>
-                </form>
               </div>
-            ) : (
-              <div className="surface p-12 text-center rounded-lg text-[var(--color-ink-mute)] text-xs space-y-2">
-                <LifeBuoy className="h-8 w-8 text-[var(--color-ink-mute)] mx-auto" />
-                <p>Select a support ticket from the list to view its conversation thread.</p>
-              </div>
-            )}
+            ))}
           </div>
+        )}
+      </div>
 
-        </div>
-      </PanelScrollReveal>
-
-      {/* New Ticket Modal */}
-      {showNewTicketModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 anim-fade-in">
-          <form onSubmit={handleCreateTicket} className="w-full max-w-lg surface p-5 sm:p-6 rounded-lg space-y-4 anim-scale-in">
-            <div className="flex justify-between items-center border-b border-[var(--color-line)] pb-3">
-              <h3 className="text-sm font-semibold text-[var(--color-ink)]">Create Support Ticket</h3>
-              <button type="button" onClick={() => setShowNewTicketModal(false)} className="btn-icon">
-                <X className="w-4 h-4" />
+      {/* Ticket Conversation Modal */}
+      {selectedTicket && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-[#14151b] border border-[#23252e] rounded-2xl p-6 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#23252e]">
+              <div>
+                <h3 className="text-sm font-bold text-white">{selectedTicket.subject}</h3>
+                <div className="text-[11px] text-neutral-400 font-mono mt-0.5">
+                  Category: {selectedTicket.category} · Status: {selectedTicket.status}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTicket(null)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div>
-              <label className="label block mb-1">Subject</label>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+              {Array.isArray(selectedTicket.messages) && selectedTicket.messages.map((m, i) => {
+                const isStaff = m.senderRole === 'admin' || m.senderRole === 'super_admin' || m.senderRole === 'support';
+                return (
+                  <div
+                    key={m.id || i}
+                    className={`p-3.5 rounded-xl border space-y-1 ${
+                      isStaff
+                        ? 'bg-amber-950/20 border-amber-500/30 ml-4'
+                        : 'bg-[#0c0d12] border-[#23252e] mr-4'
+                    }`}
+                  >
+                    <div className="text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+                      <span className={isStaff ? 'text-amber-400 font-bold' : 'text-neutral-300'}>
+                        {m.senderName} {isStaff && '★ Staff Support'}
+                      </span>
+                      <span>{new Date(m.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="text-xs text-white leading-relaxed">{m.message}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <form onSubmit={handleSendReply} className="flex gap-2 pt-2 border-t border-[#23252e]">
               <input
                 type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="e.g. Assistance setting up GeyserMC plugin"
-                className="field w-full px-3 py-1.5 text-xs rounded-md"
-                required
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+                placeholder="Type your reply..."
+                className="flex-1 bg-[#0c0d12] border border-[#23252e] text-white text-xs rounded-lg px-3.5 py-2.5 focus:outline-none focus:border-[#f97316]"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label block mb-1">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="field w-full px-2.5 py-1.5 text-xs rounded-md"
-                >
-                  <option value="Technical Support">Technical Support</option>
-                  <option value="Billing & Orders">Billing & Orders</option>
-                  <option value="Node / Hardware Migration">Node Migration</option>
-                  <option value="Other Enquiries">Other Enquiries</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label block mb-1">Priority Level</label>
-                <select
-                  value={priority}
-                  onChange={(e: any) => setPriority(e.target.value)}
-                  className="field w-full px-2.5 py-1.5 text-xs rounded-md capitalize"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="label block mb-1">Problem Description</label>
-              <textarea
-                value={initialMessage}
-                onChange={(e) => setInitialMessage(e.target.value)}
-                placeholder="Describe what issue or error you are experiencing in detail..."
-                rows={4}
-                className="field w-full p-3 text-xs rounded-md resize-none"
-                required
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-line)]">
-              <button
-                type="button"
-                onClick={() => setShowNewTicketModal(false)}
-                className="btn btn-ghost text-xs py-1.5"
-              >
-                Cancel
-              </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="btn btn-primary text-xs py-1.5"
+                className="px-4 py-2.5 rounded-lg bg-[#f97316] text-white text-xs font-bold hover:bg-[#ea580c] transition-colors"
               >
-                {isSubmitting ? 'Submitting...' : 'Open Ticket'}
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Ticket Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-[#14151b] border border-[#23252e] rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#23252e]">
+              <div>
+                <h3 className="text-sm font-bold text-white">Open a support ticket</h3>
+                <div className="text-[11px] text-neutral-400 font-mono mt-0.5">
+                  Topic: {selectedTopic}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
-          </form>
+
+            <form onSubmit={handleCreateTicket} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Brief summary of your inquiry..."
+                  className="w-full bg-[#0c0d12] border border-[#23252e] text-white text-xs rounded-lg px-3.5 py-2.5 focus:outline-none focus:border-[#f97316]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-400 mb-1">Message</label>
+                <textarea
+                  rows={4}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Describe the issue in detail, include server ID or logs if applicable..."
+                  className="w-full bg-[#0c0d12] border border-[#23252e] text-white text-xs rounded-lg px-3.5 py-2.5 focus:outline-none focus:border-[#f97316]"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#23252e]">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 rounded-lg bg-[#0c0d12] border border-[#23252e] text-neutral-300 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-lg bg-[#f97316] text-white text-xs font-bold hover:bg-[#ea580c] transition-colors"
+                >
+                  {isSubmitting ? 'Opening...' : 'Open ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

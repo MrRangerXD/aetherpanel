@@ -1,8 +1,10 @@
+import React from 'react';
 import {
-  LayoutDashboard, Server, PlusCircle, CreditCard, LifeBuoy,
-  Activity, Settings, LogOut, ShieldCheck, ChevronDown, Cpu, Coins, Key
+  LayoutDashboard, Server, PlusCircle, CreditCard, LifeBuoy, Settings, LogOut,
+  ShieldCheck, Coins, Key, Activity, Zap, ExternalLink, User, Star
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { useBranding } from '../lib/BrandingContext';
 
 interface SidebarProps {
   currentPage: string;
@@ -20,203 +22,168 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectServer
 }) => {
   const { user, logout } = useAuth();
+  const { brandName } = useBranding();
+
+  const isDashboardActive = currentPage === 'dashboard';
+  const isServerActive = currentPage === 'servers' || currentPage === 'server-manage';
+  const isAccountActive = currentPage === 'settings' || currentPage === 'api-keys';
 
   return (
     <aside
       id="aether-sidebar"
-      className="hidden lg:flex w-60 flex-none border-r border-[var(--color-line)] bg-[var(--color-surface)] flex-col h-full select-none z-20"
+      className="hidden lg:flex w-64 flex-none border-r border-[#181922] bg-[#09090b] flex-col h-full select-none z-20"
     >
-      {/* Active Workspace / Server Switcher */}
-      <div className="p-3 border-b border-[var(--color-line)] shrink-0">
-        <div className="label mb-2">
-          Workspace
+      {/* Main Navigation Sections */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+        {/* SECTION: SERVERS */}
+        <div className="space-y-1">
+          <div className="px-3 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold mb-1">
+            Servers
+          </div>
+
+          <button
+            onClick={() => onNavigate('dashboard')}
+            className={`w-full flex items-center justify-between px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              isDashboardActive
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <LayoutDashboard className={`h-4 w-4 ${isDashboardActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+              <span>Dashboard</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('servers')}
+            className={`w-full flex items-center justify-between px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              isServerActive
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Server className={`h-4 w-4 ${isServerActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+              <span>My servers</span>
+            </div>
+            {userServers.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#23252e] text-neutral-300 font-mono">
+                {userServers.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => onNavigate('deploy')}
+            className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              currentPage === 'deploy'
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <PlusCircle className="h-4 w-4 text-[#f97316]" />
+            <span className="text-[#f97316] font-medium">Create server</span>
+          </button>
         </div>
 
-        {userServers.length > 0 ? (
-          <div className="relative">
-            <select
-              value={currentServerId || 'overview'}
-              onChange={(e) => {
-                if (e.target.value === 'overview') {
-                  onNavigate('dashboard');
-                } else if (onSelectServer) {
-                  onSelectServer(e.target.value);
-                }
-              }}
-              className="w-full appearance-none rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] px-2.5 py-1.5 text-xs text-[var(--color-ink)] font-medium focus:outline-none focus:border-[var(--color-accent)] pr-7 transition-colors cursor-pointer"
-            >
-              <option value="overview" className="bg-[var(--color-surface)] text-[var(--color-ink)]">
-                All Servers ({userServers.length})
-              </option>
-              <optgroup label="Your Servers" className="bg-[var(--color-surface)] text-[var(--color-ink-mute)]">
-                {userServers.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-[var(--color-surface)] text-[var(--color-ink)]">
-                    {s.name} ({s.software})
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-[var(--color-ink-mute)] pointer-events-none" />
+        {/* SECTION: ACCOUNT & SERVICES */}
+        <div className="space-y-1">
+          <div className="px-3 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold mb-1">
+            Account
           </div>
-        ) : (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-[11px] text-[var(--color-ink-mute)]">
-            <Cpu className="h-3.5 w-3.5 text-[var(--color-accent)] shrink-0" />
-            <span>No active servers</span>
-          </div>
-        )}
-      </div>
 
-      {/* Primary Navigation */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-0.5">
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'dashboard'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <LayoutDashboard className={`h-3.5 w-3.5 ${currentPage === 'dashboard' ? 'text-[var(--color-accent)]' : ''}`} />
-          <span>Dashboard</span>
-        </button>
+          <button
+            onClick={() => onNavigate('settings')}
+            className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              isAccountActive
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <User className={`h-4 w-4 ${isAccountActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+            <span>Account</span>
+          </button>
 
-        <button
-          onClick={() => onNavigate('servers')}
-          className={`w-full flex items-center justify-between px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'servers'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Server className={`h-3.5 w-3.5 ${currentPage === 'servers' ? 'text-[var(--color-accent)]' : ''}`} />
-            <span>My Servers</span>
-          </div>
-          {userServers.length > 0 && (
-            <span className="text-[10px] px-1 py-0.2 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-dim)] font-mono border border-[var(--color-line)]">
-              {userServers.length}
+          <button
+            onClick={() => onNavigate('billing')}
+            className={`w-full flex items-center justify-between px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer group ${
+              currentPage === 'billing'
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Star className="h-4 w-4 text-amber-400 fill-amber-400/20 group-hover:fill-amber-400 transition-colors" />
+              <span className="text-amber-300 font-medium group-hover:text-amber-200">Premium</span>
+            </div>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              VIP
             </span>
-          )}
-        </button>
+          </button>
 
-        <button
-          onClick={() => onNavigate('deploy')}
-          className="w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium text-white bg-[var(--color-accent)] hover:bg-[#3d6ae8] transition-colors my-2 cursor-pointer"
-        >
-          <PlusCircle className="h-3.5 w-3.5" />
-          <span>Deploy Server</span>
-        </button>
+          <button
+            onClick={() => onNavigate('support')}
+            className={`w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              currentPage === 'support'
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <LifeBuoy className={`h-4 w-4 ${currentPage === 'support' ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+            <span>Support</span>
+          </button>
 
-        <div className="pt-3 pb-1 label px-3">
-          Management
+          <button
+            onClick={() => onNavigate('afk-rewards')}
+            className={`w-full flex items-center justify-between px-3 h-9 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              currentPage === 'afk-rewards'
+                ? 'bg-[#181922] text-white border-l-2 border-[#f97316] pl-2.5 font-semibold shadow-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Coins className={`h-4 w-4 ${currentPage === 'afk-rewards' ? 'text-[#f97316]' : 'text-neutral-400'}`} />
+              <span>AFK Rewards</span>
+            </div>
+            <span className="text-[9px] font-mono text-[#f97316] font-semibold bg-[#f97316]/10 px-1.5 py-0.5 rounded">
+              FREE
+            </span>
+          </button>
         </div>
 
-        <button
-          onClick={() => onNavigate('billing')}
-          className={`w-full flex items-center justify-between px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'billing'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <CreditCard className={`h-3.5 w-3.5 ${currentPage === 'billing' ? 'text-[var(--color-accent)]' : ''}`} />
-            <span>Billing</span>
+        {/* Promo Card: "Need more power?" (Matching Orihost screenshot image_621d190d.png) */}
+        <div className="p-3.5 rounded-xl bg-gradient-to-b from-[#181922] to-[#12131a] border border-[#23252e] space-y-2 relative overflow-hidden group">
+          <div className="flex items-center gap-2 text-xs font-bold text-white">
+            <Zap className="h-3.5 w-3.5 text-[#f97316] fill-current" />
+            <span>Need more power?</span>
           </div>
-          <span className="text-[11px] font-mono text-[var(--color-ok)] font-medium">
-            ${user?.credits?.toFixed(2) || '0.00'}
-          </span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('afk-rewards')}
-          className={`w-full flex items-center justify-between px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'afk-rewards'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Coins className={`h-3.5 w-3.5 ${currentPage === 'afk-rewards' ? 'text-[var(--color-accent)]' : ''}`} />
-            <span>AFK Rewards</span>
-          </div>
-          <span className="text-[9px] font-mono text-[var(--color-accent)]">
-            EARN
-          </span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('support')}
-          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'support'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <LifeBuoy className={`h-3.5 w-3.5 ${currentPage === 'support' ? 'text-[var(--color-accent)]' : ''}`} />
-          <span>Support Tickets</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('activity')}
-          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'activity'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <Activity className={`h-3.5 w-3.5 ${currentPage === 'activity' ? 'text-[var(--color-accent)]' : ''}`} />
-          <span>Activity Log</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('settings')}
-          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'settings'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <Settings className={`h-3.5 w-3.5 ${currentPage === 'settings' ? 'text-[var(--color-accent)]' : ''}`} />
-          <span>Settings</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('api-keys')}
-          className={`w-full flex items-center gap-2.5 px-3 h-8 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
-            currentPage === 'api-keys'
-              ? 'bg-[var(--color-surface-2)] text-[var(--color-ink)] border-l-2 border-[var(--color-accent)]'
-              : 'text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
-          }`}
-        >
-          <Key className={`h-3.5 w-3.5 ${currentPage === 'api-keys' ? 'text-[var(--color-accent)]' : ''}`} />
-          <span>API Credentials</span>
-        </button>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            Dedicated 24/7 plans on our high-performance Ryzen & EPYC nodes.
+          </p>
+          <button
+            onClick={() => onNavigate('billing')}
+            className="text-[11px] font-semibold text-[#f97316] hover:text-[#fb923c] flex items-center gap-1 transition-colors pt-1 cursor-pointer"
+          >
+            <span>View plans</span>
+            <span>&rarr;</span>
+          </button>
+        </div>
       </div>
 
-      {/* User Footer (Pinned Bottom) */}
-      <div className="p-2.5 border-t border-[var(--color-line)] shrink-0 bg-[var(--color-surface)]">
-        <div className="flex items-center justify-between p-2 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)]">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <img
-              src={user?.avatarUrl || 'https://api.dicebear.com/7.x/identicon/svg?seed=user'}
-              alt="Avatar"
-              className="h-6 w-6 rounded-md object-cover bg-zinc-800 shrink-0"
-            />
+      {/* User Profile Pill at Bottom (Matching Orihost) */}
+      <div className="p-3 border-t border-[#181922] shrink-0 bg-[#09090b]">
+        <div className="flex items-center justify-between p-2 rounded-xl bg-[#12131a] border border-[#1f212b]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-[#f97316] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+              {((user?.displayName || user?.username || 'U')[0]).toUpperCase()}
+            </div>
             <div className="truncate">
-              <div className="text-xs font-semibold text-[var(--color-ink)] truncate leading-tight">
-                {user?.displayName || user?.username || 'User'}
+              <div className="text-xs font-bold text-white truncate leading-tight">
+                {user?.displayName || user?.username || 'kravenog'}
               </div>
-              <div className="text-[10px] text-[var(--color-ink-mute)] flex items-center gap-1 leading-none mt-0.5">
-                {user?.role === 'super_admin' ? (
-                  <span className="text-[var(--color-accent)] font-medium flex items-center gap-0.5">
-                    <ShieldCheck className="h-2.5 w-2.5" /> Superadmin
-                  </span>
-                ) : user?.role === 'admin' ? (
-                  <span className="text-[var(--color-accent)] font-medium">Admin</span>
-                ) : (
-                  <span>Customer</span>
-                )}
+              <div className="text-[10px] text-neutral-500 truncate leading-none mt-0.5">
+                {user?.email || 'user@example.com'}
               </div>
             </div>
           </div>
@@ -224,10 +191,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={() => logout()}
             title="Sign Out"
-            className="p-1 text-[var(--color-ink-mute)] hover:text-[var(--color-err)] transition-colors cursor-pointer"
+            className="p-1.5 text-neutral-400 hover:text-red-400 transition-colors cursor-pointer shrink-0 rounded-lg hover:bg-neutral-800"
           >
-            <LogOut className="h-3.5 w-3.5" />
+            <LogOut className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Tiny Social Icons Row */}
+        <div className="flex items-center justify-center gap-4 mt-2.5 text-neutral-500 text-[11px]">
+          <a
+            href="https://discord.gg"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-indigo-400 transition-colors"
+            title="Discord"
+          >
+            Discord
+          </a>
+          <span>•</span>
+          <a
+            href="https://youtube.com"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-red-400 transition-colors"
+            title="YouTube"
+          >
+            YouTube
+          </a>
+          <span>•</span>
+          <a
+            href="https://twitter.com"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-sky-400 transition-colors"
+            title="Twitter"
+          >
+            Twitter
+          </a>
         </div>
       </div>
     </aside>

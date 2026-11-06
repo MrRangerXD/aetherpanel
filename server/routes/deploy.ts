@@ -387,9 +387,9 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
   };
   db.orders.unshift(order);
 
-  initializeServerFiles(serverId, prod?.category || 'minecraft', newServer.software, newServer.version);
+  initializeServerFiles(serverId, category, newServer.software, newServer.version);
 
-  if (prod?.category === 'minecraft') {
+  if (category === 'minecraft') {
     appendConsoleLog(serverId, `[AetherPanel]: Provisioning Minecraft server runtime (${newServer.software} ${newServer.version})...`);
     writeMinecraftEula(serverId, true);
     writeServerProperties(serverId, {
@@ -401,6 +401,9 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
     } catch (err: any) {
       appendConsoleLog(serverId, `[AetherInstaller/WARN]: Server JAR download notice: ${err.message}`);
     }
+  } else {
+    appendConsoleLog(serverId, `[AetherPanel]: Provisioning ${newServer.software} application runtime (${newServer.version})...`);
+    appendConsoleLog(serverId, `[AetherPanel]: Environment variables initialized for port ${assignedPort}.`);
   }
 
   appendConsoleLog(serverId, `[AetherPanel]: Server auto-provisioned successfully from template '${selectedSoftware}' on node ${targetNode.name}.`);

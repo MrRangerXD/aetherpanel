@@ -80,7 +80,7 @@ export async function ensureLocalNode(): Promise<Node> {
       flagCode: 'IN',
       status: 'online',
       ip: primaryIp,
-      fqdn: hostName.includes('.') ? hostName : `${hostName}.local`,
+      fqdn: process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || (hostName.includes('.') ? hostName : `${hostName}.local`),
       sftpPort: 2022,
       lastHeartbeatAt: new Date().toISOString(),
       createdAt: new Date().toISOString()

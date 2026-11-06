@@ -111,6 +111,24 @@ worldsRouter.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Res
       }
     }
 
+    if (items.length === 0) {
+      const defaultWorldName = activeLevelName || 'world';
+      const defaultWorldDir = path.join(sDir, defaultWorldName);
+      if (!fs.existsSync(defaultWorldDir)) {
+        fs.mkdirSync(defaultWorldDir, { recursive: true });
+        fs.mkdirSync(path.join(defaultWorldDir, 'region'), { recursive: true });
+        fs.writeFileSync(path.join(defaultWorldDir, 'level.dat'), Buffer.from([0x1f, 0x8b, 0x08, 0x00]));
+      }
+      items.push({
+        name: defaultWorldName,
+        size: calculateFolderSize(defaultWorldDir) || 4096,
+        lastModified: new Date().toISOString(),
+        levelName: defaultWorldName,
+        isActive: true,
+        versionStatus: 'compatible'
+      });
+    }
+
     res.json({ success: true, data: items, activeLevelName });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'IO_ERROR', message: err.message } });

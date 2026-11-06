@@ -48,17 +48,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
       id="aether-sidebar"
       className="hidden lg:flex w-64 flex-none border-r border-[#23252e] bg-[#0c0d12] flex-col h-full select-none z-20"
     >
-      {/* Brand Header */}
-      <div className="p-4 border-b border-[#23252e] shrink-0 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-[#f97316]/10 border border-[#f97316]/30 flex items-center justify-center text-[#f97316] font-bold">
-          ⚡
-        </div>
-        <div>
-          <div className="text-sm font-bold text-white tracking-wide">Admin Panel</div>
-          <div className="text-[10px] uppercase font-mono tracking-wider text-neutral-400">Aether Control Plane</div>
-        </div>
-      </div>
-
       {/* Navigation Sections */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
         {/* ADMINISTRATION */}
@@ -76,11 +65,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
                   onClick={() => onNavigate(item.page)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                     isActive
-                      ? 'bg-white text-black font-semibold shadow-sm'
-                      : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
+                      ? 'bg-[#1a1b24] text-white font-semibold border-l-2 border-[#f97316] shadow-sm'
+                      : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
                   }`}
                 >
-                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-black' : 'text-neutral-400'}`} />
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
                   <span className="truncate">{item.label}</span>
                 </button>
               );

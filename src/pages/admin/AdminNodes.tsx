@@ -438,7 +438,7 @@ export const AdminNodes: React.FC = () => {
         {viewMode === 'list' && (
           <button
             onClick={() => setViewMode('create')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-all cursor-pointer shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs shadow-md shadow-[#f97316]/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Node</span>
@@ -777,7 +777,7 @@ export const AdminNodes: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-2 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                  className="px-6 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs shadow-md shadow-[#f97316]/20 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? 'Creating Node...' : 'Create Node'}
                 </button>
@@ -876,7 +876,7 @@ export const AdminNodes: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setViewMode('create')}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-all cursor-pointer shadow-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs shadow-md shadow-[#f97316]/20 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Create your first node</span>
@@ -1061,7 +1061,7 @@ export const AdminNodes: React.FC = () => {
                   setTokenModal(null);
                   setViewMode('list');
                 }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-all cursor-pointer shadow-sm"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs shadow-md shadow-[#f97316]/20 transition-all cursor-pointer"
               >
                 <Copy className="w-4 h-4" />
                 <span>Copy Token & Continue</span>
@@ -1164,8 +1164,8 @@ export const AdminNodes: React.FC = () => {
                 onClick={() => setViewTab('overview')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   viewTab === 'overview'
-                    ? 'bg-white text-black font-semibold'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-[#f97316]/15 text-[#f97316] border border-[#f97316]/40 font-semibold'
+                    : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
                 }`}
               >
                 Telemetry & Gauges
@@ -1174,8 +1174,8 @@ export const AdminNodes: React.FC = () => {
                 onClick={() => setViewTab('servers')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   viewTab === 'servers'
-                    ? 'bg-white text-black font-semibold'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-[#f97316]/15 text-[#f97316] border border-[#f97316]/40 font-semibold'
+                    : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
                 }`}
               >
                 Servers ({viewingNode.serverCount || viewingNode.servers?.length || 0})
@@ -1184,8 +1184,8 @@ export const AdminNodes: React.FC = () => {
                 onClick={() => setViewTab('allocations')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   viewTab === 'allocations'
-                    ? 'bg-white text-black font-semibold'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-[#f97316]/15 text-[#f97316] border border-[#f97316]/40 font-semibold'
+                    : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
                 }`}
               >
                 Allocations ({viewingNode.allocationsCount?.total || viewingNode.allocations?.length || 0})
@@ -1194,8 +1194,8 @@ export const AdminNodes: React.FC = () => {
                 onClick={() => setViewTab('config')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   viewTab === 'config'
-                    ? 'bg-white text-black font-semibold'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-[#f97316]/15 text-[#f97316] border border-[#f97316]/40 font-semibold'
+                    : 'text-neutral-400 hover:text-white hover:bg-[#181920]'
                 }`}
               >
                 Daemon Config
@@ -1363,7 +1363,7 @@ export const AdminNodes: React.FC = () => {
                     <button
                       type="submit"
                       disabled={addingAlloc || !newAllocPort.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 cursor-pointer disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs cursor-pointer disabled:opacity-50 transition-all"
                     >
                       {addingAlloc ? 'Adding...' : 'Allocate Port'}
                     </button>
@@ -1608,7 +1608,7 @@ export const AdminNodes: React.FC = () => {
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-6 py-2 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs cursor-pointer disabled:opacity-50 transition-all shadow-md shadow-[#f97316]/20"
                 >
                   {savingEdit ? 'Saving Changes...' : 'Save Changes'}
                 </button>

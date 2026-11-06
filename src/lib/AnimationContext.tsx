@@ -80,7 +80,7 @@ export const AnimationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const motionEnabled = settings.enabled && !motionReduced;
 
   // Determine transition speeds and styles
-  const getTransitionProps = useCallback((type: 'page' | 'modal' | 'dropdown' | 'panel' | 'stagger' = 'page') => {
+  const getTransitionProps = useCallback((type: 'page' | 'modal' | 'dropdown' | 'panel' | 'stagger' | 'tab' = 'page') => {
     if (!motionEnabled) {
       return {
         initial: { opacity: 1, x: 0, y: 0, scale: 1 },
@@ -115,10 +115,19 @@ export const AnimationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         };
       }
       return {
-        initial: { opacity: 1, y: yOffset },
+        initial: { opacity: 0, y: yOffset },
         animate: { opacity: 1, y: 0 },
-        exit: { opacity: 1, y: -yOffset },
+        exit: { opacity: 0, y: -yOffset },
         transition: { duration, ease }
+      };
+    }
+
+    if (type === 'tab') {
+      return {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+        transition: { duration: 0.18, ease }
       };
     }
 
@@ -133,44 +142,44 @@ export const AnimationProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         };
       }
       return {
-        initial: { opacity: 1, y: yOffset * 1.5 },
+        initial: { opacity: 0, y: yOffset * 1.5 },
         animate: { opacity: 1, y: 0 },
-        exit: { opacity: 1, y: -yOffset * 1.5 },
+        exit: { opacity: 0, y: -yOffset * 1.5 },
         transition: { duration: duration * 1.2, ease }
       };
     }
 
     if (type === 'modal') {
       return {
-        initial: { opacity: 1, scale: 0.96, y: yOffset },
+        initial: { opacity: 0, scale: 0.96, y: yOffset },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 1, scale: 0.96, y: yOffset },
+        exit: { opacity: 0, scale: 0.96, y: yOffset },
         transition: { duration: duration * 0.9, ease }
       };
     }
 
     if (type === 'dropdown') {
       return {
-        initial: { opacity: 1, scale: 0.98, y: -4 },
+        initial: { opacity: 0, scale: 0.98, y: -4 },
         animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 1, scale: 0.98, y: -4 },
+        exit: { opacity: 0, scale: 0.98, y: -4 },
         transition: { duration: duration * 0.7, ease }
       };
     }
 
     if (type === 'stagger') {
       return {
-        initial: { opacity: 1, y: yOffset * 0.5 },
+        initial: { opacity: 0, y: yOffset * 0.5 },
         animate: { opacity: 1, y: 0 },
-        exit: { opacity: 1, y: -yOffset * 0.5 },
+        exit: { opacity: 0, y: -yOffset * 0.5 },
         transition: { duration: duration * 0.8, ease }
       };
     }
 
     return {
-      initial: { opacity: 1 },
+      initial: { opacity: 0 },
       animate: { opacity: 1 },
-      exit: { opacity: 1 },
+      exit: { opacity: 0 },
       transition: { duration }
     };
   }, [motionEnabled, settings]);

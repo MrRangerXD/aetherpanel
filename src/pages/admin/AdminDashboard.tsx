@@ -253,9 +253,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             <div className="space-y-2">
               <button
                 onClick={() => onNavigate('admin-users')}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white text-black font-semibold text-xs transition-all hover:bg-neutral-200 cursor-pointer shadow-sm"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#181920] border border-[#f97316]/40 text-white font-semibold text-xs hover:bg-[#20222e] hover:border-[#f97316] transition-all cursor-pointer shadow-sm"
               >
-                <UserPlus className="w-4 h-4 text-black shrink-0" />
+                <UserPlus className="w-4 h-4 text-[#f97316] shrink-0" />
                 <span>Create User</span>
               </button>
 

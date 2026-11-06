@@ -1803,9 +1803,9 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     {
       id: 'local',
       name: 'Local Node',
-      hostname: 'localhost',
-      apiPort: 3000,
-      apiUrl: 'http://127.0.0.1:3000',
+      hostname: process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || 'localhost',
+      apiPort: 9666,
+      apiUrl: `http://${process.env.NODE_FQDN || '127.0.0.1'}:9666`,
       ssl: false,
       isLocal: true,
       behindProxy: false,
@@ -1822,8 +1822,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
 
       // Compatibility fields
       ip: '127.0.0.1',
-      fqdn: hostName,
-      daemonPort: 3000,
+      fqdn: process.env.NODE_FQDN || process.env.LOCAL_NODE_FQDN || hostName,
+      daemonPort: 9666,
       sftpPort: 2022,
       location: 'local',
       locationName: 'Primary Control Plane VPS',

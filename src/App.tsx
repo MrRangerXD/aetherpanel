@@ -282,7 +282,7 @@ function AppContent() {
         {/* App Shell Flex Contract */}
         <div id="aether-app-shell" className="flex h-full w-full overflow-hidden relative z-10">
           {/* Customer Sidebar */}
-          {isCustomerPage && currentPage !== 'server-manage' && (
+          {isCustomerPage && (
             <Sidebar
               currentPage={currentPage}
               onNavigate={handleNavigate}
@@ -315,7 +315,13 @@ function AppContent() {
             </div>
 
             {/* Content Viewport */}
-            <main className={currentPage === 'server-manage' ? 'flex-1 w-full min-w-0 p-0 flex flex-col' : 'flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto flex flex-col justify-between'}>
+            <main className={
+              currentPage === 'server-manage'
+                ? 'flex-1 w-full min-w-0 p-0 flex flex-col'
+                : isAdminPage
+                ? 'flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-between'
+                : 'flex-1 p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto flex flex-col justify-between'
+            }>
               <div className="flex-1 flex flex-col">
                 <PageTransition routeKey={currentPage}>
                   <div className="flex-1 flex flex-col">

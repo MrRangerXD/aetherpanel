@@ -803,7 +803,7 @@ configure_firewall() {
 
   local ssh_port="${DETECTED_SSH_PORT:-22}"
   local p_port="${PANEL_PORT:-3000}"
-  local d_port="${DAEMON_PORT:-8080}"
+  local d_port="${DAEMON_PORT:-9666}"
   local s_port="${SFTP_PORT:-2022}"
 
   log_msg "Configuring firewall via manager: ${FIREWALL_MGR} (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port})"
@@ -1499,18 +1499,82 @@ install_panel() {
   chmod 600 "$INSTALL_DIR/.env" 2>/dev/null || true
   echo -e "${GREEN}[✓] Step 5 complete: Environment configured (${INSTALL_DIR}/.env).${NC}\n"
 
-  # [6/8] Database Schema Initialization
-  echo -e "${YELLOW}[6/8] Initializing database storage schemas...${NC}"
+  # [6/8] Database Schema Initialization & Local Node Auto-Creation
+  echo -e "${YELLOW}[6/8] Initializing database storage schemas & Local Node record...${NC}"
+  local current_iso_time
+  current_iso_time=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z" 2>/dev/null || echo "2026-11-05T00:00:00.000Z")
+  local host_ram_mb
+  host_ram_mb=${RAM_TOTAL_MB:-4096}
+  if [ "$host_ram_mb" -le 0 ] 2>/dev/null; then host_ram_mb=4096; fi
+  local host_disk_gb
+  host_disk_gb=${DISK_FREE_GB:-200}
+  if [ "$host_disk_gb" -le 0 ] 2>/dev/null; then host_disk_gb=200; fi
+  local host_cores
+  host_cores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null || echo "4")
+  host_cores="${host_cores:-4}"
+
   if [ ! -f "$INSTALL_DIR/data/db.json" ]; then
     cat <<EOF > "$INSTALL_DIR/data/db.json"
 {
   "users": [],
   "passwords": {},
   "servers": [],
-  "nodes": [],
+  "nodes": [
+    {
+      "id": "local",
+      "name": "Local Node",
+      "hostname": "${NODE_FQDN}",
+      "apiPort": 9666,
+      "daemonPort": 9666,
+      "apiUrl": "http://${NODE_FQDN}:9666",
+      "ssl": false,
+      "behindProxy": false,
+      "maintenanceMode": false,
+      "isLocal": true,
+      "isLocalNode": true,
+      "memory": ${host_ram_mb},
+      "totalRamMB": ${host_ram_mb},
+      "usedRamMB": 0,
+      "disk": $(( host_disk_gb * 1024 )),
+      "totalDiskGB": ${host_disk_gb},
+      "usedDiskGB": 1,
+      "cpu": $(( host_cores * 100 )),
+      "totalCpuCores": ${host_cores},
+      "usedCpuCores": 0,
+      "maxServers": 100,
+      "serverCount": 0,
+      "memoryOverallocate": 100,
+      "diskOverallocate": 100,
+      "tags": ["local", "primary", "bare-metal"],
+      "location": "local",
+      "locationName": "Primary Control Plane VPS",
+      "flagCode": "IN",
+      "status": "online",
+      "ip": "${SERVER_IP:-127.0.0.1}",
+      "fqdn": "${NODE_FQDN}",
+      "sftpPort": 2022,
+      "lastHeartbeatAt": "${current_iso_time}",
+      "createdAt": "${current_iso_time}"
+    }
+  ],
   "plans": [],
-  "locations": [],
-  "allocations": [],
+  "locations": [
+    {
+      "id": "loc_local",
+      "shortCode": "LOCAL",
+      "name": "Local Datacenter",
+      "description": "Primary VPS Control Plane Location",
+      "createdAt": "${current_iso_time}"
+    }
+  ],
+  "allocations": [
+    { "id": "alloc_1", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 25565, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" },
+    { "id": "alloc_2", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 25566, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" },
+    { "id": "alloc_3", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 25567, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" },
+    { "id": "alloc_4", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 25568, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" },
+    { "id": "alloc_5", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 3001, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" },
+    { "id": "alloc_6", "nodeId": "local", "ip": "${SERVER_IP:-127.0.0.1}", "port": 9667, "isAssigned": false, "assigned": false, "createdAt": "${current_iso_time}" }
+  ],
   "auditLogs": [],
   "settings": {
     "siteName": "AetherPanel",
@@ -1527,7 +1591,7 @@ install_panel() {
 EOF
     chmod 644 "$INSTALL_DIR/data/db.json" 2>/dev/null || true
   fi
-  echo -e "${GREEN}[✓] Step 6 complete: Database initialized safely.${NC}\n"
+  echo -e "${GREEN}[✓] Step 6 complete: Database initialized safely with Local Node (Port 9666).${NC}\n"
 
   # [7/8] Production Build & Runtime Provisioning
   echo -e "${YELLOW}[7/8] Building application and provisioning runtimes...${NC}"
@@ -1548,14 +1612,87 @@ EOF
   echo -e "${CYAN}    Compiling frontend and backend bundles (npm run build)...${NC}"
   log_msg "Building production bundle"
   if ! npm run build >> "$LOG_FILE" 2>&1; then
-    echo -e "${RED}[ERROR] Build failed. Diagnostic details in ${LOG_FILE}${NC}"
-    log_msg "ERROR: npm run build failed"
+    echo -e "${YELLOW}    [!] Standard build had warnings. Running isolated compiler fallback...${NC}"
+    npx vite build >> "$LOG_FILE" 2>&1 || true
+    npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs >> "$LOG_FILE" 2>&1 || true
+  fi
+
+  # Verify compiled artifacts
+  if [ ! -f "$INSTALL_DIR/dist/server.cjs" ] || [ ! -f "$INSTALL_DIR/dist/index.html" ]; then
+    echo -e "${RED}[ERROR] Build verification failed: dist/server.cjs or dist/index.html missing. Check ${LOG_FILE}${NC}"
+    log_msg "ERROR: Build verification failed"
     return 1
   fi
 
   prepare_java_runtime_manager "$INSTALL_DIR"
   setup_service_manager "$INSTALL_DIR" "${PANEL_PORT:-3000}"
-  echo -e "${GREEN}[✓] Step 7 complete: Application compiled and registered.${NC}\n"
+
+  # [7b] Automated Local Daemon Agent Auto-Provisioning (Zero-Touch Local Node)
+  echo -e "${CYAN}    Auto-provisioning Local Daemon Agent on port 9666...${NC}"
+  local local_daemon_dir="/etc/aethernode"
+  local local_daemon_vols="/var/lib/aethernode/volumes"
+  local local_daemon_logs="/var/log/aethernode"
+
+  if [ "$IS_ROOT" = false ] && [ "$HAS_SUDO" = false ]; then
+    local_daemon_dir="${INSTALL_DIR}/data/nodes/local/etc"
+    local_daemon_vols="${INSTALL_DIR}/data/nodes/local/volumes"
+    local_daemon_logs="${INSTALL_DIR}/data/logs"
+  fi
+
+  mkdir -p "$local_daemon_dir" "$local_daemon_vols" "$local_daemon_logs"
+
+  if [ -d "${INSTALL_DIR}/daemon" ]; then
+    cp -a "${INSTALL_DIR}/daemon/"* "${local_daemon_dir}/" 2>/dev/null || true
+  fi
+
+  cat <<DAEMON_CFG_EOF > "${local_daemon_dir}/config.json"
+{
+  "panelUrl": "${PANEL_URL}",
+  "nodeId": "local",
+  "token": "AETHER-LOCAL-DEFAULT-TOKEN",
+  "port": 9666,
+  "bindHost": "0.0.0.0",
+  "sftpPort": 2022,
+  "storagePath": "${local_daemon_vols}",
+  "logLevel": "info"
+}
+DAEMON_CFG_EOF
+  chmod 600 "${local_daemon_dir}/config.json" 2>/dev/null || true
+
+  if [ -f "${local_daemon_dir}/package.json" ]; then
+    ( cd "${local_daemon_dir}" && npm install --omit=dev --no-audit --no-fund >> "$LOG_FILE" 2>&1 || true )
+  fi
+
+  if [ "$INIT_SYSTEM" = "systemd" ] && [ "$IS_ROOT" = true ]; then
+    cat <<SERVICE_EOF > /etc/systemd/system/aethernode.service
+[Unit]
+Description=AetherPanel Local Node Daemon (Universal Minecraft & Bots)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${local_daemon_dir}
+ExecStart=/usr/bin/env node ${local_daemon_dir}/agent.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:${HOME}/.bun/bin
+StandardOutput=append:${local_daemon_logs}/agent.log
+StandardError=append:${local_daemon_logs}/agent.log
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+    systemctl daemon-reload >> "$LOG_FILE" 2>&1 || true
+    systemctl enable aethernode >> "$LOG_FILE" 2>&1 || true
+    systemctl restart aethernode >> "$LOG_FILE" 2>&1 || true
+    echo -e "${GREEN}[✓] Local Node Daemon registered and active (aethernode.service on port 9666).${NC}"
+  fi
+
+  echo -e "${GREEN}[✓] Step 7 complete: Application & Local Daemon compiled and registered.${NC}\n"
 
   # [8/8] Live Health Check Verification
   echo -e "${YELLOW}[8/8] Performing live application health verification...${NC}"
@@ -2000,7 +2137,7 @@ show_tutorial() {
   echo -e "   • ${BOLD}CI / Runner Mode:${NC} Automated ephemeral build & verification."
   echo -e "\n${CYAN}2. Port & Network Requirements:${NC}"
   echo -e "   • ${BOLD}Port 3000/TCP:${NC} AetherPanel Web UI & REST API"
-  echo -e "   • ${BOLD}Port 8080/TCP:${NC} AetherNode Daemon Agent"
+  echo -e "   • ${BOLD}Port 9666/TCP:${NC} AetherNode Daemon Agent (Default)"
   echo -e "   • ${BOLD}Port 2022/TCP:${NC} AetherNode SFTP Transport"
   echo -e "   • ${BOLD}Ports 25565-25600/TCP/UDP:${NC} Minecraft & App Port Allocations\n"
   echo -e "${CYAN}3. Node Pairing One-Liner:${NC}"

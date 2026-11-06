@@ -90,7 +90,9 @@ export const Billing: React.FC<BillingProps> = ({ onNavigate }) => {
   const { user, refreshUser } = useAuth();
 
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'orders' | 'calculator' | 'vouchers'>('overview');
+  const [activeTab, setActiveTab] = useState<'premium' | 'overview' | 'subscriptions' | 'orders' | 'calculator' | 'vouchers'>('premium');
+  const [selectedPlan, setSelectedPlan] = useState<'lite' | 'premium'>('premium');
+  const [selectedBillingPeriod, setSelectedBillingPeriod] = useState<'monthly' | '6months' | '1year' | '2years' | '3years'>('1year');
 
   // Core Data States
   const [orders, setOrders] = useState<Order[]>([]);
@@ -470,7 +472,8 @@ export const Billing: React.FC<BillingProps> = ({ onNavigate }) => {
       {/* Navigation Tabs Bar */}
       <div className="flex items-center gap-1 border-b border-[var(--color-line)] pb-1.5 overflow-x-auto">
         {[
-          { id: 'overview', label: 'Overview', icon: DollarSign },
+          { id: 'premium', label: 'Upgrade Account (Premium)', icon: Crown },
+          { id: 'overview', label: 'Overview & Wallet', icon: DollarSign },
           { id: 'subscriptions', label: `Servers (${subscriptions.length})`, icon: Server },
           { id: 'orders', label: `Invoices (${orders.length})`, icon: FileText },
           { id: 'calculator', label: 'Calculator', icon: Cpu },
@@ -482,13 +485,13 @@ export const Billing: React.FC<BillingProps> = ({ onNavigate }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                 isActive
-                  ? 'bg-[var(--color-surface-3)] text-[var(--color-ink)] border border-[var(--color-line)]'
-                  : 'text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
+                  ? 'bg-[#181922] text-white border-b-2 border-[#f97316]'
+                  : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
               }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-[#f97316]' : 'text-neutral-400'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -499,6 +502,199 @@ export const Billing: React.FC<BillingProps> = ({ onNavigate }) => {
         <div className="p-3 rounded-md bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 text-[var(--color-ok)] text-xs font-medium flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" />
           <span>{renewSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* TAB 0: ORIHOST PREMIUM UPGRADE (image_884b3a09.png) */}
+      {activeTab === 'premium' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">Upgrade your account</h2>
+            <p className="text-xs text-neutral-400 mt-1 max-w-2xl leading-relaxed">
+              Remove ads, unlock more server slots and get exclusive perks. Premium is a one-time prepaid purchase from €2.50/month, never a subscription. Prepay longer periods to save up to 20%.
+            </p>
+          </div>
+
+          {/* Choose a plan cards */}
+          <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-5 space-y-4">
+            <div className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+              Choose a plan
+            </div>
+            <div className="text-[11px] text-neutral-400 -mt-2">
+              Both plans are one-time payments.
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* Lite Card */}
+              <div
+                onClick={() => setSelectedPlan('lite')}
+                className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedPlan === 'lite'
+                    ? 'bg-[#181922] border-[#f97316] ring-1 ring-[#f97316]'
+                    : 'bg-[#0c0d12] border-[#23252e] hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">Lite</span>
+                  <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${selectedPlan === 'lite' ? 'border-[#f97316]' : 'border-neutral-600'}`}>
+                    {selectedPlan === 'lite' && <div className="w-2 h-2 rounded-full bg-[#f97316]" />}
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono mt-3">€3</div>
+                <div className="text-[11px] text-neutral-400 mt-1">Ad-free panel experience</div>
+              </div>
+
+              {/* Premium Card */}
+              <div
+                onClick={() => setSelectedPlan('premium')}
+                className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedPlan === 'premium'
+                    ? 'bg-[#181922] border-[#f97316] ring-1 ring-[#f97316]'
+                    : 'bg-[#0c0d12] border-[#23252e] hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#f97316]">Premium</span>
+                  <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${selectedPlan === 'premium' ? 'border-[#f97316]' : 'border-neutral-600'}`}>
+                    {selectedPlan === 'premium' && <div className="w-2 h-2 rounded-full bg-[#f97316]" />}
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono mt-3">
+                  €2.50<span className="text-xs text-neutral-400 font-sans font-normal">/mo</span>
+                </div>
+                <div className="text-[11px] text-neutral-400 mt-1">Everything in Lite, plus more servers and perks</div>
+              </div>
+            </div>
+
+            {/* Billing Period Selector */}
+            {selectedPlan === 'premium' && (
+              <div className="space-y-2 pt-3 border-t border-[#23252e]">
+                <div className="text-xs font-medium text-neutral-400">
+                  Billing period <span className="text-[11px] text-neutral-500">· Prepay a longer period and save.</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                  {[
+                    { id: 'monthly', period: 'Monthly', total: '€2.50', perMo: '€2.50/mo' },
+                    { id: '6months', period: '6 months', total: '€14.25', perMo: '€2.38/mo', discount: 'save 5%' },
+                    { id: '1year', period: '1 year', total: '€27', perMo: '€2.25/mo', badge: 'Popular', discount: 'save 10%' },
+                    { id: '2years', period: '2 years', total: '€51', perMo: '€2.13/mo', discount: 'save 15%' },
+                    { id: '3years', period: '3 years', total: '€72', perMo: '€2.00/mo', discount: 'save 20%' }
+                  ].map((p) => {
+                    const isSelected = selectedBillingPeriod === p.id;
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedBillingPeriod(p.id as any)}
+                        className={`p-3 rounded-lg border transition-all cursor-pointer relative ${
+                          isSelected
+                            ? 'bg-[#181922] border-[#f97316]'
+                            : 'bg-[#0c0d12] border-[#23252e] hover:border-neutral-700'
+                        }`}
+                      >
+                        {p.badge && (
+                          <span className="absolute -top-2 right-2 text-[9px] font-bold font-mono px-1.5 py-0.2 rounded bg-amber-500 text-black">
+                            {p.badge}
+                          </span>
+                        )}
+                        <div className="text-xs font-bold text-white">{p.period}</div>
+                        <div className="text-base font-extrabold text-white font-mono mt-1">{p.total}</div>
+                        <div className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                          <span>{p.perMo}</span>
+                          {p.discount && <span className="text-emerald-400 font-semibold">{p.discount}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className="text-[11px] text-neutral-500 pt-1 leading-relaxed">
+                  ⓘ Prepaid at the listed price. Premium does not auto-renew: renew manually before it expires, and renewing early adds the new period on top of your remaining time.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Feature Matrix Table: What you get (image_884b3a09.png) */}
+          <div className="rounded-xl bg-[#14151b] border border-[#23252e] overflow-hidden">
+            <div className="p-4 border-b border-[#23252e] text-xs font-bold text-white uppercase tracking-wider font-mono">
+              What you get
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[#23252e] text-[10px] font-mono uppercase text-neutral-400 bg-[#0e0f14]">
+                    <th className="py-2.5 px-4 font-semibold">Feature</th>
+                    <th className="py-2.5 px-4 font-semibold text-center">FREE</th>
+                    <th className="py-2.5 px-4 font-semibold text-center">LITE</th>
+                    <th className="py-2.5 px-4 font-semibold text-center text-[#f97316]">PREMIUM</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#23252e]/60">
+                  {[
+                    { feature: 'High-Performance Hardware', free: 'Shared Node', lite: 'AMD EPYC Node', premium: 'AMD Ryzen 9 7950X' },
+                    { feature: 'Server Instances Limit', free: '1 Container', lite: '3 Containers', premium: 'Unlimited Clusters' },
+                    { feature: 'RAM Allocation per Server', free: '1 GB', lite: '2 GB', premium: 'Up to 16 GB' },
+                    { feature: 'Fast NVMe PCIe 4.0 Storage', free: '5 GB', lite: '25 GB', premium: '100+ GB Uncapped' },
+                    { feature: 'Multi-Repo Plugin & Mod Manager', free: '✓', lite: '✓', premium: '✓ Priority CDN' },
+                    { feature: 'World Manager (Dimensions & Gamerules)', free: '✓', lite: '✓', premium: '✓ Instant Clones' },
+                    { feature: 'Dedicated Ports & Allocation', free: 'Dynamic', lite: '1 Dedicated Port', premium: 'Up to 5 Dedicated Ports' },
+                    { feature: 'Subusers & Granular Team RBAC', free: '1 Member', lite: '5 Members', premium: 'Unlimited Subusers' },
+                    { feature: 'Automated Snapshots & S3 Backups', free: '1 Backup', lite: '5 Backups', premium: 'Unlimited Automated' },
+                    { feature: 'Encrypted Root SFTP Access', free: '✓', lite: '✓', premium: '✓ 10 Gbps Pipe' },
+                    { feature: 'Priority Support & VIP Queue', free: 'Standard', lite: 'Standard', premium: 'VIP Ticket Escalation' },
+                    { feature: 'Zero-Ad Panel Experience', free: '✓ 100% Ad-Free', lite: '✓ 100% Ad-Free', premium: '✓ 100% Ad-Free' }
+                  ].map((row, idx) => (
+                    <tr key={idx} className="hover:bg-[#181922] transition-colors">
+                      <td className="py-2.5 px-4 text-neutral-200 font-medium">{row.feature}</td>
+                      <td className="py-2.5 px-4 text-center text-neutral-400 font-mono">{row.free}</td>
+                      <td className="py-2.5 px-4 text-center text-neutral-200 font-mono font-semibold">{row.lite}</td>
+                      <td className="py-2.5 px-4 text-center text-[#f97316] font-mono font-bold">{row.premium}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Sticky Checkout Bar */}
+          <div className="p-4 rounded-xl bg-[#14151b] border border-[#23252e] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-xs text-neutral-400">
+                {selectedPlan === 'lite' ? 'Lite Plan' : `Premium · ${selectedBillingPeriod === '1year' ? '1 year' : selectedBillingPeriod}`}
+              </div>
+              <div className="text-lg font-extrabold text-white font-mono">
+                {selectedPlan === 'lite' ? '€3' : selectedBillingPeriod === '1year' ? '€27' : selectedBillingPeriod === '6months' ? '€14.25' : selectedBillingPeriod === '2years' ? '€51' : selectedBillingPeriod === '3years' ? '€72' : '€2.50'}{' '}
+                <span className="text-xs text-neutral-400 font-normal">one-time payment</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCryptoModal(true);
+                  setCreditAmount(27);
+                }}
+                className="px-4 py-2.5 rounded-lg bg-[#0c0d12] border border-[#23252e] hover:border-neutral-600 text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Pay with crypto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddCreditsModal(true);
+                  setCreditAmount(27);
+                }}
+                className="px-5 py-2.5 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Pay with card
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

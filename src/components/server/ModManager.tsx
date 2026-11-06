@@ -22,6 +22,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
 
   // Search State
   const [query, setQuery] = useState('');
+  const [source, setSource] = useState<'modrinth' | 'curseforge' | 'hangar'>('modrinth');
   const [searchResults, setSearchResults] = useState<ModrinthProject[]>([]);
   const [searching, setSearching] = useState(false);
   const [detectedLoader, setDetectedLoader] = useState('fabric');
@@ -98,21 +99,29 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
     }
   };
 
-  // Search Modrinth Mods
-  const handleSearch = async (e?: React.FormEvent) => {
+  // Auto-fetch popular mods on search tab activation
+  useEffect(() => {
+    if (activeTab === 'search' && searchResults.length === 0 && !searching) {
+      handleSearch(undefined, source, '');
+    }
+  }, [activeTab]);
+
+  // Search Mods across Modrinth, CurseForge & Hangar
+  const handleSearch = async (e?: React.FormEvent, overrideSource?: 'modrinth' | 'curseforge' | 'hangar', queryOverride?: string) => {
     if (e) e.preventDefault();
-    if (!query.trim()) return;
+    const activeSrc = overrideSource || source;
+    const queryStr = queryOverride !== undefined ? queryOverride : query;
     setSearching(true);
     try {
       const res = await apiRequest<ModrinthProject[]>(
-        `/servers/${server.id}/mods/search?q=${encodeURIComponent(query.trim())}`
+        `/servers/${server.id}/mods/search?source=${activeSrc}&q=${encodeURIComponent(queryStr.trim())}`
       );
       if (res.success) {
         setSearchResults(res.data || []);
         if (res.loader) setDetectedLoader(res.loader);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Modrinth search failed');
+      toast.error(err.message || `${activeSrc} search failed`);
     } finally {
       setSearching(false);
     }
@@ -123,9 +132,10 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
     setSelectedProject(project);
     setLoadingDeps(true);
     setSelectedOptionals([]);
+    const pId = (project as any).project_id || project.id || (project as any).slug;
     try {
       const res = await apiRequest<ModDependency[]>(
-        `/servers/${server.id}/mods/dependencies/${project.id}`
+        `/servers/${server.id}/mods/dependencies/${encodeURIComponent(pId)}`
       );
       if (res.success) {
         setDependencies(res.data || []);
@@ -141,13 +151,14 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
   const handleInstallWithDeps = async () => {
     if (!selectedProject) return;
     setInstallingDeps(true);
+    const pId = (selectedProject as any).project_id || selectedProject.id || (selectedProject as any).slug;
     try {
       const res = await apiRequest<{ success: boolean; message: string; restartRequired: boolean; installed: string[] }>(
         `/servers/${server.id}/mods/install-with-deps`,
         {
           method: 'POST',
           body: JSON.stringify({
-            projectId: selectedProject.id,
+            projectId: pId,
             includeOptional: selectedOptionals
           })
         }
@@ -213,7 +224,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
             </span>
           </div>
           <p className="text-xs text-[var(--color-ink-dim)] mt-1">
-            Install and manage Fabric, Forge, and NeoForge mods with automatic dependency resolution
+            Install and manage Fabric, Forge, and NeoForge mods across Modrinth, CurseForge, and Hangar
           </p>
         </div>
 
@@ -236,7 +247,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
                 : 'text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]'
             }`}
           >
-            Search Modrinth
+            Browse Mods (Modrinth / CurseForge / Hangar)
           </button>
           <button
             onClick={() => setActiveTab('modpack')}
@@ -364,24 +375,76 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
         </div>
       )}
 
-      {/* Search Modrinth Tab */}
+      {/* Search Mods Tab */}
       {activeTab === 'search' && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Repository Source Selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#14151b] border border-[#23252e] rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('modrinth');
+                  if (query.trim()) handleSearch(undefined, 'modrinth');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'modrinth' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                Modrinth
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('curseforge');
+                  if (query.trim()) handleSearch(undefined, 'curseforge');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'curseforge' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                CurseForge
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('hangar');
+                  if (query.trim()) handleSearch(undefined, 'hangar');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  source === 'hangar' ? 'bg-[#f97316] text-white shadow-sm' : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                Hangar (PaperMC)
+              </button>
+            </div>
+
+            <span className="text-[11px] text-neutral-400 font-mono">
+              Source: <span className="text-white font-semibold capitalize">{source}</span> &bull; Loader: <span className="text-[#f97316] font-semibold uppercase">{detectedLoader}</span>
+            </span>
+          </div>
+
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-dim)]" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
               <input
                 type="text"
-                placeholder={`Search ${detectedLoader} mods for Minecraft ${server.version || ''} (e.g. Sodium, Lithium, FerriteCore)...`}
+                placeholder={
+                  source === 'curseforge'
+                    ? `Search CurseForge ${detectedLoader} mods for Minecraft ${server.version || ''}...`
+                    : source === 'hangar'
+                    ? `Search Hangar plugins/addons for Minecraft ${server.version || ''}...`
+                    : `Search Modrinth ${detectedLoader} mods for Minecraft ${server.version || ''}...`
+                }
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="field w-full pl-9 pr-3 py-2 text-xs bg-[var(--color-surface)] border border-[var(--color-line)] rounded-lg text-[var(--color-ink)]"
+                className="field w-full pl-9 pr-3 py-2 text-xs bg-[#14151b] border border-[#23252e] rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:border-[#f97316]"
               />
             </div>
             <button
               type="submit"
               disabled={searching}
-              className="btn-primary px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+              className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-[#f97316]/20 transition-all cursor-pointer"
             >
               {searching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
               Search
@@ -436,15 +499,30 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-[var(--color-line)] flex items-center justify-between">
-                    <a
-                      href={`https://modrinth.com/mod/${project.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] flex items-center gap-1"
-                    >
-                      Modrinth Page
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {(() => {
+                      const itemSource = (project as any).source || source;
+                      const externalUrl = itemSource === 'curseforge'
+                        ? `https://www.curseforge.com/minecraft/mc-mods/${project.slug}`
+                        : itemSource === 'hangar'
+                        ? `https://hangar.papermc.io/${(project as any).author || 'papermc'}/${project.slug}`
+                        : `https://modrinth.com/mod/${project.slug}`;
+                      const label = itemSource === 'curseforge'
+                        ? 'CurseForge Page'
+                        : itemSource === 'hangar'
+                        ? 'Hangar Page'
+                        : 'Modrinth Page';
+                      return (
+                        <a
+                          href={externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] flex items-center gap-1"
+                        >
+                          {label}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      );
+                    })()}
 
                     <button
                       onClick={() => handleOpenDependencies(project)}

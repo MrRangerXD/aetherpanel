@@ -1437,7 +1437,7 @@ export interface PluginSidecarEntry {
   projectId?: string;
   version?: string;
   name?: string;
-  source?: 'modrinth' | 'hangar' | 'direct';
+  source?: 'modrinth' | 'hangar' | 'curseforge' | 'direct';
   installedAt?: string;
 }
 
