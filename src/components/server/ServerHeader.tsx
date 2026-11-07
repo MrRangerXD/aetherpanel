@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Wifi, Check, Copy, RotateCw, Play, Square, Skull,
   Box, FileText, Terminal as TerminalIcon, ArrowLeft,
   ChevronDown, ExternalLink, Zap, Info, Shield, Database,
   Clock, Folder, Activity, Key, Sliders, Users, HardDrive,
-  Package, Boxes, Globe, Crown
+  Package, Boxes, Globe, Crown, FolderInput, MessageSquare
 } from 'lucide-react';
 import { Server } from '../../types';
 import { formatMemory } from '../../lib/serverNormalize';
@@ -53,6 +53,22 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
   backupsCount = 0
 }) => {
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close More menu when clicking outside anywhere on document
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setMoreDropdownOpen(false);
+      }
+    };
+    if (moreDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [moreDropdownOpen]);
 
   // Minecraft servers get Plugins, Mods, Players, Worlds, Properties outside in main tabs row!
   const mainTabs = isMinecraft
@@ -85,19 +101,20 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
       ];
 
   const moreTabs = [
-    { id: 'network', label: 'Network & SFTP' },
-    { id: 'monitoring', label: 'Monitoring & Metrics' },
+    { id: 'network', label: 'Network & SFTP', icon: Wifi, desc: 'Allocations & SFTP access' },
+    { id: 'monitoring', label: 'Monitoring', icon: Activity, desc: 'Live CPU & RAM telemetry' },
     ...(isMinecraft
       ? [
-          { id: 'settings', label: 'Settings' },
-          { id: 'env', label: 'Raw .env Editor' }
+          { id: 'settings', label: 'Server Settings', icon: Sliders, desc: 'Container variables & flags' },
+          { id: 'env', label: 'Raw .env Editor', icon: Key, desc: 'Direct environment secrets' }
         ]
       : []),
-    { id: 'importer', label: 'Server Importer' },
-    { id: 'discord', label: 'Discord Bot' }
+    { id: 'importer', label: 'Server Importer', icon: FolderInput, desc: 'Pterodactyl migration' },
+    { id: 'discord', label: 'Discord Bot', icon: MessageSquare, desc: 'Webhooks & notifications' }
   ];
 
-  const isMoreTabActive = moreTabs.some((t) => t.id === activeTab);
+  const activeMoreTab = moreTabs.find((t) => t.id === activeTab);
+  const isMoreTabActive = !!activeMoreTab;
 
   return (
     <div className="border-b border-[#181920] bg-[#09090b] space-y-4 shrink-0 px-4 sm:px-6 pt-4 pb-2">
@@ -289,51 +306,75 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
           })}
         </div>
 
-        {/* More Dropdown (Outside Scroll Container - Never Clipped) */}
-        <div className="shrink-0 relative">
+        {/* More Dropdown (Outside Scroll Container - Never Clipped, Anchored with Ref) */}
+        <div ref={dropdownRef} className="shrink-0 relative">
           <button
+            type="button"
             onClick={() => setMoreDropdownOpen((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap border border-transparent ${
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
               isMoreTabActive
-                ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
-                : 'text-neutral-400 hover:text-white hover:bg-[#14151b] hover:border-[#23252e]'
+                ? 'text-white bg-[#181924] border-[#f97316]/50 shadow-orange-500/10'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b] border-transparent hover:border-[#23252e]'
             }`}
           >
-            <span>More</span>
-            <ChevronDown className="h-3 w-3" />
+            <div className="flex items-center gap-1.5">
+              <span>{isMoreTabActive && activeMoreTab ? activeMoreTab.label : 'More'}</span>
+              {isMoreTabActive && (
+                <span className="h-1.5 w-1.5 rounded-full bg-[#f97316] animate-pulse" />
+              )}
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${moreDropdownOpen ? 'rotate-180 text-[#f97316]' : 'text-neutral-400'}`} />
           </button>
 
           {moreDropdownOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setMoreDropdownOpen(false)}
-              />
-              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-[#14151b] border border-[#23252e] shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95">
-                <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold border-b border-[#23252e]/60 mb-1">
-                  Additional Tools
-                </div>
-                {moreTabs.map((mt) => (
-                  <button
-                    key={mt.id}
-                    onClick={() => {
-                      if (onTabSelect) onTabSelect(mt.id);
-                      setMoreDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                      activeTab === mt.id
-                        ? 'bg-[#181922] text-[#f97316] font-bold'
-                        : 'text-neutral-300 hover:text-white hover:bg-[#1c1e28]'
-                    }`}
-                  >
-                    <span>{mt.label}</span>
-                    {activeTab === mt.id && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#f97316]" />
-                    )}
-                  </button>
-                ))}
+            <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-[#14151b] border border-[#262834] shadow-[0_20px_50px_rgba(0,0,0,0.85)] p-2 z-[999] animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold border-b border-[#23252e]/80 mb-1">
+                <span>Tools & Advanced</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f97316]" />
               </div>
-            </>
+
+              <div className="space-y-1">
+                {moreTabs.map((mt) => {
+                  const Icon = mt.icon;
+                  const isActive = activeTab === mt.id;
+                  return (
+                    <button
+                      key={mt.id}
+                      type="button"
+                      onClick={() => {
+                        if (onTabSelect) onTabSelect(mt.id);
+                        setMoreDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center justify-between group ${
+                        isActive
+                          ? 'bg-[#181924] text-[#f97316] font-bold border border-[#f97316]/30 shadow-inner'
+                          : 'text-neutral-300 hover:text-white hover:bg-[#1c1e28]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`p-1.5 rounded-lg border transition-colors shrink-0 ${
+                          isActive
+                            ? 'bg-[#09090b] border-[#f97316]/40 text-[#f97316]'
+                            : 'bg-[#09090b] border-[#1f212b] text-neutral-400 group-hover:text-white group-hover:border-neutral-700'
+                        }`}>
+                          <Icon className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="truncate">
+                          <div className="truncate font-semibold leading-tight">{mt.label}</div>
+                          {mt.desc && (
+                            <div className="text-[10px] text-neutral-500 truncate leading-tight mt-0.5">{mt.desc}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {isActive && (
+                        <span className="h-2 w-2 rounded-full bg-[#f97316] shadow-sm shadow-orange-500/50 shrink-0 ml-2" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>

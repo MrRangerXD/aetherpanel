@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Server, Shield, Cpu, Terminal, HelpCircle,
   Activity, User, LogIn, Sparkles, BookOpen, Layers,
@@ -220,9 +221,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-20 px-4 animate-in fade-in duration-150">
-      <div
-        className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-start justify-center pt-20 px-4 animate-in fade-in duration-150" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        style={{ willChange: 'transform, opacity', transform: 'translateZ(0)' }}
+        className="w-full max-w-2xl bg-[#09090b] border border-[#23252e] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Search Header */}
@@ -311,7 +317,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           </div>
           <span>AetherPanel Quick Search</span>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

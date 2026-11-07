@@ -126,7 +126,7 @@ function AppContent() {
     return () => window.removeEventListener('popstate', syncRouteFromUrl);
   }, [syncRouteFromUrl]);
 
-  // Programmatic navigation updating browser history
+  // Programmatic navigation updating browser history & smooth scroll-up
   const handleNavigate = useCallback((page: string, params?: any, options?: { replace?: boolean }) => {
     const targetUrl = routeToUrl(page, params);
     
@@ -138,8 +138,27 @@ function AppContent() {
 
     setCurrentPage(page);
     setPageParams(params || {});
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // 60fps smooth scroll-up for window and internal panel viewport
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const viewport = document.getElementById('aether-main-viewport');
+      if (viewport) {
+        viewport.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch {}
   }, []);
+
+  // Guarantee scroll-up on any route change (including back/forward navigation)
+  useEffect(() => {
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const viewport = document.getElementById('aether-main-viewport');
+      if (viewport) {
+        viewport.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch {}
+  }, [currentPage]);
 
   // Fetch servers for quick selector when logged in
   const fetchServers = async () => {
