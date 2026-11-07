@@ -497,17 +497,17 @@ export const AdminNodes: React.FC = () => {
         </div>
 
         {/* TOTAL SERVERS */}
-        <div className="p-4 rounded-xl bg-[#14151b] border border-blue-500/30 flex flex-col justify-between">
+        <div className="p-4 rounded-xl bg-[#14151b] border border-[#f97316]/30 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-medium tracking-wider text-blue-400 uppercase">
+            <span className="text-[11px] font-mono font-medium tracking-wider text-[#f97316] uppercase">
               Total Servers
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <div className="w-7 h-7 rounded-lg bg-[#f97316]/10 border border-[#f97316]/20 flex items-center justify-center text-[#f97316]">
               <Server className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-bold text-blue-400 font-mono">{totalServersCount}</div>
+            <div className="text-2xl font-bold text-[#f97316] font-mono">{totalServersCount}</div>
             <div className="text-[11px] text-neutral-500 mt-0.5">across all nodes</div>
           </div>
         </div>
@@ -911,7 +911,7 @@ export const AdminNodes: React.FC = () => {
                                 <div className="font-bold text-white flex items-center gap-2">
                                   <span>{node.name}</span>
                                   {node.isLocal && (
-                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/20">
                                       LOCAL
                                     </span>
                                   )}
@@ -1094,7 +1094,7 @@ export const AdminNodes: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold text-white">{viewingNode.name}</h3>
                     {viewingNode.isLocal && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/20">
                         LOCAL
                       </span>
                     )}
@@ -1235,7 +1235,7 @@ export const AdminNodes: React.FC = () => {
                   <div className="p-4 rounded-xl bg-[#0c0d12] border border-[#23252e] space-y-3">
                     <div className="flex items-center justify-between text-xs text-neutral-400">
                       <span className="font-mono uppercase font-semibold">Disk Allocated</span>
-                      <HardDrive className="w-4 h-4 text-blue-400" />
+                      <HardDrive className="w-4 h-4 text-amber-400" />
                     </div>
                     <div>
                       <div className="text-xl font-bold font-mono text-white">
@@ -1243,7 +1243,7 @@ export const AdminNodes: React.FC = () => {
                       </div>
                       <div className="w-full bg-[#1e2029] h-2 rounded-full mt-2 overflow-hidden">
                         <div
-                          className="bg-blue-500 h-full rounded-full transition-all"
+                          className="bg-amber-500 h-full rounded-full transition-all"
                           style={{
                             width: `${Math.min(100, Math.round(((viewingNode.usedDiskGB || 0) / Math.max(1, viewingNode.totalDiskGB || Math.round((viewingNode.disk || 102400) / 1024))) * 100))}%`
                           }}
@@ -1377,7 +1377,7 @@ export const AdminNodes: React.FC = () => {
                         key={alloc.id}
                         className={`p-2.5 rounded-lg border text-center font-mono text-xs ${
                           alloc.isAssigned || alloc.assigned
-                            ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                            ? 'bg-[#f97316]/10 border-[#f97316]/30 text-[#f97316]'
                             : 'bg-[#0c0d12] border-[#23252e] text-neutral-300'
                         }`}
                       >

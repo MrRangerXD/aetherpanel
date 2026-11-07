@@ -44,107 +44,194 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
     return server.version ? `Nodejs ${server.version}` : 'Nodejs 25';
   });
 
-  // Egg variables matching Orihost screenshot (image_f10f972e.png)
-  const [variables, setVariables] = useState<EggVariable[]>([
-    {
-      key: 'GIT_ADDRESS',
-      name: 'Git Repo Address',
-      envName: 'GIT_ADDRESS',
-      description: 'GitHub Repo to clone i.e. https://github.com/parkervcp/repo_name',
-      type: 'text',
-      defaultValue: '',
-      value: '',
-      placeholder: 'https://github.com/username/repo'
-    },
-    {
-      key: 'BRANCH',
-      name: 'Install Branch',
-      envName: 'BRANCH',
-      description: 'The branch to install.',
-      type: 'text',
-      defaultValue: 'main',
-      value: 'main',
-      placeholder: 'main'
-    },
-    {
-      key: 'USER_UPLOAD',
-      name: 'User Uploaded Files',
-      envName: 'USER_UPLOAD',
-      description: 'Skip all the install stuff if you are letting a user upload files. 0 = false (default) 1 = true',
-      type: 'boolean',
-      defaultValue: '0',
-      value: '0'
-    },
-    {
-      key: 'AUTO_UPDATE',
-      name: 'Auto Update',
-      envName: 'AUTO_UPDATE',
-      description: 'Pull the latest files on startup when using a GitHub repo.',
-      type: 'boolean',
-      defaultValue: '0',
-      value: '0'
-    },
-    {
-      key: isPython ? 'PYTHON_PACKAGES' : isBun ? 'BUN_PACKAGES' : 'NODE_PACKAGES',
-      name: isPython ? 'Additional Python packages' : isBun ? 'Additional Bun packages' : 'Additional Node packages',
-      envName: isPython ? 'PYTHON_PACKAGES' : isBun ? 'BUN_PACKAGES' : 'NODE_PACKAGES',
-      description: 'Install additional packages. Use spaces to separate.',
-      type: 'text',
-      defaultValue: '',
-      value: '',
-      placeholder: isPython ? 'requests discord.py pyyaml' : 'express dotenv discord.js'
-    },
-    {
-      key: 'USERNAME',
-      name: 'Git Username',
-      envName: 'USERNAME',
-      description: 'Username to auth with git.',
-      type: 'text',
-      defaultValue: '',
-      value: '',
-      placeholder: 'git-username'
-    },
-    {
-      key: 'ACCESS_TOKEN',
-      name: 'Git Access Token',
-      envName: 'ACCESS_TOKEN',
-      description: 'Password to use with git. Recommended: GitHub Personal Access Token.',
-      type: 'password',
-      defaultValue: '',
-      value: '',
-      placeholder: 'ghp_xxxxxxxxxxxx'
-    },
-    {
-      key: isPython ? 'UNINSTALL_PACKAGES' : 'UNNODE_PACKAGES',
-      name: isPython ? 'Uninstall Python packages' : 'Uninstall Node packages',
-      envName: isPython ? 'UNINSTALL_PACKAGES' : 'UNNODE_PACKAGES',
-      description: 'Uninstall packages on startup. Use spaces to separate.',
-      type: 'text',
-      defaultValue: '',
-      value: '',
-      placeholder: 'unused-package'
-    },
-    {
-      key: 'MAIN_FILE',
-      name: 'Main file',
-      envName: 'MAIN_FILE',
-      description: 'The file that starts the app. Can be .js, .ts, or .py.',
-      type: 'text',
-      defaultValue: isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js',
-      value: server.startup?.entryFile || (isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js'),
-      placeholder: isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js'
-    },
-    {
-      key: isPython ? 'PYTHON_ARGS' : isBun ? 'BUN_ARGS' : 'NODE_ARGS',
-      name: 'Additional Arguments',
-      envName: isPython ? 'PYTHON_ARGS' : isBun ? 'BUN_ARGS' : 'NODE_ARGS',
-      description: 'Any extra CLI arguments passed to the runtime.',
-      type: 'text',
-      defaultValue: '',
-      value: '',
-      placeholder: '--inspect --trace-warnings'
+  // Egg variables matching Pterodactyl Minecraft Egg vs Bot Hosting
+  const [variables, setVariables] = useState<EggVariable[]>(() => {
+    if (isMinecraft) {
+      return [
+        {
+          key: 'SERVER_JARFILE',
+          name: 'Server Jar File',
+          envName: 'SERVER_JARFILE',
+          description: 'The name of the executable jar file to run (e.g., server.jar, paper.jar, purpur.jar).',
+          type: 'text',
+          defaultValue: server.startup?.serverJar || 'server.jar',
+          value: server.startup?.serverJar || 'server.jar',
+          placeholder: 'server.jar'
+        },
+        {
+          key: 'MINECRAFT_VERSION',
+          name: 'Minecraft Version',
+          envName: 'MINECRAFT_VERSION',
+          description: 'The Minecraft game version to execute. Use "latest" or specific version like 1.21.4, 1.20.4, 1.16.5.',
+          type: 'text',
+          defaultValue: server.version || 'latest',
+          value: server.version || 'latest',
+          placeholder: 'latest'
+        },
+        {
+          key: 'BUILD_NUMBER',
+          name: 'Build Number',
+          envName: 'BUILD_NUMBER',
+          description: 'The build number for the chosen server software jar, or "latest" to pull current stable release.',
+          type: 'text',
+          defaultValue: 'latest',
+          value: 'latest',
+          placeholder: 'latest'
+        },
+        {
+          key: 'JAVA_VERSION',
+          name: 'Java Environment Version',
+          envName: 'JAVA_VERSION',
+          description: 'OpenJDK runtime specification. Java 21 for 1.20.5+, Java 17 for 1.18+, Java 11 for 1.16, Java 8 for 1.8-1.12.',
+          type: 'text',
+          defaultValue: '21',
+          value: '21',
+          placeholder: '21'
+        },
+        {
+          key: 'JVM_FLAGS',
+          name: 'JVM & Aikar Flags',
+          envName: 'JVM_FLAGS',
+          description: 'Optimized G1GC flags for Minecraft server performance and garbage collection tuning.',
+          type: 'text',
+          defaultValue: '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch',
+          value: server.startup?.jvmFlags || '-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch',
+          placeholder: '-XX:+UseG1GC -XX:+ParallelRefProcEnabled'
+        },
+        {
+          key: 'ONLINE_MODE',
+          name: 'Online Mode Authentication',
+          envName: 'ONLINE_MODE',
+          description: 'Verify player accounts with Mojang session servers. Set to Disabled (0) for offline/cracked networks.',
+          type: 'boolean',
+          defaultValue: '1',
+          value: '1'
+        },
+        {
+          key: 'SERVER_PORT',
+          name: 'Primary Port',
+          envName: 'SERVER_PORT',
+          description: 'Allocated game port for incoming player socket connections.',
+          type: 'text',
+          defaultValue: String(server.primaryPort || 25565),
+          value: String(server.primaryPort || 25565),
+          placeholder: '25565'
+        },
+        {
+          key: 'VIEW_DISTANCE',
+          name: 'View Distance',
+          envName: 'VIEW_DISTANCE',
+          description: 'Server chunk render and sync distance radius (default 10).',
+          type: 'text',
+          defaultValue: '10',
+          value: '10',
+          placeholder: '10'
+        }
+      ];
     }
-  ]);
+
+    // Bot Hosting runtime variables (Python, Node.js, Bun)
+    return [
+      {
+        key: 'GIT_ADDRESS',
+        name: 'Git Repo Address',
+        envName: 'GIT_ADDRESS',
+        description: 'Git repository to clone on startup (e.g., https://github.com/username/bot-repo).',
+        type: 'text',
+        defaultValue: '',
+        value: '',
+        placeholder: 'https://github.com/username/repo'
+      },
+      {
+        key: 'BRANCH',
+        name: 'Install Branch',
+        envName: 'BRANCH',
+        description: 'The git branch to checkout and run.',
+        type: 'text',
+        defaultValue: 'main',
+        value: 'main',
+        placeholder: 'main'
+      },
+      {
+        key: 'USER_UPLOAD',
+        name: 'User Uploaded Files',
+        envName: 'USER_UPLOAD',
+        description: 'Skip git cloning if you manually uploaded source files via File Manager or SFTP. 0 = clone, 1 = skip.',
+        type: 'boolean',
+        defaultValue: '0',
+        value: '0'
+      },
+      {
+        key: 'AUTO_UPDATE',
+        name: 'Auto Update',
+        envName: 'AUTO_UPDATE',
+        description: 'Execute git pull origin on every container startup.',
+        type: 'boolean',
+        defaultValue: '0',
+        value: '0'
+      },
+      {
+        key: isPython ? 'PYTHON_PACKAGES' : isBun ? 'BUN_PACKAGES' : 'NODE_PACKAGES',
+        name: isPython ? 'Additional Python packages' : isBun ? 'Additional Bun packages' : 'Additional Node packages',
+        envName: isPython ? 'PYTHON_PACKAGES' : isBun ? 'BUN_PACKAGES' : 'NODE_PACKAGES',
+        description: 'Install additional packages on boot. Space separated.',
+        type: 'text',
+        defaultValue: '',
+        value: '',
+        placeholder: isPython ? 'requests discord.py pyyaml' : 'express dotenv discord.js'
+      },
+      {
+        key: 'USERNAME',
+        name: 'Git Username',
+        envName: 'USERNAME',
+        description: 'Username for private git repository cloning.',
+        type: 'text',
+        defaultValue: '',
+        value: '',
+        placeholder: 'git-username'
+      },
+      {
+        key: 'ACCESS_TOKEN',
+        name: 'Git Access Token',
+        envName: 'ACCESS_TOKEN',
+        description: 'Personal Access Token (PAT) for private repository authentication.',
+        type: 'password',
+        defaultValue: '',
+        value: '',
+        placeholder: 'ghp_xxxxxxxxxxxx'
+      },
+      {
+        key: isPython ? 'UNINSTALL_PACKAGES' : 'UNNODE_PACKAGES',
+        name: isPython ? 'Uninstall Python packages' : 'Uninstall Node packages',
+        envName: isPython ? 'UNINSTALL_PACKAGES' : 'UNNODE_PACKAGES',
+        description: 'Uninstall unwanted packages on startup.',
+        type: 'text',
+        defaultValue: '',
+        value: '',
+        placeholder: 'unused-package'
+      },
+      {
+        key: 'MAIN_FILE',
+        name: 'Main Entry File',
+        envName: 'MAIN_FILE',
+        description: 'The startup script executed by the container runtime.',
+        type: 'text',
+        defaultValue: isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js',
+        value: server.startup?.entryFile || (isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js'),
+        placeholder: isPython ? 'main.py' : isBun ? 'src/index.ts' : 'src/index.js'
+      },
+      {
+        key: isPython ? 'PYTHON_ARGS' : isBun ? 'BUN_ARGS' : 'NODE_ARGS',
+        name: 'Additional Runtime Arguments',
+        envName: isPython ? 'PYTHON_ARGS' : isBun ? 'BUN_ARGS' : 'NODE_ARGS',
+        description: 'Extra CLI flags passed directly to runtime engine.',
+        type: 'text',
+        defaultValue: '',
+        value: '',
+        placeholder: '--trace-warnings'
+      }
+    ];
+  });
 
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
@@ -188,11 +275,11 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
   // Generate resolved live startup command based on runtime
   const compiledStartupCommand = React.useMemo(() => {
     if (isMinecraft) {
+      const jarVal = variables.find((v) => v.key === 'SERVER_JARFILE')?.value || server.startup?.serverJar || 'server.jar';
+      const flagsVal = variables.find((v) => v.key === 'JVM_FLAGS')?.value || server.startup?.jvmFlags || '-XX:+UseG1GC -XX:+ParallelRefProcEnabled';
       const xmx = server.startup?.xmxMB || server.limits?.ramMB || 4096;
       const xms = server.startup?.xmsMB || 512;
-      const jar = server.startup?.serverJar || 'server.jar';
-      const flags = server.startup?.jvmFlags || '-XX:+UseG1GC -XX:+ParallelRefProcEnabled';
-      return `java -Xms${xms}M -Xmx${xmx}M ${flags} -jar ${jar} nogui`;
+      return `java -Xms${xms}M -Xmx${xmx}M ${flagsVal} -jar ${jarVal} nogui`;
     }
 
     if (isPython) {
@@ -205,7 +292,7 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
 
     // Default Node.js
     return `missing=""; [[ -z "\${GIT_ADDRESS}" ]] && missing+="GIT_ADDRESS "; [[ -z "\${BRANCH}" ]] && missing+="BRANCH "; if [[ -n "\${GIT_ADDRESS}" && ! -d ".git" ]]; then git clone --branch "\${BRANCH:-main}" "\${GIT_ADDRESS}" .; elif [[ "\${AUTO_UPDATE}" == "1" ]]; then git pull origin "\${BRANCH:-main}"; fi; if [[ -n "\${NODE_PACKAGES}" ]]; then npm install \${NODE_PACKAGES}; fi; if [ -f /home/container/package.json ]; then npm install; fi; node ${mainFileVal} ${argsVal}`.trim();
-  }, [isMinecraft, isPython, isBun, mainFileVal, argsVal, server]);
+  }, [isMinecraft, isPython, isBun, mainFileVal, argsVal, server, variables]);
 
   const handleCopyCommand = () => {
     navigator.clipboard.writeText(compiledStartupCommand);
@@ -234,18 +321,37 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
       if (verMatch) extractedVer = verMatch[1];
 
       // 3. Update server startup config
-      await apiRequest(`/servers/${server.id}/startup`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          version: extractedVer,
-          entryFile: mainFileVal,
-          startup: {
-            compiledCommand: compiledStartupCommand,
+      if (isMinecraft) {
+        const jarVal = variables.find((v) => v.key === 'SERVER_JARFILE')?.value || 'server.jar';
+        const flagsVal = variables.find((v) => v.key === 'JVM_FLAGS')?.value || '';
+        await apiRequest(`/servers/${server.id}/startup`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            version: extractedVer,
+            entryFile: jarVal,
+            startup: {
+              compiledCommand: compiledStartupCommand,
+              serverJar: jarVal,
+              jvmFlags: flagsVal,
+              entryFile: jarVal,
+              dockerImage: selectedImage
+            }
+          })
+        });
+      } else {
+        await apiRequest(`/servers/${server.id}/startup`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            version: extractedVer,
             entryFile: mainFileVal,
-            dockerImage: selectedImage
-          }
-        })
-      });
+            startup: {
+              compiledCommand: compiledStartupCommand,
+              entryFile: mainFileVal,
+              dockerImage: selectedImage
+            }
+          })
+        });
+      }
 
       showToastMsg('success', 'Startup configuration and variables saved successfully!');
       if (onRefreshServer) onRefreshServer();

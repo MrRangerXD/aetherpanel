@@ -100,7 +100,7 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
   const isMoreTabActive = moreTabs.some((t) => t.id === activeTab);
 
   return (
-    <div className="border-b border-[#23252e] bg-[#0c0d12] space-y-4 shrink-0 px-4 sm:px-6 pt-4 pb-2">
+    <div className="border-b border-[#181920] bg-[#09090b] space-y-4 shrink-0 px-4 sm:px-6 pt-4 pb-2">
       {/* 1. Breadcrumb row (Orihost image_00688f85.png) */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
         <div className="flex items-center gap-2 font-mono">
@@ -260,9 +260,10 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
         </div>
       </div>
 
-      {/* 3. Orihost Horizontal Sub-Navigation Tabs Row (image_00688f85.png) */}
-      <div className="flex items-center justify-between border-t border-[#23252e]/80 pt-2 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1 sm:gap-2">
+      {/* 3. Horizontal Sub-Navigation Tabs Row */}
+      <div className="flex items-center justify-between border-t border-[#23252e]/80 pt-2 relative overflow-visible gap-2">
+        {/* Scrollable Main Tabs Row */}
+        <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-1 sm:gap-2 py-0.5">
           {mainTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -270,7 +271,7 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
               <button
                 key={tab.id}
                 onClick={() => onTabSelect && onTabSelect(tab.id)}
-                className={`relative flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                className={`relative flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   isActive
                     ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
                     : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
@@ -286,23 +287,32 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
               </button>
             );
           })}
+        </div>
 
-          {/* More Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setMoreDropdownOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                isMoreTabActive
-                  ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
-                  : 'text-neutral-400 hover:text-white hover:bg-[#14151b]'
-              }`}
-            >
-              <span>More</span>
-              <ChevronDown className="h-3 w-3" />
-            </button>
+        {/* More Dropdown (Outside Scroll Container - Never Clipped) */}
+        <div className="shrink-0 relative">
+          <button
+            onClick={() => setMoreDropdownOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap border border-transparent ${
+              isMoreTabActive
+                ? 'text-white bg-[#181922] border-b-2 border-[#f97316]'
+                : 'text-neutral-400 hover:text-white hover:bg-[#14151b] hover:border-[#23252e]'
+            }`}
+          >
+            <span>More</span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
 
-            {moreDropdownOpen && (
-              <div className="absolute left-0 top-full mt-1 w-48 rounded-xl bg-[#14151b] border border-[#23252e] shadow-2xl p-1 z-50 animate-in fade-in slide-in-from-top-2">
+          {moreDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setMoreDropdownOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-[#14151b] border border-[#23252e] shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95">
+                <div className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold border-b border-[#23252e]/60 mb-1">
+                  Additional Tools
+                </div>
                 {moreTabs.map((mt) => (
                   <button
                     key={mt.id}
@@ -310,18 +320,21 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
                       if (onTabSelect) onTabSelect(mt.id);
                       setMoreDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
                       activeTab === mt.id
                         ? 'bg-[#181922] text-[#f97316] font-bold'
                         : 'text-neutral-300 hover:text-white hover:bg-[#1c1e28]'
                     }`}
                   >
-                    {mt.label}
+                    <span>{mt.label}</span>
+                    {activeTab === mt.id && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#f97316]" />
+                    )}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
 

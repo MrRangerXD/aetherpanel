@@ -683,37 +683,37 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
         {/* Left Column: Terminal Console Window */}
         <div className="col-span-1 lg:col-span-3 space-y-3">
           {/* Console Top Control Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 rounded-xl bg-[#14151b] border border-[#23252e]">
             <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
               {/* Connection Status Indicator */}
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono">
-                <span className="text-[var(--color-ink-mute)]">Socket:</span>
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#0c0d12] border border-[#23252e] text-xs font-mono">
+                <span className="text-neutral-500">Socket:</span>
                 {wsStatus === 'CONNECTED' && (
-                  <span className="flex items-center gap-1.5 text-[var(--color-ok)] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-ok)] animate-pulse" />
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     CONNECTED
                   </span>
                 )}
                 {wsStatus === 'CONNECTING' && (
-                  <span className="flex items-center gap-1.5 text-[var(--color-warn)] font-medium">
+                  <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                     <RotateCw className="h-3 w-3 animate-spin" />
                     CONNECTING
                   </span>
                 )}
                 {wsStatus === 'RECONNECTING' && (
-                  <span className="flex items-center gap-1.5 text-[var(--color-warn)] font-medium">
+                  <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                     <RotateCw className="h-3 w-3 animate-spin" />
                     RECONNECTING
                   </span>
                 )}
                 {wsStatus === 'DISCONNECTED' && (
-                  <span className="flex items-center gap-1.5 text-[var(--color-ink-mute)] font-medium">
+                  <span className="flex items-center gap-1.5 text-neutral-400 font-medium">
                     <WifiOff className="h-3 w-3" />
                     DISCONNECTED
                   </span>
                 )}
                 {wsStatus === 'ERROR' && (
-                  <span className="flex items-center gap-1.5 text-[var(--color-err)] font-medium">
+                  <span className="flex items-center gap-1.5 text-rose-400 font-medium">
                     <AlertTriangle className="h-3 w-3" />
                     SOCKET ERROR
                   </span>
@@ -721,38 +721,38 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
               </div>
 
               {/* Buffer Length Indicator */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs font-mono">
-                <span className="text-[var(--color-ink-mute)]">Buffer:</span>
-                <span className="text-[var(--color-ink)] font-semibold">{logs.length}</span>
-                <span className="text-[var(--color-ink-mute)] hidden xs:inline">/ {MAX_BUFFER_LINES}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0c0d12] border border-[#23252e] text-xs font-mono">
+                <span className="text-neutral-500">Buffer:</span>
+                <span className="text-neutral-200 font-semibold">{logs.length}</span>
+                <span className="text-neutral-500 hidden xs:inline">/ {MAX_BUFFER_LINES}</span>
               </div>
             </div>
 
             {/* Quick Actions (Search, Copy, Download, Clear) */}
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1 sm:flex-none">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-ink-mute)]" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-500" />
                 <input
                   type="text"
                   value={filterQuery}
                   onChange={(e) => setFilterQuery(e.target.value)}
                   placeholder="Filter logs..."
-                  className="w-full sm:w-40 pl-8 pr-2.5 py-1 rounded-md bg-[var(--color-surface-2)] border border-[var(--color-line)] text-xs text-[var(--color-ink)] placeholder-[var(--color-ink-mute)] focus:outline-none focus:border-[var(--color-accent)] transition-colors font-mono"
+                  className="w-full sm:w-44 pl-8 pr-2.5 py-1 rounded-lg bg-[#0c0d12] border border-[#23252e] text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#f97316] transition-colors font-mono"
                 />
               </div>
 
               <button
                 onClick={handleCopyLogs}
                 title="Copy Terminal Logs"
-                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+                className="p-1.5 rounded-lg bg-[#0c0d12] hover:bg-[#181920] border border-[#23252e] text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0"
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-[var(--color-ok)]" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
 
               <button
                 onClick={handleDownloadLogs}
                 title="Download Logs"
-                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+                className="p-1.5 rounded-lg bg-[#0c0d12] hover:bg-[#181920] border border-[#23252e] text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
@@ -760,7 +760,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
               <button
                 onClick={handleClearLogs}
                 title="Clear View"
-                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-err)]/10 hover:border-[var(--color-err)]/30 border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-err)] transition-colors cursor-pointer shrink-0"
+                className="p-1.5 rounded-lg bg-[#0c0d12] hover:bg-rose-950/40 hover:border-rose-500/40 border border-[#23252e] text-neutral-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -771,9 +771,9 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
                   connectWebSocket();
                 }}
                 title="Reconnect Stream"
-                className="p-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-line)] text-[var(--color-ink-mute)] hover:text-[var(--color-ink)] transition-colors cursor-pointer shrink-0"
+                className="p-1.5 rounded-lg bg-[#0c0d12] hover:bg-[#181920] border border-[#23252e] text-neutral-400 hover:text-[#f97316] transition-colors cursor-pointer shrink-0"
               >
-                <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING' ? 'animate-spin text-[var(--color-accent)]' : ''}`} />
+                <RotateCw className={`h-3.5 w-3.5 ${wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING' ? 'animate-spin text-[#f97316]' : ''}`} />
               </button>
             </div>
           </div>
@@ -786,47 +786,47 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
               onScroll={handleScroll}
               tabIndex={0}
               style={{ overscrollBehavior: 'contain' }}
-              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4 font-mono text-xs text-[var(--color-ink)] h-[460px] sm:h-[500px] overflow-y-auto overflow-x-auto space-y-0.5 focus:outline-none focus:border-[var(--color-accent)]"
+              className="rounded-xl border border-[#23252e] bg-[#0c0d12] p-4 font-mono text-xs text-neutral-200 h-[460px] sm:h-[500px] overflow-y-auto overflow-x-auto space-y-0.5 focus:outline-none focus:border-[#f97316]"
             >
               {filteredLogs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--color-ink-mute)] space-y-2 select-none">
-                  <TerminalIcon className="h-8 w-8 text-[var(--color-ink-mute)] opacity-40" />
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-neutral-500 space-y-2 select-none">
+                  <TerminalIcon className="h-8 w-8 text-neutral-600 opacity-40" />
                   {filterQuery ? (
                     <div>
-                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">No matching log lines found.</p>
-                      <p className="text-[11px] text-[var(--color-ink-mute)]">Try adjusting or clearing your search filter query.</p>
+                      <p className="font-semibold text-neutral-300 text-xs">No matching log lines found.</p>
+                      <p className="text-[11px] text-neutral-500">Try adjusting or clearing your search filter query.</p>
                     </div>
                   ) : isStarting ? (
                     <div className="space-y-1">
-                      <div className="flex items-center justify-center gap-2 text-[var(--color-warn)] font-medium text-xs">
+                      <div className="flex items-center justify-center gap-2 text-amber-400 font-medium text-xs">
                         <RotateCw className="h-3.5 w-3.5 animate-spin" />
                         <span>Starting server container...</span>
                       </div>
-                      <p className="text-[11px] text-[var(--color-ink-mute)]">Initializing runtime environment and attaching stdout stream...</p>
+                      <p className="text-[11px] text-neutral-500">Initializing runtime environment and attaching stdout stream...</p>
                     </div>
                   ) : isStopping ? (
                     <div className="space-y-1">
-                      <div className="flex items-center justify-center gap-2 text-[var(--color-warn)] font-medium text-xs">
+                      <div className="flex items-center justify-center gap-2 text-amber-400 font-medium text-xs">
                         <RotateCw className="h-3.5 w-3.5 animate-spin" />
                         <span>Stopping server...</span>
                       </div>
-                      <p className="text-[11px] text-[var(--color-ink-mute)]">Sending graceful shutdown signal to active process...</p>
+                      <p className="text-[11px] text-neutral-500">Sending graceful shutdown signal to active process...</p>
                     </div>
                   ) : isRunning ? (
                     <div>
-                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">Live container active (PID: {server.startup?.pid || 'Attached'}).</p>
-                      <p className="text-[11px] text-[var(--color-ink-mute)]">Waiting for process stdout/stderr emissions...</p>
+                      <p className="font-semibold text-neutral-300 text-xs">Live container active (PID: {server.startup?.pid || 'Attached'}).</p>
+                      <p className="text-[11px] text-neutral-500">Waiting for process stdout/stderr emissions...</p>
                     </div>
                   ) : (
                     <div className="space-y-2 max-w-sm">
-                      <p className="font-semibold text-[var(--color-ink-dim)] text-xs">Server is offline.</p>
-                      <p className="text-[11px] text-[var(--color-ink-mute)]">
+                      <p className="font-semibold text-neutral-300 text-xs">Server is offline.</p>
+                      <p className="text-[11px] text-neutral-500">
                         Start the server to view live console output.
                       </p>
                       {onPowerAction && (
                         <button
                           onClick={() => onPowerAction('start')}
-                          className="mt-2 btn btn-primary text-xs"
+                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
                         >
                           <Play className="h-3 w-3 fill-current" />
                           <span>Start Server</span>
@@ -841,7 +841,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
                   return (
                     <div
                       key={idx}
-                      className={`leading-relaxed whitespace-pre font-mono text-[11px] w-max min-w-full ${colorClass} hover:bg-[var(--color-surface-2)]/60 px-1 rounded transition-colors`}
+                      className={`leading-relaxed whitespace-pre font-mono text-[11px] w-max min-w-full ${colorClass} hover:bg-[#181920]/60 px-1 rounded transition-colors`}
                     >
                       {cleaned}
                     </div>
@@ -855,7 +855,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
               <button
                 type="button"
                 onClick={handleJumpToBottom}
-                className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-white font-medium text-xs transition-colors z-10 cursor-pointer anim-fade-in"
+                className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f97316] text-white font-medium text-xs transition-colors z-10 cursor-pointer shadow-lg"
               >
                 <ArrowDown className="h-3 w-3" />
                 <span>{unreadCount > 0 ? `↓ ${unreadCount} New` : 'Scroll to bottom'}</span>
@@ -867,7 +867,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           <form onSubmit={(e) => handleSendCommand(e)} className="space-y-2">
             <div className="relative flex items-center gap-2">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[var(--color-ink-mute)] text-xs font-bold select-none">&gt;</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-neutral-500 text-xs font-bold select-none">&gt;</span>
                 <input
                   type="text"
                   value={command}
@@ -881,11 +881,11 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
                       ? 'Server is starting... input queued'
                       : 'Server is offline. Start server to send commands.'
                   }
-                  className="field w-full pl-7 pr-16 text-xs font-mono"
+                  className="w-full pl-7 pr-16 py-2.5 rounded-xl bg-[#0c0d12] border border-[#23252e] text-xs font-mono text-white placeholder-neutral-500 focus:outline-none focus:border-[#f97316] transition-colors"
                 />
                 {lastAck && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--color-ok)] bg-[var(--color-ok)]/10 border border-[var(--color-ok)]/30 px-1.5 py-0.5 rounded hidden xs:inline-flex items-center gap-1">
-                    <Check className="w-3 h-3 text-[var(--color-ok)]" /> {lastAck}
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded hidden xs:inline-flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" /> {lastAck}
                   </span>
                 )}
               </div>
@@ -893,7 +893,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
               <button
                 type="submit"
                 disabled={!command.trim() || (!isRunning && !isStarting) || isSubmitting}
-                className="btn btn-primary text-xs shrink-0"
+                className="px-4 py-2.5 rounded-xl bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 {isSubmitting ? (
                   <RotateCw className="h-3.5 w-3.5 animate-spin" />
@@ -907,7 +907,7 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
             {/* Quick Command Suggestions */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[var(--color-ink-mute)] font-mono text-[10px] mr-1">Quick:</span>
+                <span className="text-neutral-500 font-mono text-[10px] mr-1">Quick:</span>
                 {quickCommands.map((q) => (
                   <button
                     key={q.cmd}
@@ -915,14 +915,14 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
                     disabled={!isRunning}
                     onClick={() => handleSendCommand(undefined, q.cmd)}
                     title={q.desc}
-                    className="btn btn-ghost text-[10px] font-mono py-0.5 px-2 h-auto"
+                    className="px-2 py-0.5 rounded-lg bg-[#14151b] border border-[#23252e] hover:border-[#f97316] text-neutral-400 hover:text-white transition-colors cursor-pointer text-[10px] font-mono disabled:opacity-40"
                   >
                     {q.label}
                   </button>
                 ))}
               </div>
 
-              <div className="text-[10px] text-[var(--color-ink-mute)] font-mono flex items-center gap-2">
+              <div className="text-[10px] text-neutral-500 font-mono flex items-center gap-2">
                 <span>↑↓ history</span>
                 <span>•</span>
                 <span>stdin active</span>
@@ -932,47 +932,47 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
         </div>
 
         {/* ─────────────────────────────────────────────────────────────────────────
-            RIGHT COLUMN: 7 REAL TELEMETRY CARDS (EXACT MATCH FOR PTERODACTYL)
+            RIGHT COLUMN: 7 REAL TELEMETRY CARDS (DASHBOARD WARM ORANGE & ZINC THEME)
         ───────────────────────────────────────────────────────────────────────── */}
         <div className="col-span-1 lg:col-span-1 space-y-2">
           {/* 1. Address Card */}
           <div
             onClick={handleCopyAddress}
-            className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] hover:border-[var(--color-line)]/80 transition-colors cursor-pointer group relative overflow-hidden"
+            className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e] hover:border-[#323542] transition-colors cursor-pointer group relative overflow-hidden"
             title="Click to copy Address"
           >
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)] group-hover:text-[var(--color-accent)] transition-colors">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316] group-hover:border-[#f97316]/40 transition-colors">
                 <Wifi className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Address</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate flex items-center gap-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Address</div>
+                <div className="text-xs font-semibold text-white font-mono truncate flex items-center gap-1 mt-0.5">
                   <span className="truncate">{serverAddress}</span>
                   {addressCopied ? (
-                    <Check className="h-3 w-3 text-[var(--color-ok)] shrink-0" />
+                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
                   ) : (
-                    <Copy className="h-3 w-3 text-[var(--color-ink-mute)] group-hover:text-[var(--color-ink)] transition-colors shrink-0 opacity-0 group-hover:opacity-100" />
+                    <Copy className="h-3 w-3 text-neutral-500 group-hover:text-white transition-colors shrink-0 opacity-0 group-hover:opacity-100" />
                   )}
                 </div>
               </div>
             </div>
             {addressCopied && (
-              <span className="absolute top-2 right-2 text-[9px] font-mono text-[var(--color-ok)] bg-[var(--color-ok)]/10 px-1 py-0.2 rounded border border-[var(--color-ok)]/30">
+              <span className="absolute top-2 right-2 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/30">
                 Copied!
               </span>
             )}
           </div>
 
           {/* 2. Uptime Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e]">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <Clock className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Uptime</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Uptime</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   {formattedUptime}
                 </div>
               </div>
@@ -980,23 +980,25 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           </div>
 
           {/* 3. CPU Load Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e] space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <Cpu className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">CPU Load</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">CPU Load</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   {isRunning ? `${realCpuPercent.toFixed(2)}%` : '0.00%'}
-                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {maxCpuPercent}%</span>
+                  <span className="text-[10px] text-neutral-400 font-normal ml-1">/ {maxCpuPercent}%</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+            <div className="h-1.5 w-full bg-[#1e2029] rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  (realCpuPercent / (maxCpuPercent || 100)) * 100 > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
+                className={`h-full rounded-full transition-all duration-300 ${
+                  (realCpuPercent / (maxCpuPercent || 100)) * 100 > 95
+                    ? 'bg-gradient-to-r from-rose-500 to-red-600'
+                    : 'bg-gradient-to-r from-amber-500 to-[#f97316]'
                 }`}
                 style={{ width: `${Math.min(100, (realCpuPercent / (maxCpuPercent || 100)) * 100)}%` }}
               />
@@ -1004,23 +1006,25 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           </div>
 
           {/* 4. Memory Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e] space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <Layers className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Memory</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Memory</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   {isRunning ? `${(realUsedRamMB / 1024).toFixed(2)} GB` : '0.00 GB'}
-                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {(realTotalRamMB / 1024).toFixed(2)} GB</span>
+                  <span className="text-[10px] text-neutral-400 font-normal ml-1">/ {(realTotalRamMB / 1024).toFixed(2)} GB</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+            <div className="h-1.5 w-full bg-[#1e2029] rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  ramPercent > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
+                className={`h-full rounded-full transition-all duration-300 ${
+                  ramPercent > 95
+                    ? 'bg-gradient-to-r from-rose-500 to-red-600'
+                    : 'bg-gradient-to-r from-emerald-500 to-teal-400'
                 }`}
                 style={{ width: `${isRunning ? ramPercent : 0}%` }}
               />
@@ -1028,23 +1032,25 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           </div>
 
           {/* 5. Disk Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] space-y-1.5">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e] space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <HardDrive className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Disk</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Disk</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   {realDiskUsageMB > 1024 ? `${(realDiskUsageMB / 1024).toFixed(2)} GB` : `${realDiskUsageMB.toFixed(2)} MB`}
-                  <span className="text-[10px] text-[var(--color-ink-mute)] font-normal ml-1">/ {realTotalDiskGB.toFixed(2)} GB</span>
+                  <span className="text-[10px] text-neutral-400 font-normal ml-1">/ {realTotalDiskGB.toFixed(2)} GB</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 w-full bg-[var(--color-surface-3)] rounded-full overflow-hidden">
+            <div className="h-1.5 w-full bg-[#1e2029] rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  diskPercent > 85 ? 'bg-[var(--color-err)]' : 'bg-[var(--color-accent)]'
+                className={`h-full rounded-full transition-all duration-300 ${
+                  diskPercent > 95
+                    ? 'bg-gradient-to-r from-rose-500 to-red-600'
+                    : 'bg-gradient-to-r from-amber-500 to-[#f97316]'
                 }`}
                 style={{ width: `${diskPercent}%` }}
               />
@@ -1052,14 +1058,14 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           </div>
 
           {/* 6. Network (Inbound) Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e]">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <ArrowDown className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Network (Inbound)</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Network (Inbound)</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   ↓ {isRunning ? `${(realNetworkIn / 1024).toFixed(1)} KB/s` : '0.0 KB/s'}
                 </div>
               </div>
@@ -1067,14 +1073,14 @@ export function ServerConsoleTab({ server, onRefreshServer, onPowerAction, hideH
           </div>
 
           {/* 7. Network (Outbound) Card */}
-          <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)]">
+          <div className="p-3.5 rounded-xl bg-[#14151b] border border-[#23252e]">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-[var(--color-surface-2)] text-[var(--color-ink-mute)]">
+              <div className="p-1.5 rounded-lg bg-[#0c0d12] border border-[#23252e] text-[#f97316]">
                 <ArrowUp className="h-3.5 w-3.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="label">Network (Outbound)</div>
-                <div className="text-xs font-semibold text-[var(--color-ink)] font-mono truncate">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">Network (Outbound)</div>
+                <div className="text-xs font-semibold text-white font-mono truncate mt-0.5">
                   ↑ {isRunning ? `${(realNetworkOut / 1024).toFixed(1)} KB/s` : '0.0 KB/s'}
                 </div>
               </div>

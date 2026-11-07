@@ -1899,7 +1899,7 @@ export const ServerFileManagerTab: React.FC<ServerFileManagerTabProps> = ({ serv
 
             {/* Quick Provider Badges */}
             <div className="flex flex-wrap gap-1.5">
-              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium">Google Drive</span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">Google Drive</span>
               <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium">MediaFire</span>
               <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-medium">Discord Attachments</span>
               <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-medium">GitHub Releases</span>

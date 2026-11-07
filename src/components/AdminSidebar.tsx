@@ -46,7 +46,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
   return (
     <aside
       id="aether-sidebar"
-      className="hidden lg:flex w-64 flex-none border-r border-[#23252e] bg-[#0c0d12] flex-col h-full select-none z-20"
+      className="hidden lg:flex w-64 flex-none border-r border-[#181920] bg-[#09090b] flex-col h-full select-none z-20"
     >
       {/* Navigation Sections */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
@@ -143,7 +143,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
       </div>
 
       {/* Admin Profile Footer */}
-      <div className="p-3 border-t border-[#23252e] bg-[#0c0d12] shrink-0">
+      <div className="p-3 border-t border-[#181920] bg-[#09090b] shrink-0">
         <div className="flex items-center justify-between p-2 rounded-lg bg-[#14151b] border border-[#23252e]">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-[#f97316]/20 border border-[#f97316]/40 flex items-center justify-center text-[#f97316] font-bold text-xs uppercase shrink-0">

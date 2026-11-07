@@ -89,7 +89,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             <span className="text-[11px] font-mono font-medium tracking-wider text-neutral-400 uppercase">
               Total Users
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <div className="w-7 h-7 rounded-lg bg-[#f97316]/10 border border-[#f97316]/20 flex items-center justify-center text-[#f97316]">
               <Users className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -307,7 +307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               {/* Admins */}
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#0c0d12] border border-[#23252e]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-6 h-6 rounded bg-blue-500/10 text-blue-400 flex items-center justify-center text-xs">
+                  <div className="w-6 h-6 rounded bg-[#f97316]/10 text-[#f97316] flex items-center justify-center text-xs">
                     <Users className="w-3.5 h-3.5" />
                   </div>
                   <span className="text-xs text-neutral-300 font-medium">Admins</span>

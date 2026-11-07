@@ -279,8 +279,20 @@ function AppContent() {
           onNavigate={handleNavigate}
         />
 
-        {/* App Shell Flex Contract */}
-        <div id="aether-app-shell" className="flex h-full w-full overflow-hidden relative z-10">
+        {/* Top Edge-to-Edge Glass Navbar (Starts at far left 0px) */}
+        <div className="flex-none sticky top-0 z-30 w-full border-b border-[#1e2029]">
+          <Navbar
+            currentPage={currentPage}
+            onNavigate={handleNavigate}
+            onOpenSearch={() => setIsSearchOpen(true)}
+            userServers={userServers}
+            currentServerId={pageParams?.serverId}
+            onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+          />
+        </div>
+
+        {/* Below Navbar: App Shell Flex Contract */}
+        <div id="aether-app-shell" className="flex flex-1 h-full w-full overflow-hidden relative z-10">
           {/* Customer Sidebar */}
           {isCustomerPage && (
             <Sidebar
@@ -302,18 +314,6 @@ function AppContent() {
 
           {/* Main Viewport Container */}
           <div id="aether-main-viewport" className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden relative z-10">
-            {/* Top Floating Glass Navbar */}
-            <div className="flex-none sticky top-0 z-30 w-full">
-              <Navbar
-                currentPage={currentPage}
-                onNavigate={handleNavigate}
-                onOpenSearch={() => setIsSearchOpen(true)}
-                userServers={userServers}
-                currentServerId={pageParams?.serverId}
-                onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-              />
-            </div>
-
             {/* Content Viewport */}
             <main className={
               currentPage === 'server-manage'
@@ -327,19 +327,13 @@ function AppContent() {
                   <div className="flex-1 flex flex-col">
                     {/* Customer Control Panel Views */}
                     {currentPage === 'dashboard' && (
-                      <div className="space-y-6">
-                        <AdBanner placement="dashboard" />
-                        <Dashboard
-                          onNavigate={handleNavigate}
-                          onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
-                        />
-                      </div>
+                      <Dashboard
+                        onNavigate={handleNavigate}
+                        onSelectServer={(sId) => handleNavigate('server-manage', { serverId: sId })}
+                      />
                     )}
                     {currentPage === 'servers' && (
-                      <div className="space-y-6">
-                        <AdBanner placement="server_list" />
-                        <ServersList onNavigate={handleNavigate} />
-                      </div>
+                      <ServersList onNavigate={handleNavigate} />
                     )}
                     {currentPage === 'deploy' && (
                       <ServerDeployWizard

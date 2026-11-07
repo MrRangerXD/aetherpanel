@@ -1258,7 +1258,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
   const canKill = !server?.isSubuser || server?.permissions?.includes('server.kill') || hasPerm('power.kill');
 
   return (
-    <div className="flex-1 w-full min-w-0 flex flex-col h-full overflow-y-auto bg-[#0c0d12]">
+    <div className="flex-1 w-full min-w-0 flex flex-col h-full overflow-y-auto bg-[#09090b]">
       <div className="flex-1 min-w-0 flex flex-col h-full">
         <ServerHeader
           server={server}
@@ -1317,6 +1317,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             server={server}
             onRefreshServer={fetchServerDetails}
             onPowerAction={handlePowerAction}
+            hideHeader={true}
           />
         </TabTransition>
       )}
@@ -2976,7 +2977,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                       onClick={() => setActiveBotRuntime('python')}
                       className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                         activeBotRuntime === 'python'
-                          ? 'bg-blue-600 text-white shadow-lg'
+                          ? 'bg-[#f97316] text-white shadow-lg'
                           : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
                       }`}
                     >
@@ -3065,7 +3066,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                             <button
                               type="button"
                               onClick={() => openFileBrowser('python')}
-                              className="text-[10px] text-blue-400 hover:text-blue-300 font-mono flex items-center gap-1"
+                              className="text-[10px] text-amber-400 hover:text-amber-300 font-mono flex items-center gap-1"
                             >
                               <Folder className="h-3 w-3" /> Browse File
                             </button>
@@ -3106,7 +3107,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
                           value={startupFlags}
                           onChange={(e) => setStartupFlags(e.target.value)}
                           placeholder="-u"
-                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-blue-300 focus:border-blue-500 focus:outline-none"
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-xs font-mono text-amber-300 focus:border-[#f97316] focus:outline-none"
                         />
                       </div>
                     </div>
@@ -3163,7 +3164,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
             {/* Lifecycle, Auto-Start & Crash Recovery */}
             <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
               <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-zinc-800/60 pb-2">
-                <Shield className="h-3.5 w-3.5 text-blue-400" /> Automation & Crash Recovery Policies
+                <Shield className="h-3.5 w-3.5 text-[#f97316]" /> Automation & Crash Recovery Policies
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

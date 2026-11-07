@@ -36,9 +36,9 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
   onNavigate
 }) => {
   return (
-    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)] h-full overflow-y-auto z-20 select-none">
+    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-[#181920] bg-[#09090b] h-full overflow-y-auto z-20 select-none">
       {/* Top Back to Servers & Server ID Badge */}
-      <div className="p-3 border-b border-[var(--color-line)] flex items-center justify-between shrink-0">
+      <div className="p-3 border-b border-[#181920] flex items-center justify-between shrink-0">
         <button
           type="button"
           onClick={() => onNavigate('dashboard')}
