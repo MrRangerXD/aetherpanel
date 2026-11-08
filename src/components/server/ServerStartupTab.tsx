@@ -37,12 +37,29 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
   const isNode = !isMinecraft && !isPython && !isBun;
 
   // Selected Docker image / runtime version
-  const [selectedImage, setSelectedImage] = useState<string>(() => {
-    if (isMinecraft) return server.version ? `Java ${server.version}` : 'Java 21 OpenJDK';
-    if (isPython) return server.version ? `Python ${server.version}` : 'Python 3.12';
-    if (isBun) return server.version ? `Bun ${server.version}` : 'Bun 1.1';
-    return server.version ? `Nodejs ${server.version}` : 'Nodejs 25';
-  });
+  const resolveInitialImage = React.useCallback(() => {
+    const rawVer = server.version || '';
+    if (isMinecraft) {
+      if (rawVer.startsWith('Java ')) return rawVer;
+      return rawVer ? `Java ${rawVer} OpenJDK` : 'Java 21 OpenJDK';
+    }
+    if (isPython) {
+      if (rawVer.startsWith('Python ')) return rawVer;
+      return rawVer ? `Python ${rawVer}` : 'Python 3.13 (Latest)';
+    }
+    if (isBun) {
+      if (rawVer.startsWith('Bun ')) return rawVer;
+      return rawVer ? `Bun ${rawVer}` : 'Bun 1.2 (Latest)';
+    }
+    if (rawVer.startsWith('Node')) return rawVer;
+    return rawVer ? `Node ${rawVer}` : 'Node 22 (LTS)';
+  }, [server.version, isMinecraft, isPython, isBun]);
+
+  const [selectedImage, setSelectedImage] = useState<string>(resolveInitialImage);
+
+  useEffect(() => {
+    setSelectedImage(resolveInitialImage());
+  }, [resolveInitialImage]);
 
   // Egg variables matching Pterodactyl Minecraft Egg vs Bot Hosting
   const [variables, setVariables] = useState<EggVariable[]>(() => {
@@ -316,9 +333,11 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
       });
 
       // 2. Extract software version from selectedImage
-      let extractedVer = 'latest';
-      const verMatch = selectedImage.match(/(\d+(\.\d+)?)/);
-      if (verMatch) extractedVer = verMatch[1];
+      let extractedVer = selectedImage;
+      if (isMinecraft) {
+        const verMatch = selectedImage.match(/(\d+(\.\d+)?)/);
+        if (verMatch) extractedVer = verMatch[1];
+      }
 
       // 3. Update server startup config
       if (isMinecraft) {
@@ -368,12 +387,12 @@ export const ServerStartupTab: React.FC<ServerStartupTabProps> = ({ server, onRe
       return ['Java 21 OpenJDK', 'Java 17 OpenJDK', 'Java 11 OpenJDK', 'Java 8 OpenJDK'];
     }
     if (isPython) {
-      return ['Python 3.12 (Latest)', 'Python 3.11', 'Python 3.10'];
+      return ['Python 3.13 (Latest)', 'Python 3.12 (Stable)', 'Python 3.11', 'Python 3.10'];
     }
     if (isBun) {
-      return ['Bun 1.1 (Latest)', 'Bun 1.0'];
+      return ['Bun 1.2 (Latest)', 'Bun 1.1', 'Bun 1.0'];
     }
-    return ['Nodejs 25', 'Nodejs 22 (LTS)', 'Nodejs 20', 'Nodejs 18'];
+    return ['Node 22 (LTS)', 'Node 23 (Current)', 'Node 20 (LTS)', 'Node 18 (LTS)'];
   }, [isMinecraft, isPython, isBun]);
 
   return (

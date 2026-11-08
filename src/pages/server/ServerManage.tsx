@@ -432,6 +432,13 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
           setJavaVersion(s.version || 'Node 22 (LTS)');
         }
       }
+
+      if (!isMc) {
+        if (s.software) setBotRuntime(s.software);
+        const activeVer = s.startup?.nodeConfig?.version || s.startup?.pythonConfig?.version || s.startup?.bunConfig?.version || s.version;
+        if (activeVer) setBotVersion(activeVer);
+        if (s.startup?.entryFile) setBotEntryPoint(s.startup.entryFile);
+      }
     }
   };
 

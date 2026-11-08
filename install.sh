@@ -1145,12 +1145,16 @@ SUPERVISOR_EOF
   chmod +x "${install_dir}/bin/aetherpanel-supervisor.sh"
 
   # 2. Generate aetherpanel-ctl management tool
-  cat <<CTL_EOF > "${install_dir}/bin/aetherpanel-ctl"
+  cat <<'CTL_EOF' > "${install_dir}/bin/aetherpanel-ctl"
 #!/usr/bin/env bash
-INSTALL_DIR="${install_dir}"
-PID_FILE="\${INSTALL_DIR}/data/aetherpanel.pid"
-LOG_FILE="\${INSTALL_DIR}/data/logs/panel.log"
-INIT_SYS="${INIT_SYSTEM}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALL_DIR="${SCRIPT_DIR}"
+PID_FILE="${INSTALL_DIR}/data/aetherpanel.pid"
+LOG_FILE="${INSTALL_DIR}/data/logs/panel.log"
+INIT_SYS="systemd"
+if ! command -v systemctl &>/dev/null || [ $(id -u) -ne 0 ]; then
+  INIT_SYS="generic"
+fi
 
 check_pid_alive() {
   local p="$1"
@@ -1190,44 +1194,44 @@ case "${1:-status}" in
     fi
     ;;
   stop)
-    if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
+    if [ "$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ $(id -u) -eq 0 ]; then
       systemctl stop aetherpanel 2>/dev/null || true
     fi
-    if [ -f "\$PID_FILE" ]; then
-      PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
-      if [ -n "\$PID" ]; then
-        kill -TERM "\$PID" 2>/dev/null || true
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+      if [ -n "$PID" ]; then
+        kill -TERM "$PID" 2>/dev/null || true
         sleep 1
-        kill -9 "\$PID" 2>/dev/null || true
+        kill -9 "$PID" 2>/dev/null || true
       fi
-      rm -f "\$PID_FILE"
+      rm -f "$PID_FILE"
     fi
     pkill -f "aetherpanel-supervisor.sh" 2>/dev/null || true
     pkill -f "dist/server.cjs" 2>/dev/null || true
     echo "AetherPanel stopped."
     ;;
   restart)
-    "\$0" stop
+    "$0" stop
     sleep 2
-    "\$0" start
+    "$0" start
     ;;
   status)
-    if [ "\$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
+    if [ "$INIT_SYS" = "systemd" ] && command -v systemctl &>/dev/null && [ $(id -u) -eq 0 ]; then
       systemctl status aetherpanel
     else
-      ACTIVE_PID=\$(cat "\$PID_FILE" 2>/dev/null || echo "")
-      if check_pid_alive "\$ACTIVE_PID"; then
-        echo "AetherPanel is RUNNING (PID \$ACTIVE_PID)."
+      ACTIVE_PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+      if check_pid_alive "$ACTIVE_PID"; then
+        echo "AetherPanel is RUNNING (PID $ACTIVE_PID)."
       else
         echo "AetherPanel is STOPPED."
       fi
     fi
     ;;
   logs)
-    if [ "\$INIT_SYS" = "systemd" ] && command -v journalctl &>/dev/null && [ \$(id -u) -eq 0 ]; then
+    if [ "$INIT_SYS" = "systemd" ] && command -v journalctl &>/dev/null && [ $(id -u) -eq 0 ]; then
       journalctl -u aetherpanel -n 50 -f
     else
-      tail -f -n 50 "\$LOG_FILE"
+      tail -f -n 50 "$LOG_FILE"
     fi
     ;;
   *)
@@ -1257,7 +1261,7 @@ Wants=network.target
 Type=simple
 User=root
 WorkingDirectory=${install_dir}
-ExecStart=/usr/bin/env npm start
+ExecStart=/usr/bin/env node ${install_dir}/dist/server.cjs
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
@@ -1314,6 +1318,103 @@ OPENRC_EOF
     echo -e "${BLUE}[INFO] Running in container or non-systemd environment. Initializing background supervisor...${NC}"
     "${install_dir}/bin/aetherpanel-ctl" restart >> "$LOG_FILE" 2>&1 || true
     echo -e "${GREEN}[✓] Universal background process supervisor initialized.${NC}"
+  fi
+}
+
+setup_nginx_reverse_proxy() {
+  local target_url="${1:-}"
+  local backend_port="${2:-3000}"
+
+  if [ -z "$target_url" ]; then return 0; fi
+
+  local domain_name
+  domain_name=$(echo "$target_url" | sed -E 's|^https?://||; s|:[0-9]+.*$||; s|/.*$||')
+  domain_name="${domain_name:-localhost}"
+
+  # Only configure reverse proxy if domain is provided (or not loopback)
+  if [ "$domain_name" = "localhost" ] || [ "$domain_name" = "127.0.0.1" ]; then
+    return 0
+  fi
+
+  echo -e "${CYAN}    Configuring Nginx Reverse Proxy for ${domain_name} (Eliminating 502 Bad Gateway)...${NC}"
+  log_msg "Configuring Nginx reverse proxy for domain $domain_name -> 127.0.0.1:$backend_port"
+
+  # Install Nginx if not available
+  if ! command -v nginx &>/dev/null && [ "$IS_ROOT" = true ]; then
+    echo -e "${YELLOW}    Nginx not found. Installing Nginx web server...${NC}"
+    if command -v apt-get &>/dev/null; then
+      run_privileged env DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$LOG_FILE" 2>&1 || true
+      run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx >> "$LOG_FILE" 2>&1 || true
+    elif command -v dnf &>/dev/null; then
+      run_privileged dnf install -y nginx >> "$LOG_FILE" 2>&1 || true
+    elif command -v yum &>/dev/null; then
+      run_privileged yum install -y nginx >> "$LOG_FILE" 2>&1 || true
+    elif command -v pacman &>/dev/null; then
+      run_privileged pacman -Sy --noconfirm nginx >> "$LOG_FILE" 2>&1 || true
+    elif command -v apk &>/dev/null; then
+      run_privileged apk add nginx >> "$LOG_FILE" 2>&1 || true
+    fi
+  fi
+
+  if command -v nginx &>/dev/null && [ "$IS_ROOT" = true ]; then
+    local conf_file=""
+    if [ -d /etc/nginx/sites-available ]; then
+      conf_file="/etc/nginx/sites-available/aetherpanel.conf"
+    elif [ -d /etc/nginx/conf.d ]; then
+      conf_file="/etc/nginx/conf.d/aetherpanel.conf"
+    else
+      mkdir -p /etc/nginx/conf.d 2>/dev/null || true
+      conf_file="/etc/nginx/conf.d/aetherpanel.conf"
+    fi
+
+    cat <<NGINX_EOF > "$conf_file"
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${domain_name};
+
+    client_max_body_size 5000M;
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 86400s;
+
+    location / {
+        proxy_pass http://127.0.0.1:${backend_port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}
+NGINX_EOF
+
+    if [ -d /etc/nginx/sites-enabled ]; then
+      ln -sf "$conf_file" /etc/nginx/sites-enabled/aetherpanel.conf 2>/dev/null || true
+      rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    fi
+
+    if nginx -t >> "$LOG_FILE" 2>&1; then
+      if command -v systemctl &>/dev/null; then
+        systemctl enable nginx >> "$LOG_FILE" 2>&1 || true
+        systemctl reload nginx >> "$LOG_FILE" 2>&1 || systemctl restart nginx >> "$LOG_FILE" 2>&1 || true
+      elif command -v rc-service &>/dev/null; then
+        rc-service nginx restart >> "$LOG_FILE" 2>&1 || true
+      elif command -v service &>/dev/null; then
+        service nginx reload >> "$LOG_FILE" 2>&1 || service nginx restart >> "$LOG_FILE" 2>&1 || true
+      fi
+      echo -e "${GREEN}[✓] Nginx reverse proxy active: http://${domain_name} -> 127.0.0.1:${backend_port}${NC}"
+      log_msg "Nginx configured successfully for ${domain_name}"
+    else
+      echo -e "${YELLOW}[!] Notice: Nginx test reported warnings; check $LOG_FILE${NC}"
+      log_msg "WARNING: nginx -t failed"
+    fi
+  else
+    echo -e "${BLUE}[INFO] Direct web access enabled on port ${backend_port}.${NC}"
   fi
 }
 
@@ -1690,9 +1791,15 @@ SERVICE_EOF
     systemctl enable aethernode >> "$LOG_FILE" 2>&1 || true
     systemctl restart aethernode >> "$LOG_FILE" 2>&1 || true
     echo -e "${GREEN}[✓] Local Node Daemon registered and active (aethernode.service on port 9666).${NC}"
+  else
+    pkill -f "${local_daemon_dir}/agent.js" 2>/dev/null || true
+    nohup /usr/bin/env node "${local_daemon_dir}/agent.js" >> "${local_daemon_logs}/agent.log" 2>&1 &
+    echo -e "${GREEN}[✓] Local Node Daemon running in background (port 9666).${NC}"
   fi
 
-  echo -e "${GREEN}[✓] Step 7 complete: Application & Local Daemon compiled and registered.${NC}\n"
+  setup_nginx_reverse_proxy "$PANEL_URL" "${PANEL_PORT:-3000}"
+
+  echo -e "${GREEN}[✓] Step 7 complete: Application, Local Daemon & Proxy compiled and registered.${NC}\n"
 
   # [8/8] Live Health Check Verification
   echo -e "${YELLOW}[8/8] Performing live application health verification...${NC}"
@@ -2226,7 +2333,12 @@ while [[ $# -gt 0 ]]; do
     --panel)
       MODE="panel"
       SHOW_MENU=false
-      shift
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]] && [[ "$2" =~ ^https?:// ]]; then
+        PANEL_URL="$2"
+        shift 2
+      else
+        shift
+      fi
       ;;
     --panel-url|--url)
       if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
@@ -2270,7 +2382,7 @@ while [[ $# -gt 0 ]]; do
         shift
       fi
       ;;
-    --port)
+    -p|--port)
       if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
         PANEL_PORT="$2"
         shift 2

@@ -92,7 +92,7 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     category: 'bot',
     description: 'Modern JavaScript/TypeScript runtime with ES modules & npm/pnpm support.',
     defaultVersion: 'Node 22 (LTS)',
-    versions: ['Node 22 (LTS)', 'Node 20 (LTS)', 'Node 23 (Current)', 'Node 18 (LTS)', 'Node 16 (Legacy)'],
+    versions: ['Node 22 (LTS)', 'Node 23 (Current)', 'Node 20 (LTS)', 'Node 18 (LTS)'],
     icon: Bot
   },
   {
@@ -100,8 +100,8 @@ const SOFTWARE_CATALOG: SoftwareOption[] = [
     name: 'Python',
     category: 'bot',
     description: 'High-performance Python runtime for Discord.py, Pycord, and automation scripts.',
-    defaultVersion: 'Python 3.12 (Latest)',
-    versions: ['Python 3.12 (Latest)', 'Python 3.13 (Preview)', 'Python 3.11 (Stable)', 'Python 3.10', 'Python 3.9'],
+    defaultVersion: 'Python 3.13 (Latest)',
+    versions: ['Python 3.13 (Latest)', 'Python 3.12 (Stable)', 'Python 3.11', 'Python 3.10'],
     icon: Bot
   },
   {

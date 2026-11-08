@@ -1846,6 +1846,8 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
       isLocalNode: true,
       serverCount: 0,
       isSecure: true,
+      daemonToken: 'AETHER-LOCAL-DEFAULT-TOKEN',
+      token: 'AETHER-LOCAL-DEFAULT-TOKEN',
       installationId: currentInstId
     }
   ];

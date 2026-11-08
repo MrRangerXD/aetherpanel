@@ -37,7 +37,7 @@ export const BotHosting: React.FC<BotHostingProps> = ({ onNavigate }) => {
     {
       icon: Terminal,
       title: 'Multi-Language Runtimes',
-      description: 'Native zero-configuration support for Node.js (v18, v20, v22), Python (3.10, 3.11, 3.12), and modern Bun.'
+      description: 'Native zero-configuration support for Node.js (v20, v22 LTS, v23), Python (3.11, 3.12, 3.13 Latest), and modern Bun (v1.2 Latest).'
     },
     {
       icon: Zap,
@@ -193,7 +193,7 @@ export const BotHosting: React.FC<BotHostingProps> = ({ onNavigate }) => {
                     <ul className="space-y-2 text-xs text-neutral-300 pt-2 border-t border-[#23252e]">
                       <li className="flex items-center gap-2">
                         <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                        <span>Node.js 22, Python 3.12, Bun 1.1</span>
+                        <span>Node.js 22/23, Python 3.13, Bun 1.2</span>
                       </li>
                       <li className="flex items-center gap-2">
                         <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
