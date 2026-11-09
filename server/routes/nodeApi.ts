@@ -14,6 +14,16 @@ export async function findNodeByDaemonToken(db: any, token: string) {
   let found = db.nodes.find((n: any) => n.daemonToken === clean || n.token === clean);
   if (found) return found;
 
+  // Fallback for default local node agent token
+  if (clean === 'AETHER-LOCAL-DEFAULT-TOKEN') {
+    found = db.nodes.find((n: any) => n.isLocal || n.id === 'local') || db.nodes[0];
+    if (found) {
+      if (!found.daemonToken) found.daemonToken = clean;
+      if (!found.token) found.token = clean;
+      return found;
+    }
+  }
+
   // Bcrypt comparison against hashed token if needed
   for (const n of db.nodes) {
     if (n.token && n.token.startsWith('$2')) {
@@ -156,6 +166,12 @@ router.post(['/heartbeat', '/:nodeId/heartbeat'], async (req: Request, res: Resp
       success: false,
       error: { code: 'UNAUTHORIZED', message: 'Daemon authentication failed or node not found' }
     });
+  }
+
+  // Ensure node permanently remembers the active daemonToken for subsequent command queries
+  if (daemonToken && (!node.daemonToken || !node.token)) {
+    if (!node.daemonToken) node.daemonToken = daemonToken;
+    if (!node.token) node.token = daemonToken;
   }
 
   const body = req.body || {};

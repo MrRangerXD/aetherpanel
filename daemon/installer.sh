@@ -199,9 +199,11 @@ CONFIG_PATH="${INSTALL_DIR}/config.json"
 cat > "$CONFIG_PATH" <<EOF
 {
   "panelUrl": "${PANEL_URL}",
-  "nodeId": ${NODE_ID},
+  "nodeId": "${NODE_ID}",
   "token": "${TOKEN}",
+  "daemonToken": "${TOKEN}",
   "port": ${PORT},
+  "daemonPort": ${PORT},
   "bindHost": "${BIND_HOST}",
   "heartbeatIntervalMs": 15000,
   "commandPollIntervalMs": 1000

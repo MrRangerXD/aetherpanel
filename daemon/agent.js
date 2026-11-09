@@ -26,13 +26,20 @@ const axios = require('axios');
 const https = require('https');
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 4 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 4 });
-const archiver = require('archiver');
-const unzipper = require('unzipper');
-const pidusage = require('pidusage');
-const sanitize = require('sanitize-filename');
-const AdmZip = require('adm-zip');
-const yaml = require('js-yaml');
-const NBT = require('prismarine-nbt');
+let archiver;
+try { archiver = require('archiver'); } catch { archiver = null; }
+let unzipper;
+try { unzipper = require('unzipper'); } catch { unzipper = null; }
+let pidusage;
+try { pidusage = require('pidusage'); } catch { pidusage = null; }
+let sanitize;
+try { sanitize = require('sanitize-filename'); } catch { sanitize = (s) => String(s || '').replace(/[^a-zA-Z0-9_.-]/g, '_'); }
+let AdmZip;
+try { AdmZip = require('adm-zip'); } catch { AdmZip = null; }
+let yaml;
+try { yaml = require('js-yaml'); } catch { yaml = null; }
+let NBT;
+try { NBT = require('prismarine-nbt'); } catch { NBT = null; }
 
 // ------------------------------------------------------------
 // Configuration
@@ -45,7 +52,7 @@ const CONFIG_FILE = path.join(ROOT, 'config.json');
 
 let config = {
   panelUrl: process.env.PANEL_URL || 'http://localhost:3000',
-  nodeId: Number(process.env.NODE_ID || 1),
+  nodeId: process.env.NODE_ID || 'local',
   token: process.env.NODE_TOKEN || '',
   port: Number(process.env.DAEMON_PORT || 9666),
   bindHost: process.env.BIND_HOST || '0.0.0.0',
@@ -55,14 +62,22 @@ let config = {
 
 if (fs.existsSync(CONFIG_FILE)) {
   try {
-    config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) };
+    const fileCfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    config = { ...config, ...fileCfg };
   } catch (e) {
     console.error('[config] Failed to parse config.json:', e.message);
   }
 }
 
+// Normalize aliases so both token / daemonToken and port / daemonPort work seamlessly
+config.token = config.token || config.daemonToken || process.env.NODE_TOKEN || '';
+config.port = Number(config.port || config.daemonPort || process.env.DAEMON_PORT || 9666);
+if (config.nodeId === undefined || config.nodeId === null || config.nodeId === '') {
+  config.nodeId = process.env.NODE_ID || 'local';
+}
+
 if (!config.token) {
-  console.error('[config] FATAL: No node token configured. Set NODE_TOKEN or config.json token.');
+  console.error('[config] FATAL: No node token configured. Set NODE_TOKEN or config.json token/daemonToken.');
   process.exit(1);
 }
 

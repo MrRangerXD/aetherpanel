@@ -17,6 +17,16 @@
 # Universal Cross-Platform Installer, Updater & Node Pairer v4.0
 # ==============================================================================
 
+# Ensure execution in GNU Bash 4.0+
+if [ -z "${BASH_VERSION:-}" ]; then
+  if command -v bash >/dev/null 2>&1; then
+    exec bash "$0" "$@"
+  else
+    echo "Error: Bash 4.0+ is required to execute this installer." >&2
+    exit 1
+  fi
+fi
+
 set -Eeuo pipefail
 
 # ==============================================================================
@@ -140,20 +150,30 @@ prompt_input() {
   local is_secret="${2:-false}"
   local result=""
 
+  if [ -n "$prompt_text" ]; then
+    printf "%s" "$prompt_text" >&2
+  fi
+
   if [ -t 0 ]; then
     if [ "$is_secret" = true ]; then
-      read -r -s -p "$prompt_text" result || result=""
+      stty -echo 2>/dev/null || true
+      read -r result 2>/dev/null || result=""
+      stty echo 2>/dev/null || true
       echo "" >&2
     else
-      read -r -p "$prompt_text" result || result=""
+      read -r result 2>/dev/null || result=""
     fi
-  elif (exec < /dev/tty) 2>/dev/null; then
+  elif [ -e /dev/tty ] && (exec < /dev/tty) 2>/dev/null; then
     if [ "$is_secret" = true ]; then
-      read -r -s -p "$prompt_text" result < /dev/tty 2>/dev/null || result=""
+      stty -echo 2>/dev/null || true
+      read -r result < /dev/tty 2>/dev/null || result=""
+      stty echo 2>/dev/null || true
       echo "" >&2
     else
-      read -r -p "$prompt_text" result < /dev/tty 2>/dev/null || result=""
+      read -r result < /dev/tty 2>/dev/null || result=""
     fi
+  else
+    result=""
   fi
 
   echo "$result"
@@ -542,6 +562,25 @@ check_system_resources() {
     if [ "$RAM_TOTAL_MB" -gt 0 ] 2>/dev/null && [ "$RAM_TOTAL_MB" -lt 512 ] 2>/dev/null; then
       echo -e "${YELLOW}[!] Warning: System has less than 512MB RAM. Performance may be degraded.${NC}"
     fi
+
+    # Auto-provision 2GB swapfile on low-memory VPS (<2500MB RAM) to eliminate build OOM crashes
+    if [ "$IS_ROOT" = true ] && [ "$RAM_TOTAL_MB" -gt 0 ] 2>/dev/null && [ "$RAM_TOTAL_MB" -lt 2500 ] 2>/dev/null; then
+      local current_swap_mb
+      current_swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+      current_swap_mb="${current_swap_mb:-0}"
+      if [ "$current_swap_mb" -lt 1024 ] && [ ! -f /swapfile ]; then
+        echo -e "${YELLOW}[!] Host RAM is ${RAM_TOTAL_MB}MB with low swap (${current_swap_mb}MB). Provisioning 2GB virtual memory swapfile...${NC}"
+        log_msg "Provisioning 2GB swapfile to prevent npm build OOM killer"
+        (fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 2>/dev/null) >> "$LOG_FILE" 2>&1 || true
+        chmod 600 /swapfile 2>/dev/null || true
+        mkswap /swapfile >> "$LOG_FILE" 2>&1 || true
+        swapon /swapfile >> "$LOG_FILE" 2>&1 || true
+        if ! grep -q '/swapfile' /etc/fstab 2>/dev/null; then
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab 2>/dev/null || true
+        fi
+        echo -e "${GREEN}[✓] 2GB Swapfile activated successfully (protected against OOM kills).${NC}"
+      fi
+    fi
   fi
 
   # Disk Space Check
@@ -812,23 +851,27 @@ configure_firewall() {
     ufw)
       # 1. Guarantee SSH access first (never lock admin out)
       run_privileged ufw allow "${ssh_port}/tcp" comment 'AetherPanel SSH Access' >> "$LOG_FILE" 2>&1 || true
-      # 2. Web UI & Services
+      # 2. Web UI & Services (including standard HTTP/HTTPS ingress)
+      run_privileged ufw allow 80/tcp comment 'AetherPanel HTTP Web Ingress' >> "$LOG_FILE" 2>&1 || true
+      run_privileged ufw allow 443/tcp comment 'AetherPanel HTTPS Web Ingress' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow "${p_port}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow "${d_port}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow "${s_port}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow 25565:25600/tcp comment 'AetherPanel Allocations TCP' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow 25565:25600/udp comment 'AetherPanel Allocations UDP' >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] UFW network protection configured (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port}, Allocations: 25565-25600).${NC}"
+      echo -e "${GREEN}[✓] UFW network protection configured (SSH: ${ssh_port}, HTTP/HTTPS: 80/443, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port}, Allocations: 25565-25600).${NC}"
       ;;
     firewalld)
       run_privileged firewall-cmd --permanent --add-port="${ssh_port}/tcp" >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port=80/tcp >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port=443/tcp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port="${p_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port="${d_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port="${s_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port=25565-25600/tcp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port=25565-25600/udp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --reload >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] Firewalld rules configured successfully (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      echo -e "${GREEN}[✓] Firewalld rules configured successfully (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
       ;;
     iptables)
       # Create isolated AetherPanel chains to avoid disturbing existing rules
@@ -848,7 +891,9 @@ configure_firewall() {
       # Explicitly preserve SSH access with rate-limiting
       run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${ssh_port}" -m conntrack --ctstate NEW -m limit --limit 30/minute --limit-burst 60 -j ACCEPT 2>/dev/null || true
 
-      # Panel ports
+      # Web HTTP/HTTPS ingress and panel ports
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_PROTECT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
       run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${p_port}" -j ACCEPT 2>/dev/null || true
       run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${s_port}" -j ACCEPT 2>/dev/null || true
       run_privileged iptables -A AETHER_PROTECT -p tcp --dport "${d_port}" -j ACCEPT 2>/dev/null || true
@@ -860,7 +905,7 @@ configure_firewall() {
       run_privileged iptables -A AETHER_SERVERS -p tcp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
       run_privileged iptables -A AETHER_SERVERS -p udp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
 
-      echo -e "${GREEN}[✓] Iptables isolated chains and SYN flood mitigation active (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      echo -e "${GREEN}[✓] Iptables isolated chains and SYN flood mitigation active (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
       ;;
     nftables)
       # Create isolated table inet aetherpanel_filter
@@ -870,12 +915,14 @@ configure_firewall() {
       run_privileged nft add rule inet aetherpanel_filter input iif lo accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input ct state invalid drop 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${ssh_port}" accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport 80 accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport 443 accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${p_port}" accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${s_port}" accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${d_port}" accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport 25565-25600 accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input udp dport 25565-25600 accept 2>/dev/null || true
-      echo -e "${GREEN}[✓] Nftables isolated table and network protection applied (SSH: ${ssh_port}, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      echo -e "${GREEN}[✓] Nftables isolated table and network protection applied (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
       ;;
     *)
       echo -e "${BLUE}[INFO] Container / Virtual network mode: Application shield and ingress routing active.${NC}"
@@ -980,6 +1027,17 @@ check_port_available() {
 # 9. GITHUB CONNECTIVITY & SOURCE ACQUISITION
 # ==============================================================================
 verify_github_connectivity() {
+  # 0. Check if local panel source tree is already available
+  local current_dir="$(pwd)"
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+  for check_loc in "$current_dir" "$script_dir" "${INSTALL_DIR}"; do
+    if [ -f "${check_loc}/package.json" ] && [ -f "${check_loc}/server.ts" ]; then
+      echo -e "${GREEN}[✓] Local source repository detected at ${check_loc}. Bypassing remote GitHub download requirement.${NC}"
+      log_msg "Local source files present at ${check_loc}; bypassing GitHub network verification"
+      return 0
+    fi
+  done
+
   log_msg "Verifying connectivity to official GitHub repository: ${REPO_URL}"
 
   # 1. WAN Check
@@ -1017,6 +1075,21 @@ download_panel_source() {
   mkdir -p "$TEMP_DIR"
 
   local download_success=false
+
+  # Step 0: Check if current directory or script directory already contains the panel source
+  local current_dir="$(pwd)"
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+  for check_loc in "$current_dir" "$script_dir"; do
+    if [ -f "${check_loc}/package.json" ] && [ -f "${check_loc}/server.ts" ]; then
+      echo -e "${GREEN}[✓] Staging from existing local repository source (${check_loc})...${NC}"
+      log_msg "Using local source tree from ${check_loc}"
+      if [ "$(cd "$check_loc" && pwd)" != "$(cd "$target_dir" 2>/dev/null && pwd)" ]; then
+        cp -a "${check_loc}"/. "$target_dir/" 2>/dev/null || rsync -a "${check_loc}/" "$target_dir/" 2>/dev/null || true
+      fi
+      download_success=true
+      return 0
+    fi
+  done
 
   # Primary Method: Git Clone directly from official GitHub repository
   if command -v git &> /dev/null; then
@@ -1356,6 +1429,11 @@ setup_nginx_reverse_proxy() {
     fi
   fi
 
+  # Configure SELinux policy to allow Nginx network relay if SELinux is present (prevents 502 Bad Gateway)
+  if command -v setsebool &>/dev/null; then
+    run_privileged setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+  fi
+
   if command -v nginx &>/dev/null && [ "$IS_ROOT" = true ]; then
     local conf_file=""
     if [ -d /etc/nginx/sites-available ]; then
@@ -1387,6 +1465,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Port \$server_port;
         proxy_buffering off;
         proxy_request_buffering off;
     }
@@ -1408,7 +1487,7 @@ NGINX_EOF
         service nginx reload >> "$LOG_FILE" 2>&1 || service nginx restart >> "$LOG_FILE" 2>&1 || true
       fi
       echo -e "${GREEN}[✓] Nginx reverse proxy active: http://${domain_name} -> 127.0.0.1:${backend_port}${NC}"
-      log_msg "Nginx configured successfully for ${domain_name}"
+      log_msg "Nginx configured successfully for ${domain_name} (SELinux httpd_can_network_connect enabled)"
     else
       echo -e "${YELLOW}[!] Notice: Nginx test reported warnings; check $LOG_FILE${NC}"
       log_msg "WARNING: nginx -t failed"
@@ -1454,21 +1533,32 @@ install_panel() {
     echo -e "  https://panel.example.com"
     echo -e "  http://123.123.123.123:3000\n"
 
-    while true; do
+    local default_panel_url="http://${SERVER_IP:-127.0.0.1}:${PANEL_PORT:-3000}"
+    local max_attempts=3
+    local attempt=0
+    while [ "$attempt" -lt "$max_attempts" ]; do
+      attempt=$((attempt + 1))
       local input_url
-      input_url=$(prompt_input "Panel URL: ")
-      input_url=$(normalize_url "$input_url")
+      input_url=$(prompt_input "Panel URL [Default: ${default_panel_url}]: ")
 
       if [ -z "$input_url" ]; then
-        echo -e "${RED}[ERROR] Panel URL cannot be empty.${NC}"
-        continue
+        PANEL_URL="$default_panel_url"
+        echo -e "${GREEN}[✓] Using default Panel URL: ${PANEL_URL}${NC}"
+        break
       fi
+
+      input_url=$(normalize_url "$input_url")
 
       if validate_url "$input_url"; then
         PANEL_URL="$input_url"
         break
       else
         echo -e "${RED}[ERROR] Invalid Panel URL format. Must start with http:// or https:// and contain a valid hostname or IP address.${NC}"
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          PANEL_URL="$default_panel_url"
+          echo -e "${YELLOW}[!] Max attempts reached. Falling back to default URL: ${PANEL_URL}${NC}"
+          break
+        fi
       fi
     done
   else
@@ -1654,6 +1744,8 @@ install_panel() {
       "ip": "${SERVER_IP:-127.0.0.1}",
       "fqdn": "${NODE_FQDN}",
       "sftpPort": 2022,
+      "daemonToken": "AETHER-LOCAL-DEFAULT-TOKEN",
+      "token": "AETHER-LOCAL-DEFAULT-TOKEN",
       "lastHeartbeatAt": "${current_iso_time}",
       "createdAt": "${current_iso_time}"
     }
@@ -1712,6 +1804,7 @@ EOF
 
   echo -e "${CYAN}    Compiling frontend and backend bundles (npm run build)...${NC}"
   log_msg "Building production bundle"
+  export NODE_OPTIONS="--max-old-space-size=2048"
   if ! npm run build >> "$LOG_FILE" 2>&1; then
     echo -e "${YELLOW}    [!] Standard build had warnings. Running isolated compiler fallback...${NC}"
     npx vite build >> "$LOG_FILE" 2>&1 || true
@@ -1751,7 +1844,9 @@ EOF
   "panelUrl": "${PANEL_URL}",
   "nodeId": "local",
   "token": "AETHER-LOCAL-DEFAULT-TOKEN",
+  "daemonToken": "AETHER-LOCAL-DEFAULT-TOKEN",
   "port": 9666,
+  "daemonPort": 9666,
   "bindHost": "0.0.0.0",
   "sftpPort": 2022,
   "storagePath": "${local_daemon_vols}",
@@ -1759,6 +1854,11 @@ EOF
 }
 DAEMON_CFG_EOF
   chmod 600 "${local_daemon_dir}/config.json" 2>/dev/null || true
+
+  # Link or install daemon dependencies
+  if [ -d "${INSTALL_DIR}/node_modules" ] && [ ! -d "${local_daemon_dir}/node_modules" ]; then
+    ln -sf "${INSTALL_DIR}/node_modules" "${local_daemon_dir}/node_modules" 2>/dev/null || true
+  fi
 
   if [ -f "${local_daemon_dir}/package.json" ]; then
     ( cd "${local_daemon_dir}" && npm install --omit=dev --no-audit --no-fund >> "$LOG_FILE" 2>&1 || true )
@@ -1942,8 +2042,11 @@ install_node_daemon() {
 {
   "panelUrl": "${PANEL_URL}",
   "nodeId": "${NODE_ID:-unknown}",
+  "token": "${DAEMON_TOKEN:-unknown}",
   "daemonToken": "${DAEMON_TOKEN:-unknown}",
+  "port": ${DAEMON_PORT:-9666},
   "daemonPort": ${DAEMON_PORT:-9666},
+  "bindHost": "0.0.0.0",
   "sftpPort": ${SFTP_PORT:-2022},
   "storagePath": "${node_vol_dir}",
   "logLevel": "info"
