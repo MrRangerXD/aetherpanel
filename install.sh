@@ -857,9 +857,9 @@ configure_firewall() {
       run_privileged ufw allow "${p_port}/tcp" comment 'AetherPanel Web UI' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow "${d_port}/tcp" comment 'AetherNode Daemon' >> "$LOG_FILE" 2>&1 || true
       run_privileged ufw allow "${s_port}/tcp" comment 'AetherNode SFTP' >> "$LOG_FILE" 2>&1 || true
-      run_privileged ufw allow 25565:25600/tcp comment 'AetherPanel Allocations TCP' >> "$LOG_FILE" 2>&1 || true
-      run_privileged ufw allow 25565:25600/udp comment 'AetherPanel Allocations UDP' >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] UFW network protection configured (SSH: ${ssh_port}, HTTP/HTTPS: 80/443, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port}, Allocations: 25565-25600).${NC}"
+      run_privileged ufw allow 25565:30000/tcp comment 'AetherPanel Allocations TCP' >> "$LOG_FILE" 2>&1 || true
+      run_privileged ufw allow 25565:30000/udp comment 'AetherPanel Allocations UDP' >> "$LOG_FILE" 2>&1 || true
+      echo -e "${GREEN}[✓] UFW network protection configured (SSH: ${ssh_port}, HTTP/HTTPS: 80/443, Web: ${p_port}, SFTP: ${s_port}, Daemon: ${d_port}, Allocations: 25565-30000).${NC}"
       ;;
     firewalld)
       run_privileged firewall-cmd --permanent --add-port="${ssh_port}/tcp" >> "$LOG_FILE" 2>&1 || true
@@ -868,10 +868,10 @@ configure_firewall() {
       run_privileged firewall-cmd --permanent --add-port="${p_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port="${d_port}/tcp" >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --permanent --add-port="${s_port}/tcp" >> "$LOG_FILE" 2>&1 || true
-      run_privileged firewall-cmd --permanent --add-port=25565-25600/tcp >> "$LOG_FILE" 2>&1 || true
-      run_privileged firewall-cmd --permanent --add-port=25565-25600/udp >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port=25565-30000/tcp >> "$LOG_FILE" 2>&1 || true
+      run_privileged firewall-cmd --permanent --add-port=25565-30000/udp >> "$LOG_FILE" 2>&1 || true
       run_privileged firewall-cmd --reload >> "$LOG_FILE" 2>&1 || true
-      echo -e "${GREEN}[✓] Firewalld rules configured successfully (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      echo -e "${GREEN}[✓] Firewalld rules configured successfully (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}, Allocations: 25565-30000).${NC}"
       ;;
     iptables)
       # Create isolated AetherPanel chains to avoid disturbing existing rules
@@ -902,10 +902,10 @@ configure_firewall() {
       run_privileged iptables -A AETHER_PROTECT -p tcp --syn -m limit --limit 100/s --limit-burst 200 -j ACCEPT 2>/dev/null || true
 
       # Initial server allocation range
-      run_privileged iptables -A AETHER_SERVERS -p tcp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
-      run_privileged iptables -A AETHER_SERVERS -p udp --dport 25565:25600 -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_SERVERS -p tcp --dport 25565:30000 -j ACCEPT 2>/dev/null || true
+      run_privileged iptables -A AETHER_SERVERS -p udp --dport 25565:30000 -j ACCEPT 2>/dev/null || true
 
-      echo -e "${GREEN}[✓] Iptables isolated chains and SYN flood mitigation active (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      echo -e "${GREEN}[✓] Iptables isolated chains and SYN flood mitigation active (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}, Allocations: 25565-30000).${NC}"
       ;;
     nftables)
       # Create isolated table inet aetherpanel_filter
@@ -920,9 +920,9 @@ configure_firewall() {
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${p_port}" accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${s_port}" accept 2>/dev/null || true
       run_privileged nft add rule inet aetherpanel_filter input tcp dport "${d_port}" accept 2>/dev/null || true
-      run_privileged nft add rule inet aetherpanel_filter input tcp dport 25565-25600 accept 2>/dev/null || true
-      run_privileged nft add rule inet aetherpanel_filter input udp dport 25565-25600 accept 2>/dev/null || true
-      echo -e "${GREEN}[✓] Nftables isolated table and network protection applied (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}).${NC}"
+      run_privileged nft add rule inet aetherpanel_filter input tcp dport 25565-30000 accept 2>/dev/null || true
+      run_privileged nft add rule inet aetherpanel_filter input udp dport 25565-30000 accept 2>/dev/null || true
+      echo -e "${GREEN}[✓] Nftables isolated table and network protection applied (SSH: ${ssh_port}, HTTP/S: 80/443, Web: ${p_port}, SFTP: ${s_port}, Allocations: 25565-30000).${NC}"
       ;;
     *)
       echo -e "${BLUE}[INFO] Container / Virtual network mode: Application shield and ingress routing active.${NC}"
@@ -2349,7 +2349,7 @@ show_tutorial() {
   echo -e "   • ${BOLD}Port 3000/TCP:${NC} AetherPanel Web UI & REST API"
   echo -e "   • ${BOLD}Port 9666/TCP:${NC} AetherNode Daemon Agent (Default)"
   echo -e "   • ${BOLD}Port 2022/TCP:${NC} AetherNode SFTP Transport"
-  echo -e "   • ${BOLD}Ports 25565-25600/TCP/UDP:${NC} Minecraft & App Port Allocations\n"
+  echo -e "   • ${BOLD}Ports 25565-30000/TCP/UDP:${NC} Minecraft & App Port Allocations\n"
   echo -e "${CYAN}3. Node Pairing One-Liner:${NC}"
   echo -e "   Run on remote compute node:"
   echo -e "   ${BOLD}curl -fsSL ${REPO_URL}/raw/main/install.sh | bash -s -- --node --panel http://PANEL_IP:3000 --token TOKEN${NC}\n"

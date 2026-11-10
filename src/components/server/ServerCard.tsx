@@ -19,7 +19,8 @@ export const ServerCard: React.FC<ServerCardProps> = ({ server, onNavigate, onPo
 
   const isRunning = server.status === 'running';
   const isStarting = server.status === 'starting';
-  const fullIp = `${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}`;
+  const displayHost = (server as any).fqdn || ((server as any).resolvedPublicEndpoint ? (server as any).resolvedPublicEndpoint.split(':')[0] : '') || (server.primaryIp && server.primaryIp !== '127.0.0.1' && server.primaryIp !== '0.0.0.0' ? server.primaryIp : (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'));
+  const fullIp = (server as any).resolvedPublicEndpoint || `${displayHost}:${server.primaryPort || 25565}`;
 
   const canStart = !server.isSubuser || server.permissions?.includes('server.start');
   const canStop = !server.isSubuser || server.permissions?.includes('server.stop');

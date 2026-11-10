@@ -104,7 +104,9 @@ function serializePropertiesWithComments(
   for (const item of originalLines) {
     if (item.type === 'property' && item.key) {
       if (item.key in changes) {
-        outLines.push(`${item.key}=${changes[item.key]}`);
+        const val = changes[item.key];
+        const formattedVal = typeof val === 'boolean' ? (val ? 'true' : 'false') : String(val);
+        outLines.push(`${item.key}=${formattedVal}`);
         handledKeys.add(item.key);
       } else {
         outLines.push(item.raw);
@@ -118,7 +120,8 @@ function serializePropertiesWithComments(
   // Append new keys that were not in the file originally
   for (const [k, v] of Object.entries(changes)) {
     if (!handledKeys.has(k)) {
-      outLines.push(`${k}=${v}`);
+      const formattedV = typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v);
+      outLines.push(`${k}=${formattedV}`);
     }
   }
 
@@ -153,9 +156,9 @@ propertiesRouter.get('/', authMiddleware, async (req: AuthenticatedRequest, res:
   const content = fs.readFileSync(propPath, 'utf-8');
   const { props } = parsePropertiesFile(content);
 
-  // Lock server-port and server-ip to allocation
+  // Lock server-port to allocation and ensure server-ip is 0.0.0.0 for universal player join
   props['server-port'] = String(access.server.primaryPort || props['server-port'] || '25565');
-  props['server-ip'] = access.server.primaryIp || props['server-ip'] || '0.0.0.0';
+  props['server-ip'] = '0.0.0.0';
 
   const fields: ServerPropertyField[] = [];
   const knownKeys = new Set(Object.keys(PROPERTY_SCHEMA));
@@ -165,7 +168,7 @@ propertiesRouter.get('/', authMiddleware, async (req: AuthenticatedRequest, res:
     const schema = PROPERTY_SCHEMA[key];
     let typedVal: any = rawVal;
     if (schema?.type === 'boolean') {
-      typedVal = rawVal.toLowerCase() === 'true';
+      typedVal = String(rawVal).toLowerCase() === 'true';
     } else if (schema?.type === 'number') {
       typedVal = Number(rawVal) || 0;
     }

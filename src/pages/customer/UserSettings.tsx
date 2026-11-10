@@ -43,9 +43,31 @@ export const UserSettings: React.FC = () => {
   const [creatingKey, setCreatingKey] = useState(false);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
 
-  // Referrals Tab State
+  // Referrals Tab State (Clean, formatted referral code)
   const [copiedCode, setCopiedCode] = useState(false);
-  const referralCode = (user?.id ? user.id.substring(0, 8).toUpperCase() : 'HX7KY99S');
+  const referralCode = React.useMemo(() => {
+    if (!user?.id) return 'REF-8N4K-92X1';
+    let hash = 5381;
+    const seed = `${user.id}-${user.username || 'user'}-aether-ref`;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) + hash) + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let code = '';
+    let h1 = Math.abs(hash);
+    for (let i = 0; i < 4; i++) {
+      code += chars[h1 % chars.length];
+      h1 = Math.floor(h1 / chars.length) + (seed.charCodeAt(i % seed.length) * 19);
+    }
+    let h2 = Math.abs(hash ^ 0x5f3759df);
+    let code2 = '';
+    for (let i = 0; i < 4; i++) {
+      code2 += chars[h2 % chars.length];
+      h2 = Math.floor(h2 / chars.length) + (seed.charCodeAt((i + 1) % seed.length) * 31);
+    }
+    return `REF-${code}-${code2}`;
+  }, [user?.id, user?.username]);
 
   // Load API keys
   const fetchApiKeys = async () => {

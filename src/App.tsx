@@ -299,7 +299,7 @@ function AppContent() {
         />
 
         {/* Top Edge-to-Edge Glass Navbar (Starts at far left 0px) */}
-        <div className="flex-none sticky top-0 z-30 w-full border-b border-[#1e2029]">
+        <div className="flex-none sticky top-0 z-30 w-full">
           <Navbar
             currentPage={currentPage}
             onNavigate={handleNavigate}
@@ -409,7 +409,7 @@ function AppContent() {
 
               {/* Subtle Panel Footer for Customer & Admin Pages */}
               <footer className="py-3 px-5 border border-white/5 bg-zinc-950/20 text-[10px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl shadow-inner">
-                <span className="font-medium text-zinc-400">© 2025–2026 {brandName || 'AetherPanel'}</span>
+                <span className="font-medium text-zinc-400">© 2025–2026 AetherPanel</span>
                 <span className="text-[9px] text-zinc-600 hidden sm:inline tracking-widest uppercase font-semibold">Enterprise Distributed Control Plane</span>
               </footer>
             </main>

@@ -376,23 +376,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* CASE B: CONTROL PANEL NAVBAR ACTIONS (Only Credits, Deploy Server, and Admin) */}
           {isControlPanel && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {/* Wallet Credits Pill */}
               <button
                 type="button"
                 onClick={() => handleNav('billing')}
-                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-mono bg-[#14151b] hover:bg-[#1b1c24] border border-[#23252e] hover:border-orange-500/30 text-emerald-400 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-lg text-xs font-mono bg-[#14151b] hover:bg-[#1a1c24] border border-[#23252e] hover:border-emerald-500/40 text-emerald-400 font-semibold transition-colors cursor-pointer shadow-xs"
                 title="Wallet Balance & Billing"
               >
-                <Coins className="h-3.5 w-3.5 text-orange-400 shrink-0" />
-                <span className="font-semibold">${user?.credits?.toFixed(2) || '0.00'}</span>
+                <Coins className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span>${user?.credits?.toFixed(2) || '0.00'}</span>
               </button>
 
               {/* Primary Action: Deploy Server Button */}
               <button
                 type="button"
                 onClick={() => handleNav('deploy')}
-                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 h-8.5 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
                 title="Deploy a New Server Instance"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" />
@@ -405,23 +405,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('admin-dashboard')}
-                  className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold bg-[#14151b] hover:bg-[#1e2029] text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-lg text-xs font-semibold bg-[#14151b] hover:bg-[#1e2029] text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
                   title="Switch to Admin Control Plane"
                 >
-                  <Shield className="h-3.5 w-3.5 text-amber-400" />
+                  <Shield className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                   <span>Admin</span>
                 </button>
               )}
             </div>
           )}
 
-          {/* CASE C: ADMIN CONTROL PLANE NAVBAR (Dashboard Button on the Right) */}
+          {/* CASE C: ADMIN CONTROL PLANE NAVBAR (Orange Dashboard Button on the Right) */}
           {isAdminRoute && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => handleNav('dashboard')}
-                className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 h-8.5 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
                 title="Switch to Client Control Panel Dashboard"
               >
                 <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
@@ -476,7 +476,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="space-y-5">
               {/* Drawer Top Header */}
               <div className="flex items-center justify-between pb-3 border-b border-[#23252e]">
-                <AetherLogo onClick={() => handleNav(isControlPanel ? 'dashboard' : isAdminRoute ? 'admin-dashboard' : 'home')} />
+                <AetherLogo onClick={() => handleNav('home')} />
                 <button
                   type="button"
                   onClick={(e) => {

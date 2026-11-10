@@ -166,7 +166,8 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
               <tbody className="divide-y divide-[#23252e]/60 text-xs">
                 {filteredServers.map((server) => {
                   const isRunning = server.status === 'running';
-                  const fullAddress = `${server.primaryPort ? `localhost:${server.primaryPort}` : '92.118.206.166:30117'}`;
+                  const displayHost = (server as any).fqdn || ((server as any).resolvedPublicEndpoint ? (server as any).resolvedPublicEndpoint.split(':')[0] : '') || (server.primaryIp && server.primaryIp !== '127.0.0.1' && server.primaryIp !== '0.0.0.0' ? server.primaryIp : (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'));
+                  const fullAddress = (server as any).resolvedPublicEndpoint || `${displayHost}:${server.primaryPort || 25565}`;
                   const ramMB = server.resources?.memoryMb || server.limits?.ramMB || 512;
                   const diskGB = server.limits?.diskGB || 1;
 

@@ -239,7 +239,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         {/* Bottom Bar */}
         <div className="pt-6 border-t border-[var(--color-line)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--color-ink-mute)]">
           <div className="flex flex-wrap items-center gap-3">
-            <span>© 2025–2026 {brandName || 'AetherPanel'}. All rights reserved.</span>
+            <span>© 2025–2026 AetherPanel. All rights reserved.</span>
             <span className="hidden sm:inline text-[var(--color-line)]">|</span>
             <button
               id="footer_bottom_terms"

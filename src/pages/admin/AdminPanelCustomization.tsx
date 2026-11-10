@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useTheme } from '../../lib/ThemeContext';
+import { useBranding } from '../../lib/BrandingContext';
 import { FONT_OPTIONS, THEME_PRESETS } from '../../lib/theme';
 
 type TabKey =
@@ -36,7 +37,8 @@ interface FaqItem {
 
 export const AdminPanelCustomization: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('branding');
-  const { activeFontId, setActiveFontId } = useTheme();
+  const { activeFontId, setActiveFontId, setThemeAssets } = useTheme();
+  const { refreshBranding, updateBrandNameLocally } = useBranding();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -207,6 +209,15 @@ export const AdminPanelCustomization: React.FC = () => {
         if (res.data) {
           setConfig((prev: any) => ({ ...prev, ...res.data }));
         }
+        // Live synchronize to BrandingContext and ThemeContext
+        await refreshBranding();
+        if (config.branding?.brandName) {
+          updateBrandNameLocally(config.branding.brandName);
+        }
+        setThemeAssets({
+          logoUrl: config.branding?.logoUrl || '',
+          faviconUrl: config.branding?.faviconUrl || ''
+        });
       }
     } catch (err: any) {
       showToast(err.message || 'Failed to save customization', true);
@@ -523,6 +534,7 @@ export const AdminPanelCustomization: React.FC = () => {
                     className="field w-full text-xs"
                     placeholder="https://example.com/logo.svg"
                   />
+                  <p className="text-[10px] text-[var(--color-ink-mute)] mt-1">Direct SVG/PNG link to replace default hexagon icon across navbar, login & register.</p>
                 </div>
                 <div>
                   <label className="label">Custom Favicon URL</label>
@@ -533,8 +545,38 @@ export const AdminPanelCustomization: React.FC = () => {
                     className="field w-full text-xs"
                     placeholder="https://example.com/favicon.ico"
                   />
+                  <p className="text-[10px] text-[var(--color-ink-mute)] mt-1">Browser tab icon URL (16x16 or 32x32 .ico / .png).</p>
                 </div>
               </div>
+
+              {/* Live Preview Box */}
+              {(config.branding?.logoUrl || config.branding?.faviconUrl) && (
+                <div className="p-3 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface-2)] flex items-center gap-4">
+                  <div className="text-[11px] font-mono text-[var(--color-ink-dim)] uppercase tracking-wider">Live Asset Preview:</div>
+                  {config.branding?.logoUrl && (
+                    <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-[var(--color-surface)] border border-[var(--color-line)]">
+                      <span className="text-[10px] text-[var(--color-ink-mute)]">Logo:</span>
+                      <img
+                        src={config.branding.logoUrl}
+                        alt="Logo Preview"
+                        className="h-6 w-auto object-contain max-w-[120px]"
+                        onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                  {config.branding?.faviconUrl && (
+                    <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-[var(--color-surface)] border border-[var(--color-line)]">
+                      <span className="text-[10px] text-[var(--color-ink-mute)]">Favicon:</span>
+                      <img
+                        src={config.branding.faviconUrl}
+                        alt="Favicon Preview"
+                        className="h-4 w-4 object-contain"
+                        onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

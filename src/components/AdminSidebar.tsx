@@ -35,7 +35,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
     { page: 'admin-ads', label: 'Ad Campaigns', icon: Sparkles },
     { page: 'admin-rewards', label: 'AFK Rewards', icon: Coins },
     { page: 'admin-discord', label: 'Discord Bot', icon: MessageSquare },
-    { page: 'admin-panel-customization', label: 'Appearance', icon: Palette },
+    { page: 'admin-panel-customization', label: 'Panel Customization', icon: Palette },
     { page: 'admin-support', label: 'Support Queue', icon: LifeBuoy },
     { page: 'admin-audit-logs', label: 'Audit Trail', icon: FileText },
     { page: 'admin-importer', label: 'Importer', icon: FolderInput },

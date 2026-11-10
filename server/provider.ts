@@ -755,11 +755,14 @@ export async function startServer(serverId: string): Promise<boolean> {
       return false;
     }
 
-    // Sync assigned primary port into server.properties
+    // Sync assigned primary port into server.properties and guarantee 0.0.0.0 interface binding
     const propPath = path.join(dir, 'server.properties');
     if (fs.existsSync(propPath)) {
       let propContent = fs.readFileSync(propPath, 'utf8');
       propContent = propContent.replace(/server-port=\d+/, `server-port=${server.primaryPort}`);
+      if (/server-ip=.+/.test(propContent)) {
+        propContent = propContent.replace(/server-ip=.*/, 'server-ip=0.0.0.0');
+      }
       fs.writeFileSync(propPath, propContent, 'utf8');
     }
 
@@ -769,7 +772,7 @@ export async function startServer(serverId: string): Promise<boolean> {
 
     appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);
     appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: ${xmsMB}M initial, ${xmxMB}M max`);
-    appendConsoleLog(serverId, `[Server thread/INFO]: Binding socket on ${server.primaryIp || '0.0.0.0'}:${server.primaryPort}`);
+    appendConsoleLog(serverId, `[Server thread/INFO]: Binding socket on 0.0.0.0:${server.primaryPort} (External Join: ${server.primaryIp || '0.0.0.0'}:${server.primaryPort})`);
 
     try {
       intendedStops.delete(serverId);

@@ -66,13 +66,25 @@ export function resolveServerPublicEndpoint(
 ): PublicEndpointResult {
   const port = (server as any).port || server.primaryPort || 25565;
 
-  // 1. If Node has a configured Hostname/FQDN (e.g. node.znx.xyz.com or public IP)
-  const nodeHost = (node?.hostname || node?.fqdn || '').trim();
-  if (nodeHost && nodeHost !== 'localhost' && nodeHost !== '127.0.0.1' && nodeHost !== '0.0.0.0') {
+  // 1. Node explicit FQDN (Highest priority: DNS domain configured for player connections)
+  const nodeFqdn = (node?.fqdn || '').trim();
+  if (nodeFqdn && nodeFqdn !== 'localhost' && nodeFqdn !== '127.0.0.1' && nodeFqdn !== '0.0.0.0' && !nodeFqdn.endsWith('.local') && nodeFqdn !== 'local-vps') {
     return {
-      endpoint: `${nodeHost}:${port}`,
-      rawHost: nodeHost,
+      endpoint: `${nodeFqdn}:${port}`,
+      rawHost: nodeFqdn,
       source: 'fqdn',
+      port,
+      isExternallyReachable: true
+    };
+  }
+
+  // 2. Node Hostname if it is a valid external hostname
+  const nodeHostname = (node?.hostname || '').trim();
+  if (nodeHostname && nodeHostname !== 'localhost' && nodeHostname !== '127.0.0.1' && nodeHostname !== '0.0.0.0' && !nodeHostname.endsWith('.local') && nodeHostname !== 'local-vps') {
+    return {
+      endpoint: `${nodeHostname}:${port}`,
+      rawHost: nodeHostname,
+      source: nodeHostname.includes('.') ? 'fqdn' : 'node_ip',
       port,
       isExternallyReachable: true
     };

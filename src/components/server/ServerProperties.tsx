@@ -336,22 +336,27 @@ export const ServerProperties: React.FC<ServerPropertiesProps> = ({ server }) =>
                           className="field w-full px-3 py-1.5 text-xs bg-[var(--color-surface-3)] border border-[var(--color-line)] rounded-lg font-mono text-[var(--color-ink-mute)] cursor-not-allowed"
                         />
                       ) : field.type === 'boolean' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleChange(field.key, !effectiveVal)}
-                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
-                            effectiveVal
-                              ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/40'
-                              : 'bg-[var(--color-surface-2)] text-[var(--color-ink-dim)] border-[var(--color-line)]'
-                          }`}
-                        >
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              effectiveVal ? 'bg-[var(--color-ok)]' : 'bg-[var(--color-ink-mute)]'
-                            }`}
-                          />
-                          {effectiveVal ? 'Enabled (True)' : 'Disabled (False)'}
-                        </button>
+                        (() => {
+                          const isTrue = effectiveVal === true || String(effectiveVal).toLowerCase() === 'true';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange(field.key, !isTrue)}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                                isTrue
+                                  ? 'bg-[var(--color-ok)]/10 text-[var(--color-ok)] border-[var(--color-ok)]/40 hover:bg-[var(--color-ok)]/20'
+                                  : 'bg-[var(--color-surface-2)] text-[var(--color-ink-dim)] border-[var(--color-line)] hover:bg-[var(--color-surface-3)]'
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  isTrue ? 'bg-[var(--color-ok)]' : 'bg-[var(--color-ink-mute)]'
+                                }`}
+                              />
+                              {isTrue ? 'Enabled (True)' : 'Disabled (False)'}
+                            </button>
+                          );
+                        })()
                       ) : field.type === 'enum' && field.options ? (
                         <select
                           value={String(effectiveVal)}

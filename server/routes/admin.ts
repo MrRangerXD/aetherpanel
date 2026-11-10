@@ -2813,14 +2813,21 @@ function getDefaultPanelCustomization(db: any) {
   };
 }
 
-// GET /api/v1/admin/panel-customization
 router.get('/panel-customization', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   if (!db.settings.panelCustomization) {
     db.settings.panelCustomization = getDefaultPanelCustomization(db);
     saveDbSync();
   }
-  res.json({ success: true, data: db.settings.panelCustomization });
+  const customization = db.settings.panelCustomization;
+  if (!customization.branding) customization.branding = {};
+  if (!customization.branding.logoUrl && db.settings.themeSettings?.assets?.logoUrl) {
+    customization.branding.logoUrl = db.settings.themeSettings.assets.logoUrl;
+  }
+  if (!customization.branding.faviconUrl && db.settings.themeSettings?.assets?.faviconUrl) {
+    customization.branding.faviconUrl = db.settings.themeSettings.assets.faviconUrl;
+  }
+  res.json({ success: true, data: customization });
 });
 
 // PUT /api/v1/admin/panel-customization
@@ -2860,12 +2867,24 @@ router.put('/panel-customization', async (req: AuthenticatedRequest, res: Respon
 
   db.settings.panelCustomization = updated;
 
-  // Sync key settings back to primary db.settings for backward compatibility
+  // Sync key settings back to primary db.settings and themeSettings for unified platform branding
+  if (!db.settings.themeSettings) db.settings.themeSettings = {} as any;
+  if (!db.settings.themeSettings.assets) db.settings.themeSettings.assets = {} as any;
+  if (updated.branding?.logoUrl !== undefined) {
+    db.settings.themeSettings.assets.logoUrl = updated.branding.logoUrl;
+  }
+  if (updated.branding?.faviconUrl !== undefined) {
+    db.settings.themeSettings.assets.faviconUrl = updated.branding.faviconUrl;
+  }
   if (updated.branding?.brandName) db.settings.brandName = updated.branding.brandName;
   if (updated.branding?.brandTagline) db.settings.brandTagline = updated.branding.brandTagline;
   if (updated.branding?.supportEmail) db.settings.supportEmail = updated.branding.supportEmail;
   if (updated.branding?.currencySymbol) db.settings.currencySymbol = updated.branding.currencySymbol;
   if (updated.branding?.currencyCode) db.settings.currencyCode = updated.branding.currencyCode;
+  if (updated.branding?.discordUrl) {
+    if (!db.settings.socialLinks) db.settings.socialLinks = {} as any;
+    db.settings.socialLinks.discord = updated.branding.discordUrl;
+  }
   if (updated.features) {
     db.settings.registrationEnabled = updated.features.registrationEnabled;
     db.settings.emailVerificationRequired = updated.features.emailVerificationRequired;

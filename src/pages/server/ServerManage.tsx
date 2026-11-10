@@ -1244,7 +1244,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     );
   }
 
-  const fullIp = `${server.primaryIp || '127.0.0.1'}:${server.primaryPort || 25565}`;
+  const displayHost = (server as any).fqdn || ((server as any).resolvedPublicEndpoint ? (server as any).resolvedPublicEndpoint.split(':')[0] : '') || (server.primaryIp && server.primaryIp !== '127.0.0.1' && server.primaryIp !== '0.0.0.0' ? server.primaryIp : (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'));
+  const fullIp = (server as any).resolvedPublicEndpoint || `${displayHost}:${server.primaryPort || 25565}`;
   const isRunning = server.status === 'running';
   const swLower = typeof server.software === 'string' ? server.software.toLowerCase() : '';
   const isMinecraft = server.productId === 'prod_minecraft' || /minecraft|paper|purpur|vanilla|fabric|neoforge|forge|spigot|bedrock|velocity|bungee/i.test(swLower);

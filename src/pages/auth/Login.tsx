@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, Mail, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useBranding } from '../../lib/BrandingContext';
+import { AetherLogo } from '../../components/AetherLogo';
 
 interface LoginProps {
   onNavigate: (page: string) => void;
@@ -92,7 +93,10 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
       <div className="w-full max-w-sm space-y-5">
         
         {/* Header */}
-        <div className="text-center space-y-1">
+        <div className="text-center space-y-2">
+          <div className="flex justify-center mb-1">
+            <AetherLogo onClick={() => onNavigate('home')} className="cursor-pointer" />
+          </div>
           <div className="label">
             AUTHENTICATION
           </div>

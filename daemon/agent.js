@@ -849,8 +849,20 @@ async function cmdStart(serverId, payload) {
       const xms = Math.max(64, Math.floor(ram / 2));
       
       let startupCmd = payload.startup_command || `java -Xms${xms}M -Xmx${ram}M -jar ${jar} nogui`;
-      startupCmd = startupCmd.replace(/{xms}/g, xms).replace(/{ram}/g, ram).replace(/{jar}/g, jar);
-      
+      // Ensure EULA accepted and server-ip binds 0.0.0.0 so external players can join
+      try {
+        const eulaPath = path.join(dir, 'eula.txt');
+        if (!fs.existsSync(eulaPath)) fs.writeFileSync(eulaPath, 'eula=true\n');
+        const spPath = path.join(dir, 'server.properties');
+        if (fs.existsSync(spPath)) {
+          let spc = fs.readFileSync(spPath, 'utf8');
+          if (/^[ \t]*server-ip=.+/m.test(spc)) {
+            spc = spc.replace(/^[ \t]*server-ip=.*/m, 'server-ip=0.0.0.0');
+            fs.writeFileSync(spPath, spc, 'utf8');
+          }
+        }
+      } catch {}
+
       const parts = startupCmd.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
       const args = parts.slice(1);
       

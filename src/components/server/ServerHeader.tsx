@@ -100,18 +100,19 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
         { id: 'settings', label: 'Settings', icon: Sliders }
       ];
 
-  const moreTabs = [
-    { id: 'network', label: 'Network & SFTP', icon: Wifi, desc: 'Allocations & SFTP access' },
-    { id: 'monitoring', label: 'Monitoring', icon: Activity, desc: 'Live CPU & RAM telemetry' },
-    ...(isMinecraft
-      ? [
-          { id: 'settings', label: 'Server Settings', icon: Sliders, desc: 'Container variables & flags' },
-          { id: 'env', label: 'Raw .env Editor', icon: Key, desc: 'Direct environment secrets' }
-        ]
-      : []),
-    { id: 'importer', label: 'Server Importer', icon: FolderInput, desc: 'Pterodactyl migration' },
-    { id: 'discord', label: 'Discord Bot', icon: MessageSquare, desc: 'Webhooks & notifications' }
-  ];
+  const moreTabs = isMinecraft
+    ? [
+        { id: 'network', label: 'Network & SFTP', icon: Wifi, desc: 'Allocations & SFTP access' },
+        { id: 'monitoring', label: 'Monitoring', icon: Activity, desc: 'Live CPU & RAM telemetry' },
+        { id: 'importer', label: 'Server Importer', icon: FolderInput, desc: 'Pterodactyl migration' },
+        { id: 'settings', label: 'Server Settings', icon: Sliders, desc: 'Container variables & specs' }
+      ]
+    : [
+        { id: 'network', label: 'Network & SFTP', icon: Wifi, desc: 'Allocations & SFTP access' },
+        { id: 'monitoring', label: 'Monitoring', icon: Activity, desc: 'Live CPU & RAM telemetry' },
+        { id: 'importer', label: 'Server Importer', icon: FolderInput, desc: 'Pterodactyl migration' },
+        { id: 'discord', label: 'Discord Bot', icon: MessageSquare, desc: 'Webhooks & notifications' }
+      ];
 
   const activeMoreTab = moreTabs.find((t) => t.id === activeTab);
   const isMoreTabActive = !!activeMoreTab;
