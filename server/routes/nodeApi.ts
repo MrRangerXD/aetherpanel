@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { getDb, saveDbSync } from '../db';
+import { getDb, saveDbSync, scheduleSaveDb } from '../db';
 import { getInstallationId } from '../installation';
 import { appendConsoleLog, emitServerStatus, pullRemoteServerCommands, handleNodeReconnect } from '../provider';
 
@@ -82,9 +82,19 @@ router.post('/enroll', async (req: Request, res: Response) => {
   // Generate permanent daemon token
   const daemonToken = `dtoken_${crypto.randomBytes(24).toString('hex')}`;
   node.daemonToken = daemonToken;
-  if (fqdn) node.fqdn = fqdn;
+  if (fqdn && typeof fqdn === 'string' && !fqdn.endsWith('.local')) {
+    if (!node.fqdn || node.fqdn === node.ip || node.fqdn === 'localhost') {
+      node.fqdn = fqdn.trim();
+    }
+  }
   if (ip) node.ip = ip;
-  if (daemonPort) node.daemonPort = parseInt(daemonPort) || 8080;
+  if (daemonPort) {
+    const parsedPort = parseInt(daemonPort) || 9666;
+    node.daemonPort = parsedPort;
+    node.apiPort = parsedPort;
+  } else if (!node.daemonPort) {
+    node.daemonPort = 9666;
+  }
   if (sftpPort) node.sftpPort = parseInt(sftpPort) || 2022;
 
   node.status = 'online';
@@ -95,16 +105,23 @@ router.post('/enroll', async (req: Request, res: Response) => {
 
   console.log(`[AETHERNODE DAEMON ENROLLED] Node '${node.name}' (${node.id}) connected successfully.`);
 
+  const proto = (req.headers['x-forwarded-proto']?.toString().split(',')[0].trim()) || req.protocol;
+  const host = req.headers['x-forwarded-host']?.toString().split(',')[0].trim() || req.get('host');
+  const envPanelUrl = process.env.PANEL_URL && !process.env.PANEL_URL.includes('localhost')
+    ? process.env.PANEL_URL.replace(/\/+$/, '')
+    : null;
+
   return res.json({
     success: true,
     data: {
       nodeId: node.id,
       nodeName: node.name,
       daemonToken,
+      fqdn: node.fqdn || node.hostname,
       sftpPort: node.sftpPort,
       daemonPort: node.daemonPort,
       installationId: currentInstallationId,
-      panelUrl: `${req.protocol}://${req.get('host')}`
+      panelUrl: envPanelUrl || `${proto}://${host}`
     }
   });
 });
@@ -176,18 +193,35 @@ router.post(['/heartbeat', '/:nodeId/heartbeat'], async (req: Request, res: Resp
 
   const body = req.body || {};
 
-  // Parse telemetry from both Atyro daemon structure and standard structure
+  // Parse telemetry from both Atyro/AetherNode daemon structure and standard structure
+  if (body.fqdn && typeof body.fqdn === 'string' && !body.fqdn.endsWith('.local') && (!node.fqdn || node.fqdn === 'localhost')) {
+    node.fqdn = body.fqdn.trim();
+  }
+  if (body.daemonPort && !node.daemonPort) {
+    node.daemonPort = Number(body.daemonPort) || 9666;
+  }
+
   if (body.memory) {
     node.totalRamMB = body.memory.totalMb || node.totalRamMB;
-    node.usedRamMB = body.memory.usedMb || node.usedRamMB;
+    node.usedRamMB = body.memory.usedMb ?? node.usedRamMB;
   } else {
     if (typeof body.ramUsageMB === 'number') node.usedRamMB = body.ramUsageMB;
     if (typeof body.totalRamMB === 'number' && body.totalRamMB > 0) node.totalRamMB = body.totalRamMB;
   }
 
   if (body.disk) {
-    node.totalDiskGB = body.disk.totalGb || body.disk.total || node.totalDiskGB;
-    node.usedDiskGB = body.disk.usedGb || body.disk.used || node.usedDiskGB;
+    if (typeof body.disk.totalGb === 'number') {
+      node.totalDiskGB = body.disk.totalGb;
+      node.usedDiskGB = typeof body.disk.usedGb === 'number' ? body.disk.usedGb : node.usedDiskGB;
+    } else if (typeof body.disk.totalMb === 'number' && body.disk.totalMb > 0) {
+      const totalGb = Math.round(body.disk.totalMb / 1024);
+      const freeGb = typeof body.disk.freeMb === 'number' ? Math.round(body.disk.freeMb / 1024) : 0;
+      node.totalDiskGB = totalGb;
+      node.usedDiskGB = Math.max(0, totalGb - freeGb);
+    } else {
+      node.totalDiskGB = body.disk.total || node.totalDiskGB;
+      node.usedDiskGB = body.disk.used ?? node.usedDiskGB;
+    }
   } else {
     if (typeof body.diskUsageGB === 'number') node.usedDiskGB = body.diskUsageGB;
     if (typeof body.totalDiskGB === 'number' && body.totalDiskGB > 0) node.totalDiskGB = body.totalDiskGB;
@@ -224,7 +258,7 @@ router.post(['/heartbeat', '/:nodeId/heartbeat'], async (req: Request, res: Resp
     node.status = 'online';
   }
 
-  saveDbSync();
+  scheduleSaveDb(500);
 
   if (wasOffline) {
     handleNodeReconnect(node.id).catch(() => {});
@@ -415,7 +449,7 @@ router.get('/config', async (req: Request, res: Response) => {
       fqdn: node.fqdn,
       sftpFqdn: node.sftpFqdn,
       sftpPort: node.sftpPort || 2022,
-      daemonPort: node.daemonPort || 8080,
+      daemonPort: node.daemonPort || 9666,
       limits: {
         totalRamMB: node.totalRamMB,
         totalCpuCores: node.totalCpuCores,
@@ -478,7 +512,7 @@ export function startHeartbeatMonitor() {
         }
       });
 
-      if (modified) saveDbSync();
+      if (modified) scheduleSaveDb(500);
     } catch (err) {
       console.error('Error in heartbeat monitor:', err);
     }

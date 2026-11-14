@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User, Key, Shield, Check, Copy, Trash2, Plus, Info, ExternalLink,
-  Lock, AlertTriangle, Download, ArrowRight, Smartphone, RefreshCw,
-  LogOut, ShieldCheck, CheckCircle2, AlertCircle
+  User, Key, Shield, Check, Copy, Trash2,
+  Download, MousePointer, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
+import { useTheme } from '../../lib/ThemeContext';
 import { apiRequest } from '../../lib/api';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 interface ApiKeyItem {
   id: string;
@@ -18,6 +19,7 @@ interface ApiKeyItem {
 
 export const UserSettings: React.FC = () => {
   const { user, refreshUser, logout } = useAuth();
+  const { customCursorEnabled, setCustomCursorEnabled } = useTheme();
   const [activeTab, setActiveTab] = useState<'account' | 'security' | 'api' | 'referrals'>('account');
 
   // Account Tab State
@@ -34,7 +36,6 @@ export const UserSettings: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [updatingPassword, setUpdatingPassword] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   // API Tab State
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
@@ -201,13 +202,22 @@ export const UserSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="w-full space-y-6 pb-12">
       {/* 1. Header (Orihost image_fba04f18.png) */}
-      <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Account</h1>
-        <p className="text-xs text-neutral-400 mt-1">
-          Your profile, sign-in security, API keys and referrals.
-        </p>
+      <div className="flex items-center gap-3.5">
+        <UserAvatar
+          seed={user?.id || user?.username || user?.email}
+          avatarUrl={user?.avatarUrl}
+          name={user?.displayName || user?.username || 'User'}
+          sizeClass="w-11 h-11"
+          shape="rounded"
+        />
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Account</h1>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            Your profile, sign-in security, API keys and referrals.
+          </p>
+        </div>
       </div>
 
       {/* 2. Top Tabs: Account | Security | API | Referrals */}
@@ -402,6 +412,57 @@ export const UserSettings: React.FC = () => {
             </div>
           </div>
 
+          {/* Card 4: Preferences / Custom Cursor */}
+          <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-5">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="sm:w-1/3">
+                <h3 className="text-sm font-bold text-white">Preferences</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Customize interactive interface behavior for your control panel.
+                </p>
+              </div>
+
+              <div className="sm:w-2/3 flex items-center justify-between gap-3 p-3.5 rounded-lg bg-[#0c0d12] border border-[#23252e]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                    customCursorEnabled
+                      ? 'bg-[#f97316]/10 border-[#f97316]/30 text-[#f97316]'
+                      : 'bg-[#181922] border-[#23252e] text-neutral-400'
+                  }`}>
+                    <MousePointer className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Custom Cursor</span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                        customCursorEnabled
+                          ? 'bg-[#f97316]/15 text-[#f97316]'
+                          : 'bg-neutral-800 text-neutral-400'
+                      }`}>
+                        {customCursorEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">
+                      Use the custom orange arrow pointer across the website and panel.
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 border ${
+                    customCursorEnabled
+                      ? 'bg-[#f97316] hover:bg-[#ea580c] border-[#f97316] text-white'
+                      : 'bg-[#181922] hover:bg-[#1f212d] border-[#23252e] hover:border-[#f97316]/40 text-neutral-200'
+                  }`}
+                >
+                  {customCursorEnabled ? 'Disable cursor' : 'Enable cursor'}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Card 4: Your data */}
           <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-5">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -535,45 +596,6 @@ export const UserSettings: React.FC = () => {
             </div>
           </form>
 
-          {/* Two-step verification Card */}
-          <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-5">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div className="sm:w-1/3">
-                <h3 className="text-sm font-bold text-white">Two-step verification</h3>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  Protect your account with a one-time code from an authenticator app.
-                </p>
-              </div>
-
-              <div className="sm:w-2/3 flex items-center justify-between p-4 rounded-lg bg-[#0c0d12] border border-[#23252e]">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#181922] border border-[#23252e] flex items-center justify-center text-neutral-400">
-                    <Shield className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">Authenticator app</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-400">
-                        {twoFactorEnabled ? 'On' : 'Off'}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-neutral-500 mt-0.5">
-                      Two-step verification is not enabled. Add it to require a code from your phone when you sign in.
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-                  className="px-4 py-2 rounded-lg bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer shrink-0"
-                >
-                  Enable two-step
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* Account activity Card */}
           <div className="rounded-xl bg-[#14151b] border border-[#23252e] p-5">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -587,9 +609,13 @@ export const UserSettings: React.FC = () => {
               <div className="sm:w-2/3 space-y-2">
                 <div className="flex items-center justify-between p-3 rounded-lg bg-[#0c0d12] border border-[#23252e]">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-[#f97316] text-white flex items-center justify-center text-xs font-bold">
-                      {((user?.displayName || user?.username || 'K')[0]).toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      seed={user?.id || user?.username || user?.email}
+                      avatarUrl={user?.avatarUrl}
+                      name={user?.displayName || user?.username || 'User'}
+                      sizeClass="w-7 h-7"
+                      shape="rounded"
+                    />
                     <div>
                       <div className="text-xs font-bold text-white flex items-center gap-1.5">
                         <span>{user?.displayName || user?.username || 'kravenog'}</span>

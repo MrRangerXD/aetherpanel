@@ -78,7 +78,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [customCursorEnabled, setCustomCursorState] = useState<boolean>(() => {
     const val = localStorage.getItem('aether_custom_cursor');
-    return val !== null ? val === 'true' : false;
+    return val !== 'false';
   });
 
   const [animationsEnabled, setAnimationsState] = useState<boolean>(() => {
@@ -258,7 +258,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
   
   const setAccent = (acc: AccentColor) => setAccentState(acc);
-  const setCustomCursorEnabled = (enabled: boolean) => setCustomCursorState(enabled);
+  const setCustomCursorEnabled = (enabled: boolean) => {
+    setCustomCursorState(enabled);
+    localStorage.setItem('aether_custom_cursor', String(enabled));
+    window.dispatchEvent(new CustomEvent('aether-cursor-toggle', { detail: { enabled } }));
+  };
   const setAnimationsEnabled = (enabled: boolean) => setAnimationsState(enabled);
   const setAdsEnabled = (enabled: boolean) => setAdsState(enabled);
 

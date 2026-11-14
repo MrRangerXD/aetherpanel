@@ -305,7 +305,7 @@ export function startOomSafetyGuard(
 
   let lastLevel: 'safe' | 'warning' | 'critical' = 'safe';
 
-  const checkSafety = () => {
+  const checkSafety = async () => {
     try {
       if (!pid || pid <= 0) return;
 
@@ -317,15 +317,17 @@ export function startOomSafetyGuard(
         return;
       }
 
-      // Read real VmRSS from /proc/[pid]/status or cgroups
+      // Read real VmRSS asynchronously from /proc/[pid]/status
       let usedRamMB = 0;
       const procStatus = `/proc/${pid}/status`;
-      if (fs.existsSync(procStatus)) {
-        const txt = fs.readFileSync(procStatus, 'utf8');
+      try {
+        const txt = await fs.promises.readFile(procStatus, 'utf8');
         const m = txt.match(/VmRSS:\s+(\d+)\s+kB/i);
         if (m) {
           usedRamMB = +(parseInt(m[1], 10) / 1024).toFixed(1);
         }
+      } catch {
+        return;
       }
 
       if (usedRamMB <= 0) return;
@@ -368,7 +370,9 @@ export function startOomSafetyGuard(
     } catch {}
   };
 
-  const interval = setInterval(checkSafety, 1500);
+  const interval = setInterval(() => {
+    checkSafety().catch(() => {});
+  }, 5000);
   activeOomGuards.set(serverId, { interval, lastLevel });
 
   return () => stopOomSafetyGuard(serverId);

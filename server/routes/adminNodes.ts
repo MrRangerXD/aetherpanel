@@ -1,8 +1,9 @@
 import crypto from 'crypto';
-import { Router, Response } from 'express';
+import net from 'net';
+import { Router, Response, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { getDb, saveDbSync } from '../db';
+import { getDb, saveDbSync, scheduleSaveDb } from '../db';
 import { AuthenticatedRequest, createAuditLog } from '../auth';
 import { Node, Allocation } from '../../src/types';
 import { WingsClient } from '../services/wings';
@@ -11,8 +12,28 @@ import { ensureLocalNode } from '../nodeAgent';
 
 export const adminNodesRouter = Router();
 
+function getPanelPublicUrl(req: Request): string {
+  const envUrl = process.env.PANEL_URL?.trim();
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+    return envUrl.replace(/\/+$/, '');
+  }
+  const proto = req.headers['x-forwarded-proto']?.toString().split(',')[0].trim() || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host']?.toString().split(',')[0].trim() || req.get('host') || 'localhost:3000';
+  return `${proto}://${host}`;
+}
+
+function probeTcpPort(host: string, port: number, timeoutMs = 2000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cleanHost = (host || '127.0.0.1').replace(/^https?:\/\//i, '').replace(/[:/].*$/, '');
+    const sock = net.createConnection({ host: cleanHost, port, timeout: timeoutMs });
+    sock.on('connect', () => { sock.destroy(); resolve(true); });
+    sock.on('error', () => { sock.destroy(); resolve(false); });
+    sock.on('timeout', () => { sock.destroy(); resolve(false); });
+  });
+}
+
 // Reserved infrastructure ports that allocations cannot bind to
-export const RESERVED_SYSTEM_PORTS = new Set([22, 80, 443, 2022, 3000, 8080, 8443]);
+export const RESERVED_SYSTEM_PORTS = new Set([22, 80, 443, 2022, 3000, 8080, 8443, 9666]);
 
 // Zod Schemas for Node and Allocation Operations
 const CreateNodeSchema = z.object({
@@ -170,15 +191,32 @@ adminNodesRouter.post('/nodes/:id/ping', async (req: AuthenticatedRequest, res: 
       });
     }
 
-    // Remote node: check heartbeat recency
+    // Remote node: perform live HTTP health check via FQDN/hostname first, then check recent heartbeat
+    const health = await WingsClient.health(node);
+    if (health.alive) {
+      node.lastHeartbeatAt = new Date().toISOString();
+      if (!node.maintenanceMode) node.status = 'online';
+      scheduleSaveDb(300);
+      return res.json({
+        success: true,
+        online: true,
+        latencyMs: health.latencyMs,
+        message: `Connected to remote daemon via ${node.fqdn || node.hostname} (${health.latencyMs}ms).`,
+        lastHeartbeatAt: node.lastHeartbeatAt,
+        system: health.system
+      });
+    }
+
     const lastHb = node.lastHeartbeatAt ? new Date(node.lastHeartbeatAt).getTime() : 0;
-    const isRecent = (Date.now() - lastHb) < 60000;
+    const isRecent = (Date.now() - lastHb) < 45000;
 
     res.json({
       success: true,
       online: isRecent,
-      latencyMs: isRecent ? 14 : null,
-      message: isRecent ? 'Remote node daemon heartbeat verified.' : 'Node is currently unreachable or has not sent a heartbeat recently.',
+      latencyMs: isRecent ? health.latencyMs : null,
+      message: isRecent
+        ? `Inbound heartbeat active, but direct outbound probe to ${node.fqdn || node.hostname}:${node.apiPort || 9666} failed (${health.error || 'timeout'}).`
+        : (health.error || 'Node is currently unreachable or has not sent a heartbeat recently.'),
       lastHeartbeatAt: node.lastHeartbeatAt
     });
   } catch (err: any) {
@@ -207,19 +245,22 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
     const hashedToken = await bcrypt.hash(rawToken, 10);
 
     const nodeId = `node_${crypto.randomUUID()}`;
-    const cleanHostname = data.hostname.trim();
-    const cleanApiPort = data.apiPort || (data.ssl ? 8443 : 8787);
-    const calculatedApiUrl = data.apiUrl?.trim() || `${data.ssl ? 'https' : 'http'}://${cleanHostname}:${cleanApiPort}`;
+    const cleanHostname = data.hostname.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    const cleanApiPort = data.apiPort || (data.ssl ? (data.behindProxy ? 443 : 8443) : 9666);
+    const scheme = data.ssl ? 'https' : 'http';
+    const omitPort = data.behindProxy || (data.ssl && cleanApiPort === 443) || (!data.ssl && cleanApiPort === 80);
+    const calculatedApiUrl = data.apiUrl?.trim() || (omitPort ? `${scheme}://${cleanHostname}` : `${scheme}://${cleanHostname}:${cleanApiPort}`);
 
     const newNode: Node = {
       id: nodeId,
       name: data.name.trim(),
       hostname: cleanHostname,
+      fqdn: cleanHostname,
       apiPort: cleanApiPort,
       apiUrl: calculatedApiUrl,
       ssl: Boolean(data.ssl),
       token: hashedToken,
-      daemonToken: rawToken, // Kept for fast direct heartbeat lookup
+      daemonToken: rawToken, // Kept for fast direct heartbeat & outbound Wings auth
       isLocal: cleanHostname === 'localhost' || cleanHostname === '127.0.0.1',
       behindProxy: Boolean(data.behindProxy),
       maintenanceMode: Boolean(data.maintenanceMode),
@@ -237,7 +278,7 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       description: data.description || '',
       ip: cleanHostname,
       daemonPort: cleanApiPort,
-      daemonScheme: data.ssl ? 'https' : 'http',
+      daemonScheme: scheme,
       daemonSslEnabled: Boolean(data.ssl),
       status: 'offline',
       serverCount: 0,
@@ -308,7 +349,7 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
       `Created Wings node '${newNode.name}' (${newNode.hostname}:${newNode.apiPort}) with ${seededAllocs.length} initial allocations`
     );
 
-    const origin = `${req.protocol}://${req.get('host')}`;
+    const origin = getPanelPublicUrl(req);
 
     // Return the raw token ONCE only
     res.status(201).json({
@@ -320,7 +361,8 @@ adminNodesRouter.post('/nodes', async (req: AuthenticatedRequest, res: Response)
         panelUrl: origin,
         nodeId: newNode.id,
         token: rawToken,
-        port: cleanApiPort
+        port: cleanApiPort,
+        fqdn: cleanHostname
       },
       message: `Node '${newNode.name}' created successfully. Store the Wings token securely.`
     });
@@ -398,23 +440,38 @@ const updateNodeHandler = async (req: AuthenticatedRequest, res: Response) => {
       node.isLocal = true;
       node.isLocalNode = true;
     } else {
-      // Remote Node: all fields updatable
+      // Remote Node: all fields updatable including FQDN & apiUrl sync
       if (data.name !== undefined) node.name = data.name.trim();
       if (data.hostname !== undefined) {
-        node.hostname = data.hostname.trim();
-        node.ip = node.hostname;
+        const cleanHost = data.hostname.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+        node.hostname = cleanHost;
+        node.ip = cleanHost;
+        node.fqdn = cleanHost;
+        for (const alloc of db.allocations) {
+          if (alloc.nodeId === node.id && (!alloc.isAssigned && !alloc.assigned)) {
+            alloc.ip = cleanHost;
+          }
+        }
       }
       if (data.apiPort !== undefined) {
         node.apiPort = data.apiPort;
         node.daemonPort = data.apiPort;
       }
-      if (data.apiUrl !== undefined) node.apiUrl = data.apiUrl.trim() || undefined;
       if (data.ssl !== undefined) {
         node.ssl = data.ssl;
         node.daemonScheme = data.ssl ? 'https' : 'http';
         node.daemonSslEnabled = data.ssl;
       }
       if (data.behindProxy !== undefined) node.behindProxy = data.behindProxy;
+      if (data.apiUrl !== undefined) {
+        node.apiUrl = data.apiUrl.trim() || undefined;
+      } else if (data.hostname !== undefined || data.apiPort !== undefined || data.ssl !== undefined || data.behindProxy !== undefined) {
+        const port = node.apiPort || node.daemonPort || 9666;
+        const scheme = node.ssl ? 'https' : 'http';
+        const omitPort = node.behindProxy || (node.ssl && port === 443) || (!node.ssl && port === 80);
+        const host = node.fqdn || node.hostname || node.ip;
+        node.apiUrl = omitPort ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
+      }
       if (data.maintenanceMode !== undefined) {
         node.maintenanceMode = data.maintenanceMode;
         node.status = data.maintenanceMode ? 'maintenance' : (node.lastHeartbeatAt ? 'online' : 'offline');
@@ -522,8 +579,9 @@ adminNodesRouter.post('/nodes/:id/token/rotate', async (req: AuthenticatedReques
       });
     }
 
-    const newRawToken = crypto.randomBytes(32).toString('hex');
+    const newRawToken = 'AETHER-' + crypto.randomBytes(36).toString('base64url');
     node.token = await bcrypt.hash(newRawToken, 10);
+    node.daemonToken = newRawToken;
     saveDbSync();
 
     await createAuditLog(
@@ -655,17 +713,26 @@ adminNodesRouter.get('/nodes/:id/diagnostics', async (req: AuthenticatedRequest,
     }
 
     const isLocal = node.id === 'local' || node.isLocal;
+    const daemonPort = node.apiPort || node.daemonPort || 9666;
+    const remoteHealth = isLocal ? { alive: true, latencyMs: 1, error: undefined } : await WingsClient.health(node);
+    const tcpDaemonReachable = isLocal ? true : await probeTcpPort(node.fqdn || node.hostname || node.ip, daemonPort, 2000);
+    const tcpSftpReachable = isLocal ? true : await probeTcpPort(node.fqdn || node.hostname || node.ip, node.sftpPort || 2022, 1500);
+
     const diag = {
       nodeId: node.id,
       name: node.name,
       isLocal,
       hostname: node.hostname,
-      apiPort: node.apiPort,
+      fqdn: node.fqdn || node.hostname,
+      apiPort: daemonPort,
       ssl: node.ssl,
       behindProxy: node.behindProxy,
+      healthAlive: remoteHealth.alive,
+      latencyMs: remoteHealth.latencyMs,
+      healthError: remoteHealth.error,
       ports: [
-        { port: node.apiPort, service: 'Wings HTTP API', reachable: isLocal ? true : false, note: isLocal ? 'In-Process Provider' : 'Remote Wings Daemon' },
-        { port: 2022, service: 'SFTP Subsystem', reachable: true, note: 'Direct SFTP Ingress' },
+        { port: daemonPort, service: 'AetherNode HTTP API', reachable: isLocal ? true : (remoteHealth.alive || tcpDaemonReachable), note: isLocal ? 'In-Process Provider' : (remoteHealth.alive ? `Daemon Online (${remoteHealth.latencyMs}ms)` : (tcpDaemonReachable ? 'TCP Open / Auth Pending' : (remoteHealth.error || 'Daemon Unreachable'))) },
+        { port: node.sftpPort || 2022, service: 'SFTP Subsystem', reachable: tcpSftpReachable, note: 'Direct SFTP Ingress' },
         { port: 3000, service: 'AetherPanel HTTP Web', reachable: true, note: 'Primary Web Service' }
       ],
       systemMemory: {
@@ -708,10 +775,12 @@ adminNodesRouter.post('/nodes/:id/install-token', async (req: AuthenticatedReque
     });
     saveDbSync();
 
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const panelUrl = `${protocol}://${host}`;
-    const installCmd = `bash <(curl -fsSL https://raw.githubusercontent.com/mrrangerxd/aetherpanel/refs/heads/main/install.sh) --node --token ${tokenStr} --panel ${panelUrl}`;
+    const panelUrl = getPanelPublicUrl(req);
+    const nodeFqdn = (node.fqdn || node.hostname || '').trim();
+    const daemonPort = node.apiPort || node.daemonPort || 9666;
+    const fqdnFlag = nodeFqdn ? ` --fqdn ${nodeFqdn}` : '';
+    const portFlag = daemonPort !== 9666 ? ` --daemon-port ${daemonPort}` : '';
+    const installCmd = `bash <(curl -fsSL https://raw.githubusercontent.com/mrrangerxd/aetherpanel/refs/heads/main/install.sh) --node --token ${tokenStr} --panel ${panelUrl}${fqdnFlag}${portFlag}`;
 
     res.json({
       success: true,
@@ -720,6 +789,8 @@ adminNodesRouter.post('/nodes/:id/install-token', async (req: AuthenticatedReque
         token: tokenStr,
         expiresAt,
         panelUrl,
+        fqdn: nodeFqdn,
+        daemonPort,
         installCmd
       }
     });

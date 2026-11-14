@@ -228,7 +228,7 @@ export async function executeServerDeployment(db: any, userId: string, payload: 
     alloc = {
       id: `alloc_${Date.now()}_${assignedPort}`,
       nodeId: targetNode.id,
-      ip: targetNode.ip,
+      ip: effectiveIp || targetNode.fqdn || targetNode.hostname || targetNode.ip,
       port: assignedPort,
       serverId,
       isAssigned: true,

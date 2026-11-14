@@ -541,7 +541,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ server }) => {
 
       {/* Modpack Import Tab */}
       {activeTab === 'modpack' && (
-        <div className="surface p-6 rounded-lg border border-[var(--color-line)] max-w-xl mx-auto space-y-4">
+        <div className="surface p-6 rounded-lg border border-[var(--color-line)] w-full max-w-3xl space-y-4">
           <div className="flex items-center gap-3 border-b border-[var(--color-line)] pb-4">
             <div className="p-3 rounded-lg bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/30">
               <Layers className="w-6 h-6" />

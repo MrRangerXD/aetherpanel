@@ -158,7 +158,7 @@ export const ApiKeys: React.FC<{ onNavigate?: (page: string) => void }> = () => 
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 py-6 px-4">
+    <div className="w-full space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--color-line)] pb-4">
         <div>

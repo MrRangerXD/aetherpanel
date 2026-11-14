@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Server, Shield, Search, Menu, X, LayoutDashboard, CreditCard, LifeBuoy,
-  Settings, LogOut, Sliders, Users, HardDrive, Package, Coins,
-  ExternalLink, ChevronDown, Gamepad2, Bot, Activity, MousePointer,
-  Plus, Terminal, Disc as DiscordIcon, Radio, Sparkles
+  Settings, LogOut, Sliders, Users, HardDrive, Coins,
+  ExternalLink, ChevronDown, Gamepad2, Bot, Activity,
+  Plus, Disc as DiscordIcon
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useBranding } from '../lib/BrandingContext';
 import { AetherLogo } from './AetherLogo';
+import { UserAvatar } from './ui/UserAvatar';
 
 interface NavbarProps {
   currentPage: string;
@@ -28,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectServer
 }) => {
   const { user, logout } = useAuth();
-  const { brandName, supportEmail, discordUrl, socialLinks } = useBranding();
+  const { socialLinks, discordUrl } = useBranding();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hostingDropdownOpen, setHostingDropdownOpen] = useState(false);
   const dropdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -36,17 +37,43 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const activeDiscord = socialLinks?.discord || discordUrl || 'https://discord.gg/aetherpanel';
 
-  const [cursorActive, setCursorActive] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return localStorage.getItem('aether_custom_cursor') !== 'false';
-  });
-
-  const toggleCursor = () => {
-    const next = !cursorActive;
-    setCursorActive(next);
-    localStorage.setItem('aether_custom_cursor', next ? 'true' : 'false');
-    window.dispatchEvent(new CustomEvent('aether-cursor-toggle', { detail: { enabled: next } }));
-  };
+  const panelSectionLabel = React.useMemo(() => {
+    const map: Record<string, string> = {
+      dashboard: 'Dashboard',
+      servers: 'My Servers',
+      deploy: 'Create Server',
+      'server-manage': 'Server Console',
+      billing: 'Billing & Wallet',
+      support: 'Support',
+      'afk-rewards': 'AFK Rewards',
+      settings: 'Account',
+      'api-keys': 'API Keys',
+      activity: 'Activity',
+      'admin-dashboard': 'Overview',
+      'admin-users': 'Users',
+      'admin-nodes': 'Nodes',
+      'admin-servers': 'Servers',
+      'admin-settings': 'Panel Settings',
+      'admin-products': 'Products & Plans',
+      'admin-server-types': 'Server Types',
+      'admin-monitoring': 'Monitoring',
+      'admin-diagnostics': 'Diagnostics',
+      'admin-backups': 'Backups',
+      'admin-billing': 'Billing',
+      'admin-coupons': 'Coupons',
+      'admin-announcements': 'Announcements',
+      'admin-ads': 'Ad Campaigns',
+      'admin-rewards': 'AFK Rewards',
+      'admin-discord': 'Discord Bot',
+      'admin-panel-customization': 'Panel Customization',
+      'admin-support': 'Support Queue',
+      'admin-audit-logs': 'Audit Trail',
+      'admin-importer': 'Importer',
+      'admin-api-keys': 'REST API Keys',
+      'admin-legal': 'Legal Pages',
+    };
+    return map[currentPage] || (currentPage.startsWith('admin-') ? 'Admin' : 'Panel');
+  }, [currentPage]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -101,15 +128,42 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isControlPanel = !isPublicPage && !isAdminRoute;
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-[var(--color-bg)] border-b border-[var(--color-line)] select-none">
-      <div className="w-full h-14 px-3 sm:px-5 lg:px-7 flex items-center justify-between gap-3">
+    <header
+      className={`sticky top-0 z-50 w-full select-none border-b ${
+        isPublicPage
+          ? 'bg-[var(--color-bg)] border-[var(--color-line)]'
+          : 'bg-[#09090b] border-[#181920]'
+      }`}
+    >
+      <div
+        className={`w-full h-14 flex items-center justify-between ${
+          isPublicPage ? 'px-3 sm:px-5 lg:px-7 gap-3' : 'gap-0'
+        }`}
+      >
         
         {/* ========================================================================= */}
         {/* LEFT SECTION: Brand Logo (Always navigates to Homepage) */}
         {/* ========================================================================= */}
-        <div className="flex items-center gap-3 shrink-0 min-w-0">
+        <div
+          className={`flex items-center shrink-0 min-w-0 ${
+            isPublicPage
+              ? 'gap-3'
+              : 'h-full px-3 sm:px-4 lg:w-64 lg:border-r lg:border-[#181920]'
+          }`}
+        >
           <AetherLogo onClick={() => handleNav('home')} />
         </div>
+
+        {/* Orihost-style Subtle Section Breadcrumb (Only inside Panel / Admin on desktop) */}
+        {!isPublicPage && (
+          <div className="hidden sm:flex items-center gap-2 px-5 text-xs text-neutral-500 min-w-0">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+              {isAdminRoute ? 'Admin' : 'Panel'}
+            </span>
+            <span className="text-neutral-700">/</span>
+            <span className="font-medium text-neutral-200 truncate">{panelSectionLabel}</span>
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* CENTER SECTION: Desktop Navigation Links (ONLY on Public Homepage) */}
@@ -296,26 +350,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* ========================================================================= */}
         {/* RIGHT SECTION: Differentiated Action Bars */}
         {/* ========================================================================= */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className={`flex items-center gap-2 shrink-0 ${!isPublicPage ? 'px-3 sm:px-5 lg:px-6 ml-auto' : ''}`}>
           
           {/* CASE A: PUBLIC HOMEPAGE RIGHT ACTIONS */}
           {isPublicPage && (
             <>
-              {/* Custom Cursor Toggle Button (Only on Public pages as requested) */}
-              <button
-                type="button"
-                onClick={toggleCursor}
-                className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 h-8 rounded-md text-xs font-mono transition-colors border cursor-pointer ${
-                  cursorActive
-                    ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)] border-[var(--color-accent)]'
-                    : 'bg-[var(--color-surface)] text-[var(--color-ink-mute)] border-[var(--color-line)] hover:text-[var(--color-ink)]'
-                }`}
-                title={cursorActive ? 'Disable Custom Cursor' : 'Enable Custom Cursor'}
-              >
-                <MousePointer className="h-3 w-3" />
-                <span className="text-[10px] uppercase font-semibold">{cursorActive ? 'Cursor ON' : 'Cursor OFF'}</span>
-              </button>
-
               {onOpenSearch && (
                 <button
                   type="button"
@@ -374,30 +413,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </>
           )}
 
-          {/* CASE B: CONTROL PANEL NAVBAR ACTIONS (Only Credits, Deploy Server, and Admin) */}
+          {/* CASE B: ORIHOST PANEL NAVBAR ACTIONS (Credits, Admin, Deploy Server) */}
           {isControlPanel && (
-            <div className="flex items-center gap-2.5">
-              {/* Wallet Credits Pill */}
+            <div className="flex items-center gap-2">
+              {/* Wallet Credits Chip */}
               <button
                 type="button"
                 onClick={() => handleNav('billing')}
-                className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-lg text-xs font-mono bg-[#14151b] hover:bg-[#1a1c24] border border-[#23252e] hover:border-emerald-500/40 text-emerald-400 font-semibold transition-colors cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-mono font-medium bg-[#12131a] hover:bg-[#181a24] border border-[#23252e] hover:border-[#2e3240] text-zinc-200 transition-colors cursor-pointer"
                 title="Wallet Balance & Billing"
               >
-                <Coins className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <Coins className="h-3.5 w-3.5 text-[#f97316] shrink-0" />
                 <span>${user?.credits?.toFixed(2) || '0.00'}</span>
-              </button>
-
-              {/* Primary Action: Deploy Server Button */}
-              <button
-                type="button"
-                onClick={() => handleNav('deploy')}
-                className="inline-flex items-center gap-1.5 px-3.5 h-8.5 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
-                title="Deploy a New Server Instance"
-              >
-                <Plus className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden sm:inline">Deploy Server</span>
-                <span className="sm:hidden">Deploy</span>
               </button>
 
               {/* Admin Panel Link (if staff) */}
@@ -405,23 +432,35 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('admin-dashboard')}
-                  className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-lg text-xs font-semibold bg-[#14151b] hover:bg-[#1e2029] text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium bg-[#12131a] hover:bg-[#181a24] text-zinc-200 hover:text-white border border-[#23252e] hover:border-[#f97316]/40 transition-colors cursor-pointer"
                   title="Switch to Admin Control Plane"
                 >
-                  <Shield className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                  <Shield className="h-3.5 w-3.5 text-[#f97316] shrink-0" />
                   <span>Admin</span>
                 </button>
               )}
+
+              {/* Primary Action: Deploy Server Button */}
+              <button
+                type="button"
+                onClick={() => handleNav('deploy')}
+                className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-lg text-xs font-semibold text-white bg-[#f97316] hover:bg-[#ea580c] transition-colors cursor-pointer"
+                title="Deploy a New Server Instance"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Deploy Server</span>
+                <span className="sm:hidden">Deploy</span>
+              </button>
             </div>
           )}
 
-          {/* CASE C: ADMIN CONTROL PLANE NAVBAR (Orange Dashboard Button on the Right) */}
+          {/* CASE C: ADMIN CONTROL PLANE NAVBAR (Orange Dashboard Button on Right) */}
           {isAdminRoute && (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => handleNav('dashboard')}
-                className="inline-flex items-center gap-2 px-4 h-8.5 rounded-lg text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 h-8 rounded-lg text-xs font-semibold text-white bg-[#f97316] hover:bg-[#ea580c] transition-colors cursor-pointer"
                 title="Switch to Client Control Panel Dashboard"
               >
                 <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
@@ -439,7 +478,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               e.stopPropagation();
               setMobileMenuOpen((prev) => !prev);
             }}
-            className="h-8 w-8 flex items-center justify-center rounded-md text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] bg-[var(--color-surface)] border border-[var(--color-line)] lg:hidden transition-colors shrink-0 cursor-pointer"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white bg-[#12131a] border border-[#23252e] lg:hidden transition-colors shrink-0 cursor-pointer"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation-drawer"
@@ -508,27 +547,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span>Search panel & commands</span>
                   </div>
                   <kbd className="px-1 py-0.5 text-[9px] font-mono text-zinc-400 bg-[#09090b] rounded border border-[#23252e]">⌘K</kbd>
-                </button>
-              )}
-
-              {/* Cursor Toggle in Mobile Drawer (Only on public page) */}
-              {isPublicPage && (
-                <button
-                  type="button"
-                  onClick={toggleCursor}
-                  className="w-full flex items-center justify-between px-3 h-10 rounded-md text-xs font-medium text-zinc-300 bg-[#14151b] border border-[#23252e] hover:text-white transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <MousePointer className={`h-3.5 w-3.5 ${cursorActive ? 'text-[#f97316]' : 'text-zinc-500'}`} />
-                    <span>Custom Orange Cursor</span>
-                  </div>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                    cursorActive
-                      ? 'bg-orange-950/40 text-orange-400 border-orange-500/40'
-                      : 'bg-[#09090b] text-zinc-500 border-[#23252e]'
-                  }`}>
-                    {cursorActive ? 'ON' : 'OFF'}
-                  </span>
                 </button>
               )}
 
@@ -742,10 +760,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="pt-4 border-t border-[#23252e] mt-4">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-[#14151b] border border-[#23252e]">
                   <div className="flex items-center gap-2.5 overflow-hidden">
-                    <img
-                      src={user.avatarUrl || 'https://api.dicebear.com/7.x/identicon/svg?seed=user'}
-                      alt="Avatar"
-                      className="h-7 w-7 rounded-md object-cover bg-zinc-800 shrink-0"
+                    <UserAvatar
+                      seed={user.id || user.username || user.email}
+                      avatarUrl={user.avatarUrl}
+                      name={user.displayName || user.username}
+                      sizeClass="h-7 w-7"
+                      shape="rounded"
                     />
                     <div className="truncate">
                       <div className="text-xs font-semibold text-zinc-200 truncate">{user.displayName || user.username}</div>

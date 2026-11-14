@@ -1377,7 +1377,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
             displayName: 'Aether Administrator',
             email: adminEmail,
             role: 'super_admin',
-            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            avatarUrl: '',
             isSuspended: false,
             emailVerified: true,
             twoFactorEnabled: false,
@@ -1395,6 +1395,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           admin.username = 'admin';
           if (admin.tokenVersion === undefined) admin.tokenVersion = 1;
           if (admin.serverLimit === undefined) admin.serverLimit = 50;
+          if (admin.avatarUrl && admin.avatarUrl.includes('photo-1534528741775-53994a69daeb')) {
+            admin.avatarUrl = '';
+          }
           // Ensure valid known password hash is always active
           dbCache.passwords[admin.id] = adminHash;
         }
@@ -1411,7 +1414,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         migrateUserAllocations(dbCache);
 
         dbCache.nodes.forEach(n => {
-          if (n.daemonPort === undefined) n.daemonPort = 8080;
+          if (n.daemonPort === undefined) n.daemonPort = 9666;
           if (n.sftpPort === undefined) n.sftpPort = 2022;
           if (n.ramOverallocatePercent === undefined) n.ramOverallocatePercent = 0;
           if (n.cpuOverallocatePercent === undefined) n.cpuOverallocatePercent = 0;
@@ -1514,32 +1517,111 @@ export function createDbSnapshot(): void {
   }
 }
 
+let saveTimer: NodeJS.Timeout | null = null;
+let saveInFlight: Promise<void> | null = null;
+let saveDirty = false;
+let shutdownHooksInstalled = false;
+
+function ensureShutdownFlushHook() {
+  if (shutdownHooksInstalled) return;
+  shutdownHooksInstalled = true;
+  const flushOnExit = () => {
+    if (saveDirty && dbCache) {
+      try {
+        saveDbSync();
+      } catch {}
+    }
+  };
+  process.once('beforeExit', flushOnExit);
+  process.once('SIGINT', () => {
+    flushOnExit();
+    process.exit(0);
+  });
+  process.once('SIGTERM', () => {
+    flushOnExit();
+    process.exit(0);
+  });
+}
+
+async function flushDbAsync(): Promise<void> {
+  if (!dbCache) return;
+  if (saveInFlight) {
+    saveDirty = true;
+    await saveInFlight;
+    if (!saveDirty) return;
+  }
+
+  saveDirty = false;
+  const tempFile = `${DB_FILE}.tmp.${process.pid}.${Date.now()}`;
+  const runWrite = async () => {
+    try {
+      const data = JSON.stringify(dbCache, null, 2);
+      await fs.promises.writeFile(tempFile, data, 'utf-8');
+      await fs.promises.rename(tempFile, DB_FILE);
+    } catch (err) {
+      console.error('[Database] Async atomic write failed:', err);
+      try {
+        if (fs.existsSync(tempFile)) await fs.promises.unlink(tempFile);
+      } catch {}
+    } finally {
+      saveInFlight = null;
+      if (saveDirty) {
+        scheduleSaveDb(250);
+      }
+    }
+  };
+
+  saveInFlight = runWrite();
+  await saveInFlight;
+}
+
+/**
+ * Coalesces frequent state/heartbeat writes into non-blocking background disk flushes
+ * so the Node.js event loop and disk I/O never block Minecraft/game packet ticks.
+ */
+export function scheduleSaveDb(delayMs = 450): void {
+  if (!dbCache) return;
+  ensureShutdownFlushHook();
+  saveDirty = true;
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (saveDirty) {
+      flushDbAsync().catch(() => {});
+    }
+  }, delayMs);
+}
+
 export function saveDbSync(): void {
   if (!dbCache) return;
-  
+  saveDirty = false;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
   const tempFile = `${DB_FILE}.tmp.${process.pid}.${Date.now()}`;
   try {
     const data = JSON.stringify(dbCache, null, 2);
     fs.writeFileSync(tempFile, data, 'utf-8');
-    
+
     // Atomically replace the target file
     fs.renameSync(tempFile, DB_FILE);
   } catch (err) {
     console.error('[Database] CRITICAL: Failed atomic write to db.json:', err);
-    
+
     // Attempt cleanup of temp file
     if (fs.existsSync(tempFile)) {
       try { fs.unlinkSync(tempFile); } catch {}
     }
-    
+
     // Do not fall back to direct write to avoid partial data corruption
-    // The application should ideally have a retry mechanism or error state
     throw err;
   }
 }
 
 export async function saveDb(): Promise<void> {
-  saveDbSync();
+  await flushDbAsync();
 }
 
 /**
@@ -1570,7 +1652,7 @@ async function generateInitialDb(): Promise<DatabaseSchema> {
     displayName: 'Aether Administrator',
     email: adminEmail,
     role: 'super_admin',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     isSuspended: false,
     emailVerified: true,
     twoFactorEnabled: false,

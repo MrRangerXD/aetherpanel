@@ -1840,6 +1840,13 @@ router.put('/auth-providers', async (req: AuthenticatedRequest, res: Response) =
     };
   }
 
+  // Keep panelCustomization.features in sync
+  if (db.settings.panelCustomization?.features) {
+    db.settings.panelCustomization.features.googleLoginEnabled = db.settings.authProviders.google?.enabled !== false;
+    db.settings.panelCustomization.features.discordLoginEnabled = db.settings.authProviders.discord?.enabled !== false;
+    db.settings.panelCustomization.features.emailPasswordLoginEnabled = db.settings.authProviders.emailPassword?.enabled !== false;
+  }
+
   saveDbSync();
 
   await createAuditLog(
@@ -2762,6 +2769,9 @@ function getDefaultPanelCustomization(db: any) {
     features: {
       registrationEnabled: db.settings?.registrationEnabled ?? true,
       emailVerificationRequired: db.settings?.emailVerificationRequired ?? false,
+      googleLoginEnabled: db.settings?.authProviders?.google?.enabled !== false,
+      discordLoginEnabled: db.settings?.authProviders?.discord?.enabled !== false,
+      emailPasswordLoginEnabled: db.settings?.authProviders?.emailPassword?.enabled !== false,
       afkRewardsEnabled: true,
       ticketsEnabled: true,
       couponsEnabled: true,
@@ -2821,6 +2831,10 @@ router.get('/panel-customization', async (req: AuthenticatedRequest, res: Respon
   }
   const customization = db.settings.panelCustomization;
   if (!customization.branding) customization.branding = {};
+  if (!customization.features) customization.features = {};
+  customization.features.googleLoginEnabled = db.settings.authProviders?.google?.enabled !== false;
+  customization.features.discordLoginEnabled = db.settings.authProviders?.discord?.enabled !== false;
+  customization.features.emailPasswordLoginEnabled = db.settings.authProviders?.emailPassword?.enabled !== false;
   if (!customization.branding.logoUrl && db.settings.themeSettings?.assets?.logoUrl) {
     customization.branding.logoUrl = db.settings.themeSettings.assets.logoUrl;
   }
@@ -2888,6 +2902,31 @@ router.put('/panel-customization', async (req: AuthenticatedRequest, res: Respon
   if (updated.features) {
     db.settings.registrationEnabled = updated.features.registrationEnabled;
     db.settings.emailVerificationRequired = updated.features.emailVerificationRequired;
+    if (!db.settings.authProviders) {
+      db.settings.authProviders = {
+        emailPassword: { enabled: true },
+        google: { enabled: true },
+        discord: { enabled: true }
+      };
+    }
+    if (typeof updated.features.googleLoginEnabled === 'boolean') {
+      db.settings.authProviders.google = {
+        ...(db.settings.authProviders.google || {}),
+        enabled: updated.features.googleLoginEnabled
+      };
+    }
+    if (typeof updated.features.discordLoginEnabled === 'boolean') {
+      db.settings.authProviders.discord = {
+        ...(db.settings.authProviders.discord || {}),
+        enabled: updated.features.discordLoginEnabled
+      };
+    }
+    if (typeof updated.features.emailPasswordLoginEnabled === 'boolean') {
+      db.settings.authProviders.emailPassword = {
+        ...(db.settings.authProviders.emailPassword || {}),
+        enabled: updated.features.emailPasswordLoginEnabled
+      };
+    }
   }
   if (updated.maintenance) {
     db.settings.maintenanceMode = updated.maintenance.enabled;

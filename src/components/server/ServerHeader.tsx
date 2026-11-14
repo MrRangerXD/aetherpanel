@@ -118,7 +118,8 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
   const isMoreTabActive = !!activeMoreTab;
 
   return (
-    <div className="border-b border-[#181920] bg-[#09090b] space-y-4 shrink-0 px-4 sm:px-6 pt-4 pb-2">
+    <div className="border-b border-[#181920] bg-[#09090b] shrink-0">
+      <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-2 space-y-4">
       {/* 1. Breadcrumb row (Orihost image_00688f85.png) */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
         <div className="flex items-center gap-2 font-mono">
@@ -382,6 +383,7 @@ export const ServerHeader: React.FC<ServerHeaderProps> = ({
 
       {/* 4. Top 2 Promo Banners on Every Server Tab (Orihost image_00688f85.png) */}
       <div className="space-y-2 pt-1">
+      </div>
       </div>
     </div>
   );

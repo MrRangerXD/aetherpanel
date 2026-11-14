@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Mail, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
-import { useBranding } from '../../lib/BrandingContext';
 import { AetherLogo } from '../../components/AetherLogo';
 
 interface LoginProps {
@@ -9,8 +8,11 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
-  const { login, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
-  const { brandName } = useBranding();
+  const { login, loginWithGoogle, loginWithDiscord, authConfig, refreshAuthConfig } = useAuth();
+
+  useEffect(() => {
+    refreshAuthConfig();
+  }, [refreshAuthConfig]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -93,19 +95,18 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
       <div className="w-full max-w-sm space-y-5">
         
         {/* Header */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2.5">
           <div className="flex justify-center mb-1">
             <AetherLogo onClick={() => onNavigate('home')} className="cursor-pointer" />
           </div>
-          <div className="label">
-            AUTHENTICATION
+          <div className="space-y-1">
+            <h1 className="text-lg font-bold tracking-tight text-[var(--color-ink)]">
+              Sign in to your account
+            </h1>
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              Access your servers, console, and cloud resources.
+            </p>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--color-ink)] font-mono">
-            {brandName || 'AetherPanel'}
-          </h1>
-          <p className="text-xs text-[var(--color-ink-mute)]">
-            Sign in to access your servers and resources.
-          </p>
         </div>
 
         {/* Card */}

@@ -31,6 +31,7 @@ import { WorldManager } from '../../components/server/WorldManager';
 import { ServerProperties } from '../../components/server/ServerProperties';
 import { SubUsers } from '../../components/server/SubUsers';
 import { TabTransition } from '../../components/animation/TabTransition';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { buildBotStartupCommand } from '../../lib/startup';
 import { normalizeServer, formatMemory } from '../../lib/serverNormalize';
 import { normalizeServerPath, joinServerPath, getParentServerPath } from '../../lib/pathUtils';
@@ -170,6 +171,8 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Activity state
   const [activities, setActivities] = useState<ServerActivity[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitySearch, setActivitySearch] = useState('');
   const [runtimesMap, setRuntimesMap] = useState<any>(null);
 
   // Settings & Startup Config & Lifecycle state
@@ -758,9 +761,16 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
 
   // Fetch Activity
   const fetchActivities = async () => {
-    const res = await apiRequest(`/servers/${serverId}/activity`);
-    if (res.success && res.data) {
-      setActivities(res.data);
+    setActivitiesLoading(true);
+    try {
+      const res = await apiRequest(`/servers/${serverId}/activity`);
+      if (res.success && Array.isArray(res.data)) {
+        setActivities(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch server activity logs:', err);
+    } finally {
+      setActivitiesLoading(false);
     }
   };
 
@@ -827,7 +837,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
     } else if (activeTab === 'activity') {
       fetchActivities();
     }
-  }, [activeTab, serverId, currentPath]);
+  }, [activeTab, serverId, currentPath, server?.id]);
 
   // Power Actions
   const handlePowerAction = async (action: 'start' | 'stop' | 'restart' | 'kill') => {
@@ -842,6 +852,9 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         runPreflightCheck();
       }
       await fetchServerDetails();
+      if (activeTab === 'activity') {
+        fetchActivities();
+      }
     } finally {
       setPowerLoadingAction(null);
     }
@@ -1316,7 +1329,7 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
         </div>
 
         {/* Tab Content Canvas */}
-        <div className="flex-1 min-w-0 w-full p-4 sm:p-6 lg:p-8">
+        <div className="flex-1 min-w-0 w-full max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8">
 
       {/* TAB 1: CONSOLE LOGS */}
       {activeTab === 'console' && (
@@ -3353,27 +3366,116 @@ export const ServerManage: React.FC<ServerManageProps> = ({ serverId, initialTab
       {/* TAB 9: AUDIT LOG */}
       {activeTab === 'activity' && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
-                <tr>
-                  <th className="p-3">User</th>
-                  <th className="p-3">Action</th>
-                  <th className="p-3">Details</th>
-                  <th className="p-3">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60">
-                {activities.map((a) => (
-                  <tr key={a.id} className="hover:bg-zinc-900 transition-colors">
-                    <td className="p-3 font-semibold text-white">{a.username}</td>
-                    <td className="p-3 font-mono text-violet-400">{a.action}</td>
-                    <td className="p-3 text-zinc-300">{a.details}</td>
-                    <td className="p-3 text-zinc-500">{a.createdAt}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[#23252e] bg-[#14151b] p-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Activity className="h-4 w-4 text-[#f97316]" />
+                <span>Server Activity &amp; Audit Logs</span>
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Every power event, configuration edit, file operation, and sub-user action for this server.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={activitySearch}
+                  onChange={(e) => setActivitySearch(e.target.value)}
+                  placeholder="Filter logs..."
+                  className="bg-[#09090b] border border-[#23252e] focus:border-[#f97316] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none w-44 sm:w-56"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={fetchActivities}
+                disabled={activitiesLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#09090b] border border-[#23252e] hover:border-[#f97316]/50 text-xs font-medium text-neutral-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${activitiesLoading ? 'animate-spin text-[#f97316]' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#23252e] bg-[#14151b] overflow-hidden">
+            {activitiesLoading && activities.length === 0 ? (
+              <div className="p-12 text-center text-xs text-neutral-400 space-y-2">
+                <RefreshCw className="h-5 w-5 animate-spin text-[#f97316] mx-auto" />
+                <div>Loading server activity logs...</div>
+              </div>
+            ) : (() => {
+              const q = activitySearch.trim().toLowerCase();
+              const filtered = q
+                ? activities.filter((a) =>
+                    (a.username || '').toLowerCase().includes(q) ||
+                    (a.action || '').toLowerCase().includes(q) ||
+                    (a.details || '').toLowerCase().includes(q)
+                  )
+                : activities;
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="p-12 text-center space-y-2">
+                    <Activity className="h-8 w-8 text-neutral-600 mx-auto" />
+                    <p className="text-sm font-semibold text-neutral-300">
+                      {q ? 'No matching activity logs' : 'No activity recorded yet'}
+                    </p>
+                    <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                      {q
+                        ? 'Try clearing your filter query to view all server events.'
+                        : 'Actions such as starting, stopping, editing files, properties, or installing plugins will appear here.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#09090b] border-b border-[#23252e] text-neutral-400 font-mono text-[11px] uppercase">
+                      <tr>
+                        <th className="py-3 px-4">Actor</th>
+                        <th className="py-3 px-4">Action</th>
+                        <th className="py-3 px-4">Details</th>
+                        <th className="py-3 px-4 text-right">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#23252e]/70">
+                      {filtered.map((a: any) => (
+                        <tr key={a.id} className="hover:bg-[#191b24] transition-colors">
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar
+                                seed={a.userId || a.username || 'system'}
+                                avatarUrl={a.avatarUrl}
+                                name={a.username || 'system'}
+                                sizeClass="w-6 h-6"
+                                shape="rounded"
+                              />
+                              <span className="font-semibold text-white">{a.username || 'system'}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#09090b] border border-[#23252e] font-mono text-[11px] text-[#f97316]">
+                              {a.action}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-neutral-300 max-w-md break-words">
+                            {a.details}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap font-mono text-[11px] text-neutral-400 tabular-nums">
+                            {new Date(a.createdAt).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

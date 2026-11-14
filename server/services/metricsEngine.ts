@@ -82,7 +82,7 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
   /**
    * Central single-pass tick executing across all active workloads.
    */
-  private tick() {
+  private async tick() {
     const db = getDbSync();
     if (!db || !db.servers) return;
 
@@ -98,12 +98,12 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
         lastDiskCheckTime: 0
       };
 
-      // Adaptive throttle: if 0 clients are looking at this server, sample every 10 seconds to conserve node CPU
-      if (subCount === 0 && now - state.lastSampleTime < 10000) {
+      // Adaptive throttle: if 0 clients are looking at this server, sample every 15 seconds to conserve node CPU
+      if (subCount === 0 && now - state.lastSampleTime < 15000) {
         continue;
       }
 
-      const point = this.sampleServerWorkload(server, state, now);
+      const point = await this.sampleServerWorkload(server, state, now);
       this.processStates.set(server.id, state);
 
       // Store in memory ring buffer (sliding window of 60 points)
@@ -127,9 +127,9 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
   }
 
   /**
-   * Non-blocking, zero-spawn process & cgroup stat sampler.
+   * Non-blocking async /proc stat sampler without synchronous reads or child processes.
    */
-  private sampleServerWorkload(server: Server, state: ProcessSampleState, now: number): LiveMetricsPoint {
+  private async sampleServerWorkload(server: Server, state: ProcessSampleState, now: number): Promise<LiveMetricsPoint> {
     const limitRamMB = Math.max(128, server.limits?.ramMB || 1024);
     const limitDiskGB = Math.max(1, server.limits?.diskGB || 10);
     const pid = server.startup?.pid;
@@ -139,62 +139,57 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
     let pidsCount = 1;
     let oomScore = 0;
 
-    // Direct /proc inspection without spawning child shell processes (Fast & safe for 100+ containers)
     if (pid && pid > 0) {
       try {
         const procDir = `/proc/${pid}`;
-        if (fs.existsSync(procDir)) {
-          // 1. Read memory RSS
-          const statusPath = `${procDir}/status`;
-          if (fs.existsSync(statusPath)) {
-            const statusContent = fs.readFileSync(statusPath, 'utf8');
-            const vmrssMatch = statusContent.match(/VmRSS:\s+(\d+)\s+kB/i);
-            if (vmrssMatch) {
-              usedRamMB = +(parseInt(vmrssMatch[1], 10) / 1024).toFixed(1);
-            }
-            const threadsMatch = statusContent.match(/Threads:\s+(\d+)/i);
-            if (threadsMatch) {
-              pidsCount = parseInt(threadsMatch[1], 10);
-            }
-          }
+        const [statusRes, statRes, oomRes] = await Promise.allSettled([
+          fs.promises.readFile(`${procDir}/status`, 'utf8'),
+          fs.promises.readFile(`${procDir}/stat`, 'utf8'),
+          fs.promises.readFile(`${procDir}/oom_score`, 'utf8')
+        ]);
 
-          // 2. Read CPU jiffies for accurate Linux delta calculation
-          const statPath = `${procDir}/stat`;
-          if (fs.existsSync(statPath)) {
-            const statFields = fs.readFileSync(statPath, 'utf8').split(' ');
-            if (statFields.length > 14) {
-              const utime = parseInt(statFields[13], 10);
-              const stime = parseInt(statFields[14], 10);
-              const totalJiffies = utime + stime;
+        if (statusRes.status === 'fulfilled') {
+          const vmrssMatch = statusRes.value.match(/VmRSS:\s+(\d+)\s+kB/i);
+          if (vmrssMatch) {
+            usedRamMB = +(parseInt(vmrssMatch[1], 10) / 1024).toFixed(1);
+          }
+          const threadsMatch = statusRes.value.match(/Threads:\s+(\d+)/i);
+          if (threadsMatch) {
+            pidsCount = parseInt(threadsMatch[1], 10);
+          }
+        }
 
-              const elapsedMs = Math.max(1, now - state.lastSampleTime);
-              if (state.lastCpuTime > 0) {
-                const jiffiesDelta = Math.max(0, totalJiffies - state.lastCpuTime);
-                // Standard Linux clock ticks (typically 100 per sec)
-                const computed = ((jiffiesDelta / 100) / (elapsedMs / 1000)) * 100;
-                const maxCpu = Math.max(100, (server.limits?.cpuCores || 1) * 100);
-                cpuPercent = isNaN(computed) ? 0.0 : +Math.min(maxCpu, Math.max(0.1, computed)).toFixed(1);
-              }
-              state.lastCpuTime = totalJiffies;
+        if (statRes.status === 'fulfilled') {
+          const statText = statRes.value;
+          const rparen = statText.lastIndexOf(')');
+          if (rparen !== -1) {
+            const fields = statText.slice(rparen + 2).split(' ');
+            const utime = parseInt(fields[11], 10) || 0;
+            const stime = parseInt(fields[12], 10) || 0;
+            const totalJiffies = utime + stime;
+
+            const elapsedMs = Math.max(1, now - state.lastSampleTime);
+            if (state.lastCpuTime > 0 && totalJiffies >= state.lastCpuTime) {
+              const jiffiesDelta = totalJiffies - state.lastCpuTime;
+              const computed = ((jiffiesDelta / 100) / (elapsedMs / 1000)) * 100;
+              const maxCpu = Math.max(100, (server.limits?.cpuCores || 1) * 100);
+              cpuPercent = isNaN(computed) ? 0.0 : +Math.min(maxCpu, Math.max(0.0, computed)).toFixed(1);
             }
+            state.lastCpuTime = totalJiffies;
           }
+        }
 
-          // 3. Read OOM score
-          const oomPath = `${procDir}/oom_score`;
-          if (fs.existsSync(oomPath)) {
-            try {
-              oomScore = parseInt(fs.readFileSync(oomPath, 'utf8').trim(), 10) || 0;
-            } catch {}
-          }
+        if (oomRes.status === 'fulfilled') {
+          oomScore = parseInt(oomRes.value.trim(), 10) || 0;
         }
       } catch {}
     }
 
     state.lastSampleTime = now;
 
-    // Check disk usage with 30s cache to avoid excessive I/O
+    // Non-blocking cached disk usage lookup (60s TTL)
     let diskUsageMB = state.lastDiskUsageMB;
-    if (now - state.lastDiskCheckTime > 30000 || diskUsageMB === 0) {
+    if (now - state.lastDiskCheckTime > 60000 || diskUsageMB === 0) {
       diskUsageMB = this.getFastDiskUsageMB(server.id);
       state.lastDiskUsageMB = diskUsageMB;
       state.lastDiskCheckTime = now;
@@ -204,7 +199,6 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
     const usedDiskGB = +(diskUsageMB / 1024).toFixed(2);
     const diskPercent = limitDiskGB > 0 ? Math.min(100, +((usedDiskGB / limitDiskGB) * 100).toFixed(1)) : 0;
 
-    // Determine OOM danger level
     let oomDangerLevel: 'safe' | 'warning' | 'critical' = 'safe';
     if (ramPercent >= 92) {
       oomDangerLevel = 'critical';
@@ -237,19 +231,21 @@ class HighConcurrencyMetricsEngine extends EventEmitter {
   }
 
   /**
-   * Fast disk usage calculator with cached directory state.
+   * Fast non-blocking disk usage calculator with cached directory state.
    */
   private getFastDiskUsageMB(serverId: string): number {
     const cached = this.cachedDiskUsage.get(serverId);
     const now = Date.now();
-    if (cached && now - cached.checkedAt < 30000) {
+    if (cached && now - cached.checkedAt < 60000) {
       return cached.sizeMB;
     }
 
-    let sizeMB = 5;
+    let sizeMB = cached?.sizeMB || 1;
     try {
       const bytes = getRealServerDiskUsageBytes(serverId);
-      sizeMB = Math.max(1, Math.round(bytes / (1024 * 1024)));
+      if (bytes > 0) {
+        sizeMB = Math.max(1, Math.round(bytes / (1024 * 1024)));
+      }
     } catch {}
 
     this.cachedDiskUsage.set(serverId, { sizeMB, checkedAt: now });

@@ -8,9 +8,11 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import { useBranding } from '../../lib/BrandingContext';
+import { useAuth } from '../../lib/AuthContext';
 import { Order, PaymentGatewaySettings, PanelVersionInfo, UpdateJobState, AuthProviderSettings, DatabaseHost, SocialLinks, NetworkProtectionStatus } from '../../types';
 
 export const AdminSettings: React.FC = () => {
+  const { refreshAuthConfig } = useAuth();
   const [activeTab, setActiveTab] = useState<'general' | 'auth' | 'security' | 'payments' | 'pending' | 'updates' | 'network_sftp' | 'databases' | 'network_protection'>('general');
 
   // Network Protection States
@@ -600,6 +602,7 @@ export const AdminSettings: React.FC = () => {
       body: JSON.stringify(authProviders)
     });
     if (res.success) {
+      await refreshAuthConfig();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } else {
@@ -2134,7 +2137,7 @@ export const AdminSettings: React.FC = () => {
                         <div className="text-[10px] text-zinc-400">Node communication endpoint</div>
                       </div>
                       <span className="font-mono text-zinc-300 font-bold bg-zinc-800 px-2.5 py-1 rounded-lg">
-                        :{netProtectStatus?.daemonPort || 8080}
+                        :{netProtectStatus?.daemonPort || 9666}
                       </span>
                     </div>
                   </div>

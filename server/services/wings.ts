@@ -24,11 +24,19 @@ export interface WingsServerStats {
 
 function getNodeBaseUrl(node: Node): string {
   if (node.apiUrl && node.apiUrl.trim()) {
-    return node.apiUrl.replace(/\/+$/, '');
+    const raw = node.apiUrl.trim().replace(/\/+$/, '');
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `${node.ssl ? 'https' : 'http'}://${raw}`;
   }
+  const rawHost = (node.fqdn || node.hostname || node.ip || 'localhost').trim();
+  const cleanHost = rawHost.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
   const scheme = node.ssl ? 'https' : 'http';
-  const port = node.apiPort || (node.ssl ? 8443 : 8080);
-  return `${scheme}://${node.hostname}:${port}`;
+  const defaultPort = node.ssl ? (node.behindProxy ? 443 : 8443) : 9666;
+  const port = node.apiPort || (node as any).daemonPort || defaultPort;
+  if ((scheme === 'https' && port === 443) || (scheme === 'http' && port === 80) || node.behindProxy) {
+    return `${scheme}://${cleanHost}`;
+  }
+  return `${scheme}://${cleanHost}:${port}`;
 }
 
 async function wingsRequest<T = any>(
@@ -45,7 +53,8 @@ async function wingsRequest<T = any>(
   const url = `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
   const method = options.method || 'GET';
   const timeoutMs = options.timeoutMs || 8000;
-  const token = options.rawToken || node.token || '';
+  // Remote nodes store bcrypt hash in node.token and raw secret in node.daemonToken
+  const rawCandidate = options.rawToken || (node as any).daemonToken || (node.token && !node.token.startsWith('$2') ? node.token : '');
 
   try {
     const controller = new AbortController();
@@ -57,8 +66,9 @@ async function wingsRequest<T = any>(
       'User-Agent': 'AetherPanel-WingsClient/2.6.0'
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (rawCandidate) {
+      headers['Authorization'] = `Bearer ${rawCandidate}`;
+      headers['x-daemon-token'] = rawCandidate;
     }
 
     const response = await fetch(url, {
@@ -101,7 +111,7 @@ async function wingsRequest<T = any>(
 
 export class WingsClient {
   /**
-   * Ping / Health check the remote wings daemon
+   * Ping / Health check the remote daemon (supports both /api/system and /health)
    */
   static async health(node: Node, rawToken?: string): Promise<{
     alive: boolean;
@@ -111,7 +121,10 @@ export class WingsClient {
     error?: string;
   }> {
     const start = Date.now();
-    const res = await wingsRequest(node, '/api/system', { method: 'GET', timeoutMs: 5000, rawToken });
+    let res = await wingsRequest(node, '/api/system', { method: 'GET', timeoutMs: 4500, rawToken });
+    if (!res.success && (res.status === 404 || res.status === 405)) {
+      res = await wingsRequest(node, '/health', { method: 'GET', timeoutMs: 4500, rawToken });
+    }
     const latencyMs = Date.now() - start;
 
     if (res.status === 401 || res.status === 403) {

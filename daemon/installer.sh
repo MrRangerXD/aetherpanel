@@ -80,6 +80,7 @@ ask "Git branch"                                 "$DEFAULT_BRANCH"    BRANCH
 ask "System service name"                        "$DEFAULT_SERVICE"   SERVICE_NAME
 ask "Panel URL"                                  "$DEFAULT_PANEL_URL" PANEL_URL
 ask "Node ID"                                    "$DEFAULT_NODE_ID"   NODE_ID
+ask "Node FQDN (domain or public IP)"            "$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo 127.0.0.1)" NODE_FQDN
 ask "Node Authentication Token"                  "$DEFAULT_TOKEN"     TOKEN
 ask "Daemon Port"                                "$DEFAULT_PORT"      PORT
 ask "Bind Host"                                  "$DEFAULT_BIND"      BIND_HOST
@@ -200,6 +201,7 @@ cat > "$CONFIG_PATH" <<EOF
 {
   "panelUrl": "${PANEL_URL}",
   "nodeId": "${NODE_ID}",
+  "fqdn": "${NODE_FQDN}",
   "token": "${TOKEN}",
   "daemonToken": "${TOKEN}",
   "port": ${PORT},

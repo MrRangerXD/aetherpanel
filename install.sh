@@ -1991,45 +1991,53 @@ install_node_daemon() {
   PANEL_URL=$(normalize_url "$PANEL_URL")
   DETECTED_IP=$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
   DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
+  if [ -z "${NODE_FQDN:-}" ]; then
+    NODE_FQDN=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "$DETECTED_IP")
+  fi
+  NODE_FQDN="${NODE_FQDN:-$DETECTED_IP}"
 
   if [[ "$INSTALL_TOKEN" == AETHER-* ]]; then
     DAEMON_TOKEN="$INSTALL_TOKEN"
     echo -e "\n${YELLOW}[VERIFYING] Testing node authentication with Control Plane (${PANEL_URL}/api/v1/node/heartbeat)...${NC}"
     local hb_response
-    hb_response=$(curl -s -X POST "${PANEL_URL}/api/v1/node/heartbeat" \
+    hb_response=$(curl -sS -m 10 -X POST "${PANEL_URL}/api/v1/node/heartbeat" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer ${DAEMON_TOKEN}" \
-      -d "{\"daemonToken\": \"${DAEMON_TOKEN}\", \"ramUsageMB\": 128, \"cpuUsageCores\": 0.1, \"diskUsageGB\": 1}" 2>/dev/null || echo '{"success":false}')
+      -H "x-daemon-token: ${DAEMON_TOKEN}" \
+      -d "{\"daemonToken\": \"${DAEMON_TOKEN}\", \"fqdn\": \"${NODE_FQDN}\", \"daemonPort\": ${DAEMON_PORT}, \"ramUsageMB\": 128, \"cpuUsageCores\": 0.1, \"diskUsageGB\": 1}" 2>/dev/null || echo '{"success":false}')
 
     if [[ "$hb_response" == *"\"success\":true"* ]]; then
-      NODE_ID=$(echo "$hb_response" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "node")
-      echo -e "${GREEN}[✓ SUCCESS] Node token verified! Node is now ONLINE in Control Plane.${NC}"
+      NODE_ID=$(echo "$hb_response" | sed -n 's/.*"nodeId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+      NODE_ID="${NODE_ID:-node}"
+      echo -e "${GREEN}[✓ SUCCESS] Node token verified! Node (${NODE_ID}) is now ONLINE in Control Plane.${NC}"
     else
-      echo -e "${YELLOW}[!] Notice: Heartbeat sent. Daemon will sync continuously on startup.${NC}"
-      NODE_ID="node"
+      echo -e "${YELLOW}[!] Notice: Heartbeat check returned: ${hb_response:0:180}. Daemon will retry on startup.${NC}"
+      NODE_ID="${NODE_ID:-node}"
     fi
   else
     echo -e "\n${YELLOW}[ENROLLING] Contacting Control Plane (${PANEL_URL}/api/v1/node/enroll)...${NC}"
     log_msg "Enrolling node with Control Plane at ${PANEL_URL}"
 
     local enroll_response
-    enroll_response=$(curl -s -X POST "${PANEL_URL}/api/v1/node/enroll" \
+    enroll_response=$(curl -sS -m 15 -X POST "${PANEL_URL}/api/v1/node/enroll" \
       -H "Content-Type: application/json" \
       -d "{
         \"token\": \"${INSTALL_TOKEN}\",
+        \"fqdn\": \"${NODE_FQDN}\",
         \"ip\": \"${DETECTED_IP}\",
         \"daemonPort\": ${DAEMON_PORT:-9666},
         \"sftpPort\": ${SFTP_PORT:-2022}
       }" 2>/dev/null || echo '{"success":false,"error":{"message":"Network connection failed"}}')
 
     if [[ "$enroll_response" == *"\"success\":true"* ]]; then
-      DAEMON_TOKEN=$(echo "$enroll_response" | grep -o '"daemonToken":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
-      NODE_ID=$(echo "$enroll_response" | grep -o '"nodeId":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
-      NODE_NAME=$(echo "$enroll_response" | grep -o '"nodeName":"[^"]*' | grep -o '[^"]*$' 2>/dev/null || echo "")
+      DAEMON_TOKEN=$(echo "$enroll_response" | sed -n 's/.*"daemonToken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+      NODE_ID=$(echo "$enroll_response" | sed -n 's/.*"nodeId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+      NODE_NAME=$(echo "$enroll_response" | sed -n 's/.*"nodeName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 
       echo -e "${GREEN}[✓ SUCCESS] Node successfully enrolled with Control Plane!${NC}"
       echo -e "    Node ID:   ${BOLD}${NODE_ID:-unknown}${NC}"
       echo -e "    Node Name: ${BOLD}${NODE_NAME:-unknown}${NC}"
+      echo -e "    Node FQDN: ${BOLD}${NODE_FQDN}${NC}"
       log_msg "Node successfully enrolled: ID ${NODE_ID:-unknown}"
     else
       echo -e "${RED}[ERROR] Node pairing failed. Server response:${NC}"
@@ -2037,22 +2045,6 @@ install_node_daemon() {
       return 1
     fi
   fi
-
-  cat <<EOF > "${node_cfg_dir}/config.json"
-{
-  "panelUrl": "${PANEL_URL}",
-  "nodeId": "${NODE_ID:-unknown}",
-  "token": "${DAEMON_TOKEN:-unknown}",
-  "daemonToken": "${DAEMON_TOKEN:-unknown}",
-  "port": ${DAEMON_PORT:-9666},
-  "daemonPort": ${DAEMON_PORT:-9666},
-  "bindHost": "0.0.0.0",
-  "sftpPort": ${SFTP_PORT:-2022},
-  "storagePath": "${node_vol_dir}",
-  "logLevel": "info"
-}
-EOF
-  chmod 600 "${node_cfg_dir}/config.json" 2>/dev/null || true
 
   # Deploy Full Universal Daemon Files (from local repository /daemon or remote)
   echo -e "${CYAN}    Deploying AetherPanel Universal Daemon files (Minecraft + Python/Node/Bun Bots)...${NC}"
@@ -2074,16 +2066,21 @@ EOF
     fi
   fi
 
-  # Ensure config.json is populated
+  # Write authoritative config.json with properly quoted nodeId, fqdn, and daemonToken
   cat <<EOF > "${node_cfg_dir}/config.json"
 {
   "panelUrl": "${PANEL_URL}",
-  "nodeId": ${NODE_ID:-1},
+  "nodeId": "${NODE_ID:-local}",
+  "fqdn": "${NODE_FQDN}",
   "token": "${DAEMON_TOKEN:-unknown}",
+  "daemonToken": "${DAEMON_TOKEN:-unknown}",
   "port": ${DAEMON_PORT:-9666},
+  "daemonPort": ${DAEMON_PORT:-9666},
   "bindHost": "0.0.0.0",
   "sftpPort": ${SFTP_PORT:-2022},
   "storagePath": "${node_vol_dir}",
+  "heartbeatIntervalMs": 15000,
+  "commandPollIntervalMs": 1000,
   "logLevel": "info"
 }
 EOF
@@ -2434,12 +2431,15 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --panel)
-      MODE="panel"
       SHOW_MENU=false
       if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]] && [[ "$2" =~ ^https?:// ]]; then
         PANEL_URL="$2"
+        if [ -z "${MODE:-}" ]; then
+          MODE="panel"
+        fi
         shift 2
       else
+        MODE="panel"
         shift
       fi
       ;;
@@ -2482,6 +2482,15 @@ while [[ $# -gt 0 ]]; do
         shift 2
       else
         NODE_FQDN=""
+        shift
+      fi
+      ;;
+    --daemon-port)
+      if [ $# -ge 2 ] && [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        DAEMON_PORT="$2"
+        shift 2
+      else
+        DAEMON_PORT="9666"
         shift
       fi
       ;;

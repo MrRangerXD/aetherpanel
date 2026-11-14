@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import { AlertRule, AlertIncident, TelemetryPoint, Node, Server } from '../../src/types';
@@ -21,67 +20,154 @@ const router = Router();
 const nodeTelemetryBuffer: Record<string, TelemetryPoint[]> = {};
 const serverTelemetryBuffer: Record<string, TelemetryPoint[]> = {};
 
-/**
- * Accurately measures the real disk usage of a server's directory on disk in bytes.
- */
-export function getRealServerDiskUsageBytes(serverId: string): number {
-  const dir = path.join(process.cwd(), 'data', 'servers', serverId);
-  if (!fs.existsSync(dir)) return 0;
-  let totalBytes = 0;
-  function walk(currentDir: string) {
+const diskUsageCache = new Map<string, { bytes: number; checkedAt: number; refreshing?: Promise<void> }>();
+const DISK_CACHE_TTL_MS = 60_000;
+
+const slpCache = new Map<string, { result: any; checkedAt: number }>();
+const SLP_CACHE_TTL_MS = 4_500;
+
+const lastProcCpuSamples = new Map<number, { jiffies: number; timeMs: number; cpuPercent: number }>();
+
+async function walkDirSizeAsync(dir: string): Promise<number> {
+  let total = 0;
+  const stack: string[] = [dir];
+  let processed = 0;
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries: fs.Dirent[];
     try {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = path.join(currentDir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else if (entry.isFile()) {
-          try {
-            totalBytes += fs.statSync(full).size;
-          } catch {}
-        }
+      entries = await fs.promises.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else if (entry.isFile()) {
+        try {
+          const st = await fs.promises.stat(full);
+          total += st.size;
+        } catch {}
       }
-    } catch {}
+      processed++;
+      // Yield periodically so event loop & game server I/O remain responsive
+      if (processed % 150 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
   }
-  walk(dir);
-  return totalBytes;
+  return total;
+}
+
+export async function refreshServerDiskUsageBytesAsync(serverId: string): Promise<number> {
+  const existing = diskUsageCache.get(serverId);
+  if (existing?.refreshing) {
+    await existing.refreshing;
+    return diskUsageCache.get(serverId)?.bytes || 0;
+  }
+
+  const dir = path.join(process.cwd(), 'data', 'servers', serverId);
+  const promise = (async () => {
+    try {
+      await fs.promises.access(dir);
+      const bytes = await walkDirSizeAsync(dir);
+      diskUsageCache.set(serverId, { bytes, checkedAt: Date.now() });
+    } catch {
+      diskUsageCache.set(serverId, { bytes: 0, checkedAt: Date.now() });
+    }
+  })();
+
+  diskUsageCache.set(serverId, {
+    bytes: existing?.bytes ?? 0,
+    checkedAt: existing?.checkedAt ?? 0,
+    refreshing: promise
+  });
+
+  await promise;
+  return diskUsageCache.get(serverId)?.bytes || 0;
 }
 
 /**
- * Inspects the real running Linux process (via /proc/[pid]/status & ps)
- * to return actual memory RSS (in MB) and CPU utilization (in %).
+ * Returns cached server disk usage in bytes immediately (non-blocking) and triggers
+ * a throttled async background recount when stale (>60s).
  */
+export function getRealServerDiskUsageBytes(serverId: string): number {
+  const cached = diskUsageCache.get(serverId);
+  const now = Date.now();
+  if (cached) {
+    if (now - cached.checkedAt > DISK_CACHE_TTL_MS && !cached.refreshing) {
+      refreshServerDiskUsageBytesAsync(serverId).catch(() => {});
+    }
+    return cached.bytes;
+  }
+
+  // First call: schedule async walk immediately and return 0 so HTTP handlers never stall
+  refreshServerDiskUsageBytesAsync(serverId).catch(() => {});
+  return 0;
+}
+
+/**
+ * Inspects the real running Linux process (async /proc/[pid]/status & /proc/[pid]/stat)
+ * with zero child-process spawning (no execSync 'ps' stalls).
+ */
+export async function getRealProcessStatsAsync(pid?: number): Promise<{ cpuPercent: number; usedRamMB: number } | null> {
+  if (!pid || pid <= 0) return null;
+  try {
+    process.kill(pid, 0);
+  } catch {
+    lastProcCpuSamples.delete(pid);
+    return null;
+  }
+
+  let usedRamMB = 0;
+  try {
+    const statusText = await fs.promises.readFile(`/proc/${pid}/status`, 'utf8');
+    const vmrssMatch = statusText.match(/VmRSS:\s+(\d+)\s+kB/i);
+    if (vmrssMatch) {
+      usedRamMB = +(parseInt(vmrssMatch[1], 10) / 1024).toFixed(2);
+    }
+  } catch {}
+
+  let cpuPercent = lastProcCpuSamples.get(pid)?.cpuPercent || 0.0;
+  try {
+    const statText = await fs.promises.readFile(`/proc/${pid}/stat`, 'utf8');
+    const rparen = statText.lastIndexOf(')');
+    if (rparen !== -1) {
+      const rest = statText.slice(rparen + 2).split(' ');
+      // utime is field 14 overall => index 11 after ') ', stime is field 15 => index 12
+      const utime = parseInt(rest[11], 10) || 0;
+      const stime = parseInt(rest[12], 10) || 0;
+      const totalJiffies = utime + stime;
+      const now = Date.now();
+      const prev = lastProcCpuSamples.get(pid);
+      if (prev && now > prev.timeMs && totalJiffies >= prev.jiffies) {
+        const deltaJiffies = totalJiffies - prev.jiffies;
+        const deltaSec = (now - prev.timeMs) / 1000;
+        const computed = ((deltaJiffies / 100) / Math.max(0.1, deltaSec)) * 100;
+        cpuPercent = Number.isFinite(computed) ? +Math.max(0, computed).toFixed(1) : 0.0;
+      }
+      lastProcCpuSamples.set(pid, { jiffies: totalJiffies, timeMs: now, cpuPercent });
+    }
+  } catch {}
+
+  return { cpuPercent, usedRamMB };
+}
+
 export function getRealProcessStats(pid?: number): { cpuPercent: number; usedRamMB: number } | null {
   if (!pid || pid <= 0) return null;
   try {
-    // Verify process is alive
     process.kill(pid, 0);
-
-    let usedRamMB = 0;
-    const statusPath = `/proc/${pid}/status`;
-    if (fs.existsSync(statusPath)) {
-      const statusText = fs.readFileSync(statusPath, 'utf8');
-      const vmrssMatch = statusText.match(/VmRSS:\s+(\d+)\s+kB/i);
-      if (vmrssMatch) {
-        const kb = parseInt(vmrssMatch[1], 10);
-        usedRamMB = +(kb / 1024).toFixed(2);
-      }
-    }
-
-    let cpuPercent = 0.0;
-    try {
-      const psOut = execSync(`ps -p ${pid} -o %cpu --no-headers`, { encoding: 'utf8', timeout: 600 }).trim();
-      const parsedCpu = parseFloat(psOut);
-      if (!isNaN(parsedCpu)) {
-        cpuPercent = +parsedCpu.toFixed(1);
-      }
-    } catch {}
-
-    return { cpuPercent, usedRamMB };
   } catch {
-    // Process not alive
     return null;
   }
+  const prev = lastProcCpuSamples.get(pid);
+  if (prev) {
+    return { cpuPercent: prev.cpuPercent, usedRamMB: 0 };
+  }
+  return { cpuPercent: 0, usedRamMB: 0 };
 }
 
 /**
@@ -295,37 +381,42 @@ router.get('/server/:serverId/live', async (req: Request, res: Response) => {
   let slpResult = { online: false, players: { online: 0, max: server.maxPlayers || 20 }, version: server.version, latencyMs: 0, motd: '' };
 
   if (isRunning && serverPort) {
-    try {
-      const slp = await queryMinecraftServerStatus('127.0.0.1', serverPort, 1500);
-      if (slp.online) {
-        slpResult = {
-          online: true,
-          players: slp.players || { online: 0, max: server.maxPlayers || 20 },
-          version: slp.version || server.version,
-          latencyMs: slp.latencyMs || 5,
-          motd: slp.motd || ''
-        };
+    const slpKey = `${server.id}:${serverPort}`;
+    const cachedSlp = slpCache.get(slpKey);
+    if (cachedSlp && Date.now() - cachedSlp.checkedAt < SLP_CACHE_TTL_MS) {
+      slpResult = cachedSlp.result;
+    } else {
+      try {
+        const slp = await queryMinecraftServerStatus('127.0.0.1', serverPort, 1200);
+        if (slp.online) {
+          slpResult = {
+            online: true,
+            players: slp.players || { online: 0, max: server.maxPlayers || 20 },
+            version: slp.version || server.version,
+            latencyMs: slp.latencyMs || 5,
+            motd: slp.motd || ''
+          };
+        }
+      } catch {
+        // Process is alive but socket is not responding to SLP yet
       }
-    } catch {
-      // Process is alive but socket is not responding to SLP yet
+      slpCache.set(slpKey, { result: slpResult, checkedAt: Date.now() });
     }
   }
 
-  // Real Hardware and Process Metrics
+  // Real Hardware and Process Metrics (non-blocking cached disk + async /proc)
   const totalRamMB = server.limits?.ramMB || 2048;
   const totalDiskGB = server.limits?.diskGB || 20;
 
-  // Real disk usage calculation from actual files on filesystem
   const realDiskBytes = getRealServerDiskUsageBytes(server.id);
   const diskUsageMB = +(realDiskBytes / (1024 * 1024)).toFixed(2);
   const usedDiskGB = +(realDiskBytes / (1024 * 1024 * 1024)).toFixed(3);
 
-  // Real process stats via PID inspection (/proc and ps)
   let usedRamMB = 0;
   let cpuPercent = 0.0;
 
   if (isRunning) {
-    const procStats = getRealProcessStats(server.startup?.pid);
+    const procStats = await getRealProcessStatsAsync(server.startup?.pid);
     if (procStats) {
       usedRamMB = Math.min(procStats.usedRamMB, totalRamMB);
       cpuPercent = procStats.cpuPercent;
@@ -333,7 +424,6 @@ router.get('/server/:serverId/live', async (req: Request, res: Response) => {
       usedRamMB = Math.min(server.ramUsageMB || 0, totalRamMB);
       cpuPercent = server.cpuUsage || 0.0;
     }
-    // Sync back to db
     server.ramUsageMB = usedRamMB;
     server.cpuUsage = cpuPercent;
     server.diskUsageMB = diskUsageMB;

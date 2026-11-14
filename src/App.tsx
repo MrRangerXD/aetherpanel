@@ -336,10 +336,10 @@ function AppContent() {
             {/* Content Viewport */}
             <main className={
               currentPage === 'server-manage'
-                ? 'flex-1 w-full min-w-0 p-0 flex flex-col'
+                ? 'flex-1 w-full min-w-0 p-0 flex flex-col justify-between'
                 : isAdminPage
                 ? 'flex-1 w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-between'
-                : 'flex-1 p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto flex flex-col justify-between'
+                : 'flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-between'
             }>
               <div className="flex-1 flex flex-col">
                 <PageTransition routeKey={currentPage}>
@@ -408,7 +408,11 @@ function AppContent() {
               </div>
 
               {/* Subtle Panel Footer for Customer & Admin Pages */}
-              <footer className="py-3 px-5 border border-white/5 bg-zinc-950/20 text-[10px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl shadow-inner">
+              <footer className={`py-3 px-5 border border-white/5 bg-zinc-950/20 text-[10px] text-zinc-500 flex items-center justify-between font-mono shrink-0 mt-8 rounded-xl shadow-inner ${
+                currentPage === 'server-manage'
+                  ? 'max-w-[1440px] w-[calc(100%-2rem)] sm:w-[calc(100%-3rem)] lg:w-[calc(100%-4rem)] mx-auto mb-6'
+                  : ''
+              }`}>
                 <span className="font-medium text-zinc-400">© 2025–2026 AetherPanel</span>
                 <span className="text-[9px] text-zinc-600 hidden sm:inline tracking-widest uppercase font-semibold">Enterprise Distributed Control Plane</span>
               </footer>

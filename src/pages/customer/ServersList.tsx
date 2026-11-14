@@ -64,7 +64,7 @@ export const ServersList: React.FC<ServersListProps> = ({ onNavigate }) => {
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+    <div className="w-full space-y-6 pb-10">
       {/* Welcome Back Header + Badges & New Server Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

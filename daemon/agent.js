@@ -24,8 +24,9 @@ const axios = require('axios');
 // Shared keep-alive agents: reuse TCP/TLS connections across downloads
 // instead of a fresh handshake per request (big win for consecutive installs)
 const https = require('https');
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 4 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 4 });
+const allowSelfSigned = process.env.DAEMON_ALLOW_SELF_SIGNED === 'true';
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16, rejectUnauthorized: !allowSelfSigned });
 let archiver;
 try { archiver = require('archiver'); } catch { archiver = null; }
 let unzipper;
@@ -53,6 +54,7 @@ const CONFIG_FILE = path.join(ROOT, 'config.json');
 let config = {
   panelUrl: process.env.PANEL_URL || 'http://localhost:3000',
   nodeId: process.env.NODE_ID || 'local',
+  fqdn: process.env.NODE_FQDN || '',
   token: process.env.NODE_TOKEN || '',
   port: Number(process.env.DAEMON_PORT || 9666),
   bindHost: process.env.BIND_HOST || '0.0.0.0',
@@ -72,6 +74,7 @@ if (fs.existsSync(CONFIG_FILE)) {
 // Normalize aliases so both token / daemonToken and port / daemonPort work seamlessly
 config.token = config.token || config.daemonToken || process.env.NODE_TOKEN || '';
 config.port = Number(config.port || config.daemonPort || process.env.DAEMON_PORT || 9666);
+config.fqdn = (config.fqdn || process.env.NODE_FQDN || '').trim();
 if (config.nodeId === undefined || config.nodeId === null || config.nodeId === '') {
   config.nodeId = process.env.NODE_ID || 'local';
 }
@@ -82,15 +85,17 @@ if (!config.token) {
 }
 
 // ------------------------------------------------------------
-// Logging
+// Logging (non-blocking WriteStream so disk writes never stall event loop)
 // ------------------------------------------------------------
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 const agentLogPath = path.join(LOG_DIR, 'agent.log');
+const agentLogStream = fs.createWriteStream(agentLogPath, { flags: 'a' });
+agentLogStream.on('error', () => {});
 
 function log(...args) {
   const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`;
   console.log(line);
-  try { fs.appendFileSync(agentLogPath, line + '\n'); } catch {}
+  try { agentLogStream.write(line + '\n'); } catch {}
 }
 
 // ------------------------------------------------------------
@@ -123,6 +128,8 @@ async function panelFetch(method, route, body = undefined, timeoutMs = 15000) {
       url,
       data: body,
       headers: panelHeaders(),
+      httpAgent,
+      httpsAgent,
       timeout: timeoutMs,
       validateStatus: () => true,
     });
@@ -136,29 +143,33 @@ async function sendHeartbeat() {
   const cpu = os.cpus().length;
   const totalMem = Math.floor(os.totalmem() / (1024 * 1024));
   const freeMem = Math.floor(os.freemem() / (1024 * 1024));
+  const disk = await getDiskSpace();
   const body = {
-    daemonVersion: '1.0.0',
+    daemonVersion: '1.1.0',
     nodeVersion: process.version,
     os: `${os.platform()} ${os.release()} ${os.arch()}`,
+    fqdn: config.fqdn || undefined,
+    daemonPort: config.port,
     cpu,
     memory: { totalMb: totalMem, freeMb: freeMem, usedMb: totalMem - freeMem },
-    disk: await getDiskSpace(),
+    disk,
+    activeContainers: serverProcesses.size,
     uptime: os.uptime(),
   };
   const r = await panelFetch('POST', `/api/nodes/${config.nodeId}/heartbeat`, body, 10000);
   if (r.status !== 200) {
     log(`[heartbeat] failed (status ${r.status}):`, JSON.stringify(r.data).slice(0, 200));
-  } else {
-    log(`[heartbeat] ok`);
   }
 }
 
 async function getDiskSpace() {
   const bytes = await getDiskBytes();
-  if (!bytes) return { totalMb: 0, freeMb: 0 };
+  if (!bytes) return { totalMb: 0, freeMb: 0, totalGb: 0, usedGb: 0 };
   return {
     totalMb: Math.floor(bytes.total / 1048576),
     freeMb: Math.floor(bytes.free / 1048576),
+    totalGb: Math.round(bytes.total / 1073741824),
+    usedGb: Math.round(bytes.used / 1073741824),
   };
 }
 
@@ -846,9 +857,30 @@ async function cmdStart(serverId, payload) {
       if (jars.length === 0) throw new Error('No server jar found; reinstall server');
       const jar = jars[0];
       const ram = payload.ram || 1024;
-      const xms = Math.max(64, Math.floor(ram / 2));
+      const xms = Math.min(Math.max(512, Math.floor(ram / 2)), ram);
+      const isLargeHeap = ram >= 12288;
+      const aikarFlags = [
+        '-XX:+UseG1GC',
+        '-XX:+ParallelRefProcEnabled',
+        '-XX:MaxGCPauseMillis=200',
+        '-XX:+UnlockExperimentalVMOptions',
+        '-XX:+DisableExplicitGC',
+        '-XX:+AlwaysPreTouch',
+        `-XX:G1NewSizePercent=${isLargeHeap ? 40 : 30}`,
+        `-XX:G1MaxNewSizePercent=${isLargeHeap ? 50 : 40}`,
+        `-XX:G1HeapRegionSize=${isLargeHeap ? '16M' : '8M'}`,
+        `-XX:G1ReservePercent=${isLargeHeap ? 15 : 20}`,
+        '-XX:G1HeapWastePercent=5',
+        '-XX:G1MixedGCCountTarget=4',
+        `-XX:InitiatingHeapOccupancyPercent=${isLargeHeap ? 20 : 15}`,
+        '-XX:G1MixedGCLiveThresholdPercent=90',
+        '-XX:G1RSetUpdatingPauseTimePercent=5',
+        '-XX:SurvivorRatio=32',
+        '-XX:+PerfDisableSharedMem',
+        '-XX:MaxTenuringThreshold=1'
+      ].join(' ');
       
-      let startupCmd = payload.startup_command || `java -Xms${xms}M -Xmx${ram}M -jar ${jar} nogui`;
+      let startupCmd = payload.startup_command || `java -Xms${xms}M -Xmx${ram}M ${aikarFlags} -jar ${jar} nogui`;
       // Ensure EULA accepted and server-ip binds 0.0.0.0 so external players can join
       try {
         const eulaPath = path.join(dir, 'eula.txt');
@@ -1021,7 +1053,7 @@ const statsCache = new Map(); // serverId -> { at, data }
 const statsInflight = new Map(); // serverId -> Promise
 async function cmdStats(serverId) {
   const cached = statsCache.get(serverId);
-  if (cached && Date.now() - cached.at < 1000) return cached.data;
+  if (cached && Date.now() - cached.at < 3000) return cached.data;
   if (statsInflight.has(serverId)) return statsInflight.get(serverId);
 
   const pending = computeStats(serverId).then((data) => {
@@ -1192,12 +1224,12 @@ async function isServerPortListening(serverId) {
     const props = parseProperties(content);
     const port = Number(props['server-port']) || 25565;
     
-    // Try to connect to the port to verify server is listening
+    // Try to connect to the port on 127.0.0.1 to avoid IPv6 localhost resolution delay
     return new Promise((resolve) => {
       const socket = require('net').createConnection({
-        host: 'localhost',
+        host: '127.0.0.1',
         port: port,
-        timeout: 2000
+        timeout: 1500
       });
       
       socket.on('connect', () => {
@@ -1361,26 +1393,39 @@ async function getDirSize(dir) {
   return Math.min(100, (usedMb / allocMb) * 100);
 }
 
+const dirSizeCache = new Map(); // dir -> { at, diskPercent, diskUsedMB }
 async function getDirSizeDetailed(dir) {
-  // Returns both percentage and actual used MB
+  const cached = dirSizeCache.get(dir);
+  if (cached && Date.now() - cached.at < 60000) {
+    return { diskPercent: cached.diskPercent, diskUsedMB: cached.diskUsedMB };
+  }
+
   let total = 0;
+  let processed = 0;
   try {
     const walk = async (d) => {
       const entries = await fsp.readdir(d, { withFileTypes: true });
       for (const e of entries) {
         const p = path.join(d, e.name);
-        if (e.isDirectory()) await walk(p);
-        else if (e.isFile()) total += (await fsp.stat(p)).size;
+        if (e.isDirectory()) {
+          await walk(p);
+        } else if (e.isFile()) {
+          try { total += (await fsp.stat(p)).size; } catch {}
+        }
+        processed++;
+        if (processed % 150 === 0) {
+          await new Promise(r => setImmediate(r));
+        }
       }
     };
     if (fs.existsSync(dir)) await walk(dir);
   } catch {}
-  // Compute percentage against .disk_mb file if present
   const allocFile = path.join(dir, '.disk_mb');
   let allocMb = 10240;
   try { allocMb = Number(fs.readFileSync(allocFile, 'utf8')) || 10240; } catch {}
   const usedMb = total / (1024 * 1024);
   const diskPercent = Math.min(100, (usedMb / allocMb) * 100);
+  dirSizeCache.set(dir, { at: Date.now(), diskPercent, diskUsedMB: usedMb });
   return { diskPercent, diskUsedMB: usedMb };
 }
 
@@ -2976,9 +3021,105 @@ app.get('/health', async (req, res) => {
   }
 });
 
+function parseServerId(raw) {
+  const s = String(raw || '').trim();
+  if (!s || !/^[a-zA-Z0-9_-]{1,64}$/.test(s)) return null;
+  return s;
+}
+
+// Wings-compatible endpoints for direct Panel -> Daemon FQDN control
+app.get('/api/system', auth, async (req, res) => {
+  try {
+    const cpus = os.cpus();
+    res.json({
+      version: '1.1.0',
+      nodeId: config.nodeId,
+      fqdn: config.fqdn || os.hostname(),
+      os: os.platform(),
+      kernel: os.release(),
+      architecture: os.arch(),
+      cpuCount: cpus.length,
+      totalMemoryBytes: os.totalmem(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/servers', auth, async (req, res) => {
+  try {
+    const serverId = parseServerId(req.body?.uuid || req.body?.id || req.body?.serverId);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdCreate(serverId, req.body || {});
+    res.status(201).json(r.result || { serverId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/servers/:id', auth, async (req, res) => {
+  try {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdDelete(serverId);
+    res.json(r.result || { deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/servers/:id/power', auth, async (req, res) => {
+  try {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const action = String(req.body?.action || '').toLowerCase();
+    if (action === 'start') return res.json((await cmdStart(serverId, req.body || {})).result);
+    if (action === 'stop') return res.json((await cmdStop(serverId, { force: false })).result);
+    if (action === 'kill') return res.json((await cmdStop(serverId, { force: true })).result);
+    if (action === 'restart') return res.json((await cmdRestart(serverId, req.body || {})).result);
+    return res.status(400).json({ error: `Unsupported power action: ${action}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/servers/:id/commands', auth, async (req, res) => {
+  try {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const command = String(req.body?.command || '');
+    const r = await cmdConsoleCommand(serverId, { command });
+    res.json(r.result || { ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/servers/:id', auth, async (req, res) => {
+  try {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdStats(serverId);
+    const s = r.result || {};
+    res.json({
+      memoryBytes: s.memory || 0,
+      cpuPercent: s.cpu || 0,
+      diskBytes: Math.round((s.diskUsedMB || 0) * 1024 * 1024),
+      networkRxBytes: 0,
+      networkTxBytes: 0,
+      uptimeSeconds: Math.floor((s.uptime || 0) / 1000),
+      status: s.status === 'running' ? 'running' : s.status === 'starting' ? 'starting' : 'offline'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/servers/:id/stats', auth, async (req, res) => {
   try {
-    const r = await cmdStats(Number(req.params.id));
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdStats(serverId);
     res.json(r.result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2986,15 +3127,13 @@ app.get('/servers/:id/stats', auth, async (req, res) => {
 // Console history MUST come from this server's own logs/latest.log file.
 app.get('/servers/:id/logs', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
-    if (!Number.isSafeInteger(serverId) || serverId < 1) {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) {
       return res.status(400).json({ error: 'Invalid server id' });
     }
     const logFile = path.join(serverDir(serverId), 'logs', 'latest.log');
     const limit = Math.min(Math.max(Number.parseInt(req.query.lines, 10) || 200, 1), 50000);
 
-    // While the server is running, prefer the ANSI-preserving stdout buffer so
-    // history renders with the exact same colors as the live console.
     if (String(req.query.ansi || '') === '1') {
       const state = consoleOutputBuffers.get(serverId);
       if (state && state.data.length) {
@@ -3024,19 +3163,17 @@ app.get('/servers/:id/logs', auth, async (req, res) => {
       line.length > 0 || index < all.length - 1
     ).slice(-limit);
     
-    // Return logs as-is - NO color modification whatsoever
     return res.json({ logs, totalLines: logs.length, source: `/servers/${serverId}/logs/latest.log` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ANSI-preserving live console stream from process stdout/stderr. This is kept
-// in memory only and is deliberately separate from logs/latest.log.
+// ANSI-preserving live console stream from process stdout/stderr.
 app.get('/servers/:id/console/stream', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
-    if (!Number.isSafeInteger(serverId) || serverId < 1) {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) {
       return res.status(400).json({ error: 'Invalid server id' });
     }
     const state = consoleOutputBuffers.get(serverId);
@@ -3055,13 +3192,11 @@ app.get('/servers/:id/console/stream', auth, async (req, res) => {
   }
 });
 
-// Incremental console stream endpoint. Byte offsets preserve repeated messages
-// and avoid lossy snapshot comparison/deduplication in the panel.
 app.get('/servers/:id/logs/stream', auth, async (req, res) => {
   let fd;
   try {
-    const serverId = Number(req.params.id);
-    if (!Number.isSafeInteger(serverId) || serverId < 1) {
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) {
       return res.status(400).json({ error: 'Invalid server id' });
     }
     const logFile = path.join(serverDir(serverId), 'logs', 'latest.log');
@@ -3083,7 +3218,6 @@ app.get('/servers/:id/logs/stream', auth, async (req, res) => {
       const { bytesRead } = await fd.read(buffer, 0, length, start);
       chunk = buffer.subarray(0, bytesRead).toString('utf8');
     }
-    // Return chunk as-is - NO color modification
     res.json({ chunk, offset: end, size: stat.size, reset });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3094,15 +3228,17 @@ app.get('/servers/:id/logs/stream', auth, async (req, res) => {
 
 app.get('/servers/:id/files', auth, async (req, res) => {
   try {
-    const r = await cmdFileList(Number(req.params.id), { path: req.query.path || '/' });
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdFileList(serverId, { path: req.query.path || '/' });
     res.json(r.result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Streaming file upload (raw body) for large files — bypasses the JSON command queue
 app.post('/servers/:id/files/upload', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
     const targetDir = String(req.headers['x-target-dir'] || '/');
     const filename = sanitize(String(req.headers['x-filename'] || ''));
     if (!filename) return res.status(400).json({ error: 'Invalid filename' });
@@ -3143,14 +3279,18 @@ app.post('/servers/:id/files/upload', auth, async (req, res) => {
 
 app.get('/servers/:id/players/lifetime', auth, async (req, res) => {
   try {
-    const result = await cmdLifetimePlayers(Number(req.params.id));
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ success: false, error: 'Invalid server id' });
+    const result = await cmdLifetimePlayers(serverId);
     res.json({ success: true, ...result.result });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.get('/servers/:id/players/data/:uuid', auth, async (req, res) => {
   try {
-    const result = await cmdPlayerData(Number(req.params.id), req.params.uuid);
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ success: false, error: 'Invalid server id' });
+    const result = await cmdPlayerData(serverId, req.params.uuid);
     if (!result.result.playerFound) return res.status(404).json({ success: false, ...result.result });
     res.json({ success: true, ...result.result });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
@@ -3158,9 +3298,9 @@ app.get('/servers/:id/players/data/:uuid', auth, async (req, res) => {
 
 app.get('/servers/:id/players', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
     const players = await readOnlinePlayersFromLog(serverId);
-    // Read ops/whitelist/banned files
     const read = (f) => {
       try { return JSON.parse(fs.readFileSync(safeJoin(serverId, f), 'utf8')); } catch { return []; }
     };
@@ -3183,23 +3323,27 @@ app.get('/servers/:id/players', auth, async (req, res) => {
 
 app.get('/servers/:id/worlds', auth, async (req, res) => {
   try {
-    const r = await cmdWorldList(Number(req.params.id));
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdWorldList(serverId);
     res.json(r.result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/servers/:id/plugins', auth, async (req, res) => {
   try {
-    const r = await cmdPluginList(Number(req.params.id));
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const r = await cmdPluginList(serverId);
     res.json(r.result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Server properties endpoint - read server.properties file
 app.get('/servers/:id/properties', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
-    const serverPath = path.join(SERVERS_ROOT, serverId.toString());
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const serverPath = serverDir(serverId);
     const propsFile = path.join(serverPath, 'server.properties');
     
     if (!fs.existsSync(propsFile)) {
@@ -3219,7 +3363,6 @@ app.get('/servers/:id/properties', auth, async (req, res) => {
       const key = line.substring(0, eqIdx).trim();
       let val = line.substring(eqIdx + 1).trim();
       
-      // Parse booleans and numbers
       if (val === 'true') {
         val = true;
       } else if (val === 'false') {
@@ -3237,11 +3380,11 @@ app.get('/servers/:id/properties', auth, async (req, res) => {
   }
 });
 
-// Backups endpoint - list all backups for a server
 app.get('/servers/:id/backups', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
-    const backupDir = path.join(ROOT, 'backups', serverId.toString());
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
+    const backupDir = path.join(ROOT, 'backups', serverId);
     let backups = [];
     
     if (fs.existsSync(backupDir)) {
@@ -3274,15 +3417,14 @@ app.get('/servers/:id/backups', auth, async (req, res) => {
   }
 });
 
-// Download backup endpoint - serve backup file
 app.get('/servers/:id/backups/download/:filename', auth, async (req, res) => {
   try {
-    const serverId = Number(req.params.id);
+    const serverId = parseServerId(req.params.id);
+    if (!serverId) return res.status(400).json({ error: 'Invalid server id' });
     const filename = req.params.filename;
-    const backupDir = path.join(ROOT, 'backups', serverId.toString());
+    const backupDir = path.join(ROOT, 'backups', serverId);
     const filePath = path.join(backupDir, filename);
     
-    // Security check
     const resolved = path.resolve(filePath);
     if (!isPathInside(path.resolve(backupDir), resolved)) {
       return res.status(403).json({ error: 'Invalid path' });
@@ -3303,14 +3445,12 @@ app.get('/servers/:id/backups/download/:filename', auth, async (req, res) => {
 async function main() {
   ensureDir(SERVERS_ROOT);
   
-  // Load persisted start times from .server.starttime files
-  // This allows uptime tracking to survive agent restarts
   try {
     if (fs.existsSync(SERVERS_ROOT)) {
       const serverDirs = fs.readdirSync(SERVERS_ROOT);
       for (const dir of serverDirs) {
-        const serverId = parseInt(dir);
-        if (isNaN(serverId)) continue;
+        const serverId = parseServerId(dir);
+        if (!serverId) continue;
         
         const startTimeFile = path.join(SERVERS_ROOT, dir, '.server.starttime');
         if (fs.existsSync(startTimeFile)) {
@@ -3330,9 +3470,6 @@ async function main() {
     log(`[init] Failed to load persisted start times: ${err.message}`);
   }
 
-  // ================================================
-  // RESTORE PREVIOUSLY RUNNING SERVERS
-  // ================================================
   async function restoreRunningServers() {
     try {
       log(`[init] Scanning for previously running servers...`);
@@ -3343,9 +3480,10 @@ async function main() {
         return;
       }
 
-      // Scan for .server.pid files that indicate previously running servers
       const dirs = fs.readdirSync(serverDir_base);
       for (const dir of dirs) {
+        const serverId = parseServerId(dir);
+        if (!serverId) continue;
         const pidFile = path.join(serverDir_base, dir, '.server.pid');
         const startTimeFile = path.join(serverDir_base, dir, '.server.starttime');
         
@@ -3353,12 +3491,10 @@ async function main() {
           try {
             const pidContent = fs.readFileSync(pidFile, 'utf8').trim();
             const oldPid = parseInt(pidContent);
-            const serverId = parseInt(dir);
             
-            // Check if that process is actually still running
             let processExists = false;
             try {
-              process.kill(oldPid, 0);  // Signal 0 just checks if process exists
+              process.kill(oldPid, 0);
               processExists = true;
             } catch (err) {
               processExists = false;
@@ -3366,25 +3502,19 @@ async function main() {
             
             if (processExists) {
               log(`[init] Found running process from before restart: server=${dir} pid=${oldPid}`);
-              // Don't clean up - process is still running
             } else {
-              // Process doesn't exist - but check if server is actually running on its port
               log(`[init] Process ${oldPid} not found for server ${dir}, checking if port is listening...`);
-              
               try {
                 const isListening = await isServerPortListening(serverId);
                 if (isListening) {
-                  log(`[init] ✅ Server ${dir} is RUNNING on its port (detached process) - keeping PID file`);
-                  // Server is running even though we can't find the process - likely detached
-                  // Keep the PID file so we know to track it
+                  log(`[init] Server ${dir} is RUNNING on its port (detached process) - keeping PID file`);
                 } else {
-                  log(`[init] ❌ Server ${dir} not responding on port - cleaning up stale PID file`);
+                  log(`[init] Server ${dir} not responding on port - cleaning up stale PID file`);
                   try { fs.unlinkSync(pidFile); } catch {}
                   try { fs.unlinkSync(startTimeFile); } catch {}
                 }
               } catch (portCheckErr) {
                 log(`[init] Error checking port for server ${dir}: ${portCheckErr.message}`);
-                // On error, assume process is dead and clean up
                 try { fs.unlinkSync(pidFile); } catch {}
                 try { fs.unlinkSync(startTimeFile); } catch {}
               }
@@ -3399,12 +3529,15 @@ async function main() {
     }
   }
 
-  // Call restoration before starting HTTP server
   await restoreRunningServers();
 
-  // Start HTTP server
-  http.createServer(app).listen(config.port, config.bindHost, () => {
-    log(`[http] listening on ${config.bindHost}:${config.port}`);
+  // Start HTTP server with TCP NoDelay & keep-alive
+  const httpServer = http.createServer(app);
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
+  httpServer.on('connection', (socket) => socket.setNoDelay(true));
+  httpServer.listen(config.port, config.bindHost, () => {
+    log(`[http] listening on ${config.bindHost}:${config.port} (fqdn=${config.fqdn || 'unset'})`);
   });
 
   // Heartbeat loop

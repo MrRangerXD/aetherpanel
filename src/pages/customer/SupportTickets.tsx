@@ -101,7 +101,7 @@ export const SupportTickets: React.FC<SupportTicketsProps> = () => {
   const openTicketsCount = tickets.filter((t) => t.status === 'open' || t.status === 'pending').length;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="w-full space-y-6 pb-12">
 
       {/* 2. Header (Orihost image_555e7f05.png) */}
       <div>

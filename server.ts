@@ -332,6 +332,12 @@ async function startServer() {
     console.log(`[AetherPanel] Server running on http://0.0.0.0:${PORT}`);
   });
 
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+  server.on('connection', (socket) => {
+    socket.setNoDelay(true);
+  });
+
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
       console.warn(`[AetherPanel] Port ${PORT} in use, existing listener may still be handling requests.`);

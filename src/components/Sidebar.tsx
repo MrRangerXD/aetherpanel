@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useBranding } from '../lib/BrandingContext';
+import { UserAvatar } from './ui/UserAvatar';
 
 interface SidebarProps {
   currentPage: string;
@@ -184,11 +185,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Account Settings"
         >
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-8 h-8 rounded-full bg-[#f97316] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition-transform">
-              <span className="text-white font-extrabold text-xs">
-                {((user?.displayName || user?.username || 'k')[0]).toLowerCase()}
-              </span>
-            </div>
+            <UserAvatar
+              seed={user?.id || user?.username || user?.email}
+              avatarUrl={user?.avatarUrl}
+              name={user?.displayName || user?.username || 'User'}
+              sizeClass="w-8 h-8"
+              shape="rounded"
+              className="group-hover:scale-105 transition-transform"
+            />
             <div className="truncate">
               <div className="text-xs font-bold text-white group-hover:text-[#f97316] transition-colors truncate leading-tight">
                 {user?.displayName || user?.username || 'kravenog'}

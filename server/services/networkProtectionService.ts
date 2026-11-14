@@ -226,7 +226,7 @@ export async function applyHostNetworkProtection(): Promise<{ success: boolean; 
   const sshPort = probe.activeSshPort;
   const panelPort = 3000;
   const sftpPort = 2022;
-  const daemonPort = 8080;
+  const daemonPort = Number(process.env.DAEMON_PORT) || 9666;
 
   if (!probe.canExecuteFirewall) {
     return {
@@ -532,7 +532,7 @@ export async function getNetworkProtectionStatus(): Promise<NetworkProtectionSta
     sshPort: probe.activeSshPort,
     panelPort: 3000,
     sftpPort: 2022,
-    daemonPort: 8080,
+    daemonPort: Number(process.env.DAEMON_PORT) || 9666,
     managedPortCount: managedPortRegistry.size,
     managedPorts: portsArray,
     activeProtections: {

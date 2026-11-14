@@ -23,11 +23,13 @@ export interface RuntimeState {
 class FileTailer {
   private serverId: string;
   private filePath: string;
-  private fd: number | null = null;
+  private handle: fs.promises.FileHandle | null = null;
   private position: number = 0;
   private watcher: fs.FSWatcher | null = null;
   private intervalId: NodeJS.Timeout | null = null;
   private remainder: string = '';
+  private reading: boolean = false;
+  private stopped: boolean = false;
 
   constructor(serverId: string, filePath: string) {
     this.serverId = serverId;
@@ -41,7 +43,13 @@ class FileTailer {
         fs.writeFileSync(this.filePath, '');
       }
       this.position = fs.statSync(this.filePath).size;
-      this.fd = fs.openSync(this.filePath, 'r');
+      fs.promises.open(this.filePath, 'r').then(h => {
+        if (this.stopped) {
+          h.close().catch(() => {});
+          return;
+        }
+        this.handle = h;
+      }).catch(() => {});
 
       try {
         this.watcher = fs.watch(this.filePath, (event) => {
@@ -50,54 +58,56 @@ class FileTailer {
           }
         });
         this.watcher.on('error', () => {
-          // Gracefully ignore watcher errors (e.g. NFS/LXC filesystem constraints)
           try { this.watcher?.close(); } catch {}
           this.watcher = null;
         });
       } catch {
-        // Fallback safely to interval polling if fs.watch is unsupported by container filesystem
         this.watcher = null;
       }
 
-      // Fast polling fallback ensuring zero-lag console streaming across VPS setups
+      // Non-blocking fallback interval ensuring low overhead
       this.intervalId = setInterval(() => {
         this.readNewData();
-      }, 250);
+      }, 500);
     } catch (err) {
       console.error(`[FileTailer] Error starting for ${this.filePath}:`, err);
     }
   }
 
-  private readNewData() {
-    if (this.fd === null) return;
+  private async readNewData() {
+    if (this.stopped || !this.handle || this.reading) return;
+    this.reading = true;
     try {
-      const stats = fs.statSync(this.filePath);
+      const stats = await fs.promises.stat(this.filePath);
       if (stats.size < this.position) {
         this.position = 0;
         this.remainder = '';
       }
       if (stats.size === this.position) return;
 
-      const bytesToRead = stats.size - this.position;
-      const buffer = Buffer.alloc(bytesToRead);
-      fs.readSync(this.fd, buffer, 0, bytesToRead, this.position);
-      this.position = stats.size;
+      const bytesToRead = Math.min(65536, stats.size - this.position);
+      const buffer = Buffer.allocUnsafe(bytesToRead);
+      const { bytesRead } = await this.handle.read(buffer, 0, bytesToRead, this.position);
+      if (bytesRead <= 0) return;
+      this.position += bytesRead;
 
-      const text = buffer.toString('utf8');
+      const text = buffer.toString('utf8', 0, bytesRead);
       const combined = this.remainder + text;
       const lines = combined.split('\n');
-      // The last element is either empty (if ended with \n) or an incomplete line chunk
       this.remainder = lines.pop() || '';
 
       for (const line of lines) {
         appendConsoleLog(this.serverId, line);
       }
-    } catch (err) {
+    } catch {
       // Stream or descriptor closed
+    } finally {
+      this.reading = false;
     }
   }
 
   stop() {
+    this.stopped = true;
     if (this.watcher) {
       try { this.watcher.close(); } catch {}
       this.watcher = null;
@@ -106,11 +116,10 @@ class FileTailer {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    if (this.fd !== null) {
-      try {
-        fs.closeSync(this.fd);
-      } catch {}
-      this.fd = null;
+    if (this.handle) {
+      const h = this.handle;
+      this.handle = null;
+      h.close().catch(() => {});
     }
     if (this.remainder.trim()) {
       appendConsoleLog(this.serverId, this.remainder);

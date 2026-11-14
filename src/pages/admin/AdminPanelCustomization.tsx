@@ -9,6 +9,7 @@ import {
 import { apiRequest } from '../../lib/api';
 import { useTheme } from '../../lib/ThemeContext';
 import { useBranding } from '../../lib/BrandingContext';
+import { useAuth } from '../../lib/AuthContext';
 import { FONT_OPTIONS, THEME_PRESETS } from '../../lib/theme';
 
 type TabKey =
@@ -39,6 +40,7 @@ export const AdminPanelCustomization: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('branding');
   const { activeFontId, setActiveFontId, setThemeAssets } = useTheme();
   const { refreshBranding, updateBrandNameLocally } = useBranding();
+  const { refreshAuthConfig } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -84,6 +86,9 @@ export const AdminPanelCustomization: React.FC = () => {
     features: {
       registrationEnabled: true,
       emailVerificationRequired: false,
+      googleLoginEnabled: true,
+      discordLoginEnabled: true,
+      emailPasswordLoginEnabled: true,
       afkRewardsEnabled: true,
       ticketsEnabled: true,
       couponsEnabled: true,
@@ -209,8 +214,8 @@ export const AdminPanelCustomization: React.FC = () => {
         if (res.data) {
           setConfig((prev: any) => ({ ...prev, ...res.data }));
         }
-        // Live synchronize to BrandingContext and ThemeContext
-        await refreshBranding();
+        // Live synchronize to BrandingContext, AuthContext and ThemeContext
+        await Promise.all([refreshBranding(), refreshAuthConfig()]);
         if (config.branding?.brandName) {
           updateBrandNameLocally(config.branding.brandName);
         }
@@ -882,6 +887,9 @@ export const AdminPanelCustomization: React.FC = () => {
                 {[
                   { key: 'registrationEnabled', label: 'User Registration', desc: 'Allow new visitors to create accounts' },
                   { key: 'emailVerificationRequired', label: 'Email Verification', desc: 'Require verified email before deployment' },
+                  { key: 'googleLoginEnabled', label: 'Google Sign-In Button', desc: 'Show Google login/register option on auth pages' },
+                  { key: 'discordLoginEnabled', label: 'Discord Sign-In Button', desc: 'Show Discord OAuth button on auth pages' },
+                  { key: 'emailPasswordLoginEnabled', label: 'Email & Password Login', desc: 'Allow standard email & password sign-in' },
                   { key: 'afkRewardsEnabled', label: 'AFK Coin Rewards', desc: 'Enable passive coin generation system' },
                   { key: 'ticketsEnabled', label: 'Support Tickets Queue', desc: 'Customer ticket dispatch & resolution' },
                   { key: 'couponsEnabled', label: 'Discount Coupons', desc: 'Promo codes & checkout discounts' },

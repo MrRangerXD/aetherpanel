@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Mail, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useBranding } from '../../lib/BrandingContext';
@@ -9,8 +9,12 @@ interface RegisterProps {
 }
 
 export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
-  const { register, loginWithGoogle, loginWithDiscord, authConfig } = useAuth();
+  const { register, loginWithGoogle, loginWithDiscord, authConfig, refreshAuthConfig } = useAuth();
   const { brandName } = useBranding();
+
+  useEffect(() => {
+    refreshAuthConfig();
+  }, [refreshAuthConfig]);
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -120,19 +124,18 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
       <div className="w-full max-w-sm space-y-5">
         
         {/* Header */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2.5">
           <div className="flex justify-center mb-1">
             <AetherLogo onClick={() => onNavigate('home')} className="cursor-pointer" />
           </div>
-          <div className="label">
-            REGISTRATION
+          <div className="space-y-1">
+            <h1 className="text-lg font-bold tracking-tight text-[var(--color-ink)]">
+              Create your account
+            </h1>
+            <p className="text-xs text-[var(--color-ink-mute)]">
+              Deploy servers and manage cloud resources on {brandName || 'AetherPanel'}.
+            </p>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--color-ink)] font-mono">
-            Create Account
-          </h1>
-          <p className="text-xs text-[var(--color-ink-mute)]">
-            Deploy servers and manage cloud resources on {brandName || 'AetherPanel'}.
-          </p>
         </div>
 
         {/* Card */}

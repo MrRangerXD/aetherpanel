@@ -421,6 +421,14 @@ router.post('/:id/power', authMiddleware, requireApiKeyScope('servers:control'),
     return res.status(400).json({ success: false, error: { code: 'INVALID_ACTION', message: 'Invalid power action.' } });
   }
 
+  await recordServerActivity(
+    server.id,
+    req.user!.id,
+    req.user!.displayName || req.user!.username || req.user!.email?.split('@')[0] || 'user',
+    `SERVER_POWER_${action.toUpperCase()}`,
+    `Executed ${action} on server ${server.name}`
+  );
+
   await createAuditLog(
     req.user!.id, req.user!.email, req.user!.role,
     `SERVER_POWER_${action.toUpperCase()}`, server.id,
@@ -1570,14 +1578,61 @@ router.put('/:id/env', authMiddleware, async (req: AuthenticatedRequest, res: Re
   });
 });
 
-// GET /api/v1/servers/:id/activity - Server activity history
+// GET /api/v1/servers/:id/activity - Server activity history (merges direct activities & scoped audit logs)
 router.get('/:id/activity', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const access = await checkServerAccess(req, res, req.params.id, 'activity.view');
   if (!access) return;
 
   const { db } = access;
-  const serverActivities = db.activities.filter(a => a.serverId === req.params.id);
-  res.json({ success: true, data: serverActivities });
+  const serverId = req.params.id;
+  const usersById = new Map((db.users || []).map((u: any) => [u.id, u]));
+
+  const directActivities = (db.activities || [])
+    .filter((a: any) => a.serverId === serverId)
+    .map((a: any) => {
+      const matchedUser = usersById.get(a.userId) as any;
+      return {
+        ...a,
+        username: matchedUser?.displayName || matchedUser?.username || a.username || 'system',
+        avatarUrl: matchedUser?.avatarUrl
+      };
+    });
+
+  const scopedAuditLogs = (db.auditLogs || [])
+    .filter((l: any) => l.targetResource === serverId)
+    .map((l: any) => {
+      const matchedUser = usersById.get(l.actorId) as any;
+      return {
+        id: l.id,
+        serverId,
+        userId: l.actorId || 'system',
+        username: matchedUser?.displayName || matchedUser?.username || (l.actorEmail ? String(l.actorEmail).split('@')[0] : 'system'),
+        avatarUrl: matchedUser?.avatarUrl,
+        action: l.action,
+        details: l.details,
+        ipAddress: l.ipAddress,
+        createdAt: l.createdAt
+      };
+    });
+
+  // Merge and deduplicate mirrored activity + audit entries logged within the same 3s window
+  const combined = [...directActivities];
+  for (const auditItem of scopedAuditLogs) {
+    const auditTs = new Date(auditItem.createdAt).getTime();
+    const isDuplicate = combined.some((existing) => {
+      const sameTime = Math.abs(new Date(existing.createdAt).getTime() - auditTs) < 3000;
+      if (!sameTime) return false;
+      if (existing.action === auditItem.action) return true;
+      if (existing.userId === auditItem.userId && auditItem.details?.includes(existing.details)) return true;
+      return false;
+    });
+    if (!isDuplicate) {
+      combined.push(auditItem);
+    }
+  }
+
+  combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json({ success: true, data: combined });
 });
 
 // GET /api/v1/servers/:id/backups - List backups

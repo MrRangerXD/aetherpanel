@@ -1,7 +1,7 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { getDb, saveDbSync } from './db';
+import { getDb, saveDbSync, scheduleSaveDb } from './db';
 import { Node } from '../src/types';
 import { runNetworkDiagnostics } from './network/networkDetection';
 
@@ -214,7 +214,7 @@ export function startLocalNodeAgent(): void {
 
       let hostTotalDiskGB = localNode.totalDiskGB || 200;
       try {
-        const stat = fs.statfsSync(process.cwd());
+        const stat = await fs.promises.statfs(process.cwd());
         hostTotalDiskGB = Math.round((stat.blocks * stat.bsize) / (1024 * 1024 * 1024));
       } catch {
         // Ignored fallback
@@ -252,7 +252,7 @@ export function startLocalNodeAgent(): void {
         localNode.status = 'online';
       }
 
-      saveDbSync();
+      scheduleSaveDb(1000);
     } catch (err) {
       console.error('[LOCAL NODE AGENT] Heartbeat cycle error:', err);
     }

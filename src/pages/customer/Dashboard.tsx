@@ -133,7 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onSelectServer
   }, []);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div className="w-full space-y-6">
       
       {/* 1. GREETING & CLOUD STATUS HEADER */}
       <PanelScrollReveal delayMs={0}>

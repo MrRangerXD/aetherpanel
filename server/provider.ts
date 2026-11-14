@@ -768,7 +768,8 @@ export async function startServer(serverId: string): Promise<boolean> {
 
     const maxAllowedRam = server.resources?.memoryMb || server.limits?.ramMB || 1024;
     const xmxMB = Math.min(Number(server.startup?.xmxMB) || maxAllowedRam, maxAllowedRam);
-    const xmsMB = Math.min(Number(server.startup?.xmsMB) || 128, xmxMB);
+    const defaultXmsMB = Math.min(Math.max(512, Math.floor(xmxMB / 2)), xmxMB);
+    const xmsMB = Math.min(Number(server.startup?.xmsMB) || defaultXmsMB, xmxMB);
 
     appendConsoleLog(serverId, `[Server thread/INFO]: Starting Minecraft engine (${server.software} ${server.version}) on Java ${javaCheck.installedVersion || 21}`);
     appendConsoleLog(serverId, `[Server thread/INFO]: Allocating heap: ${xmsMB}M initial, ${xmxMB}M max`);
@@ -780,10 +781,32 @@ export async function startServer(serverId: string): Promise<boolean> {
       const executable = javaCheck.path || 'java';
       const args: string[] = [`-Xms${xmsMB}M`, `-Xmx${xmxMB}M`];
 
-      // Custom JVM Flags
-      if (server.startup?.jvmFlags) {
+      // Custom JVM Flags, or tuned Aikar G1GC defaults to eliminate GC stop-the-world pauses
+      if (server.startup?.jvmFlags && server.startup.jvmFlags.trim()) {
         const extraFlags = server.startup.jvmFlags.split(/\s+/).filter(Boolean);
         args.push(...extraFlags);
+      } else {
+        const isLargeHeap = xmxMB >= 12288;
+        args.push(
+          '-XX:+UseG1GC',
+          '-XX:+ParallelRefProcEnabled',
+          '-XX:MaxGCPauseMillis=200',
+          '-XX:+UnlockExperimentalVMOptions',
+          '-XX:+DisableExplicitGC',
+          '-XX:+AlwaysPreTouch',
+          `-XX:G1NewSizePercent=${isLargeHeap ? 40 : 30}`,
+          `-XX:G1MaxNewSizePercent=${isLargeHeap ? 50 : 40}`,
+          `-XX:G1HeapRegionSize=${isLargeHeap ? '16M' : '8M'}`,
+          `-XX:G1ReservePercent=${isLargeHeap ? 15 : 20}`,
+          '-XX:G1HeapWastePercent=5',
+          '-XX:G1MixedGCCountTarget=4',
+          `-XX:InitiatingHeapOccupancyPercent=${isLargeHeap ? 20 : 15}`,
+          '-XX:G1MixedGCLiveThresholdPercent=90',
+          '-XX:G1RSetUpdatingPauseTimePercent=5',
+          '-XX:SurvivorRatio=32',
+          '-XX:+PerfDisableSharedMem',
+          '-XX:MaxTenuringThreshold=1'
+        );
       }
 
       args.push('-jar', jarName);

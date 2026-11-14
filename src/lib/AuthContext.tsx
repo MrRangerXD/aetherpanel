@@ -28,8 +28,8 @@ interface AuthContextType {
 
 const defaultAuthConfig: AuthConfig = {
   emailPasswordEnabled: true,
-  googleEnabled: true,
-  discordEnabled: true,
+  googleEnabled: false,
+  discordEnabled: false,
   registrationEnabled: true
 };
 

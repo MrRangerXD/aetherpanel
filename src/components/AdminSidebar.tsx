@@ -6,6 +6,7 @@ import {
   Key, Scale, ArrowLeft, LogOut, UserPlus, PlusCircle
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { UserAvatar } from './ui/UserAvatar';
 
 interface AdminSidebarProps {
   currentPage: string;
@@ -146,9 +147,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage, onNavig
       <div className="p-3 border-t border-[#181920] bg-[#09090b] shrink-0">
         <div className="flex items-center justify-between p-2 rounded-lg bg-[#14151b] border border-[#23252e]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-[#f97316]/20 border border-[#f97316]/40 flex items-center justify-center text-[#f97316] font-bold text-xs uppercase shrink-0">
-              {user?.username?.charAt(0) || user?.email?.charAt(0) || 'A'}
-            </div>
+            <UserAvatar
+              seed={user?.id || user?.username || user?.email}
+              avatarUrl={user?.avatarUrl}
+              name={user?.username || user?.displayName || 'admin'}
+              sizeClass="w-8 h-8"
+              shape="rounded"
+            />
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate">
                 {user?.username || user?.displayName || 'admin'}
